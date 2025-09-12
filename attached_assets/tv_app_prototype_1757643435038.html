@@ -1,0 +1,553 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TV Curator</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Outfit', sans-serif;
+            background: #1e293b;
+            color: #ffffff;
+            min-height: 100vh;
+            line-height: 1.4;
+        }
+        
+        .header {
+            background: #1e293b;
+            border-bottom: 1px solid #475569;
+            padding: 16px 24px;
+        }
+        
+        .header-content {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        
+        .logo-icon {
+            width: 32px;
+            height: 32px;
+        }
+        
+        .logo h1 {
+            font-size: 20px;
+            font-weight: 700;
+            color: #ffffff;
+            margin: 0;
+        }
+        
+        .tab-container {
+            display: flex;
+            background: #374151;
+            border-radius: 8px;
+            padding: 4px;
+            gap: 4px;
+        }
+        
+        .tab-btn {
+            padding: 8px 16px;
+            background: transparent;
+            border: none;
+            border-radius: 6px;
+            color: #9ca3af;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        
+        .tab-btn:hover {
+            color: #06b6d4;
+        }
+        
+        .tab-btn.active {
+            background: #1e293b;
+            color: #06b6d4;
+        }
+        
+        .main-content {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 24px;
+        }
+        
+        .section {
+            margin-bottom: 32px;
+        }
+        
+        .section-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+        
+        .section-title {
+            font-size: 18px;
+            font-weight: 700;
+            color: #ffffff;
+        }
+        
+        .section-badge {
+            background: #06b6d4;
+            color: #1e293b;
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 700;
+        }
+        
+        .section-subtitle {
+            margin-left: auto;
+            font-size: 14px;
+            color: #64748b;
+        }
+        
+        .icon {
+            width: 20px;
+            height: 20px;
+            fill: #06b6d4;
+        }
+        
+        .show-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 12px;
+        }
+        
+        .show-card {
+            background: #374151;
+            border-radius: 8px;
+            padding: 16px;
+            transition: all 0.2s ease;
+            cursor: pointer;
+        }
+        
+        .show-card:hover {
+            background: #4b5563;
+            transform: translateY(-1px);
+        }
+        
+        .show-header {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 12px;
+            align-items: start;
+        }
+        
+        .show-poster {
+            width: 36px;
+            height: 48px;
+            background: #4b5563;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+            flex-shrink: 0;
+        }
+        
+        .show-info {
+            flex: 1;
+            min-width: 0;
+        }
+        
+        .show-title {
+            font-size: 14px;
+            font-weight: 700;
+            color: #ffffff;
+            margin-bottom: 4px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        
+        .show-meta {
+            font-size: 12px;
+            color: #9ca3af;
+            margin-bottom: 8px;
+        }
+        
+        .show-status {
+            display: inline-block;
+            padding: 3px 8px;
+            border-radius: 6px;
+            font-size: 10px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+        
+        .status-new {
+            background: rgba(6, 182, 212, 0.2);
+            color: #06b6d4;
+            border: 1px solid rgba(6, 182, 212, 0.3);
+        }
+        
+        .status-announcement {
+            background: rgba(249, 115, 22, 0.2);
+            color: #f97316;
+            border: 1px solid rgba(249, 115, 22, 0.3);
+        }
+        
+        .status-shared {
+            background: rgba(59, 130, 246, 0.2);
+            color: #3b82f6;
+            border: 1px solid rgba(59, 130, 246, 0.3);
+        }
+        
+        .status-solo {
+            background: rgba(168, 85, 247, 0.2);
+            color: #a855f7;
+            border: 1px solid rgba(168, 85, 247, 0.3);
+        }
+        
+        .show-actions {
+            display: flex;
+            gap: 8px;
+        }
+        
+        .action-btn {
+            flex: 1;
+            padding: 6px 12px;
+            border: none;
+            border-radius: 6px;
+            font-size: 10px;
+            font-weight: 700;
+            text-transform: uppercase;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        
+        .btn-primary {
+            background: #06b6d4;
+            color: #1e293b;
+        }
+        
+        .btn-primary:hover {
+            background: #0891b2;
+            transform: translateY(-1px);
+        }
+        
+        .btn-secondary {
+            background: #374151;
+            color: #9ca3af;
+            border: 1px solid #4b5563;
+        }
+        
+        .btn-secondary:hover {
+            color: #ffffff;
+        }
+        
+        .btn-danger {
+            background: #ef4444;
+            color: #ffffff;
+        }
+        
+        .btn-danger:hover {
+            background: #dc2626;
+            transform: translateY(-1px);
+        }
+        
+        .floating-add {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            width: 48px;
+            height: 48px;
+            background: #0ea5e9;
+            border: none;
+            border-radius: 12px;
+            color: #0f1419;
+            font-size: 24px;
+            font-weight: 900;
+            cursor: pointer;
+            box-shadow: 0 4px 12px rgba(14, 165, 233, 0.3);
+            transition: all 0.2s ease;
+        }
+        
+        .floating-add:hover {
+            background: #0284c7;
+            transform: translateY(-2px) scale(1.05);
+        }
+        
+        .tab-content {
+            display: none;
+        }
+        
+        .tab-content.active {
+            display: block;
+        }
+        
+        .placeholder-content {
+            text-align: center;
+            padding: 48px 0;
+        }
+        
+        .placeholder-content h3 {
+            font-size: 18px;
+            font-weight: 600;
+            color: #64748b;
+        }
+        
+        @media (max-width: 768px) {
+            .header-content {
+                flex-direction: column;
+                gap: 16px;
+                align-items: flex-start;
+            }
+            
+            .tab-container {
+                width: 100%;
+                justify-content: space-between;
+            }
+            
+            .tab-btn {
+                flex: 1;
+                text-align: center;
+            }
+            
+            .show-grid {
+                grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-content">
+                <h1>TV Curator</h1>
+                <div class="tab-container">
+                    <button class="tab-btn active" data-tab="dashboard">Dashboard</button>
+                    <button class="tab-btn" data-tab="library">Library</button>
+                    <button class="tab-btn" data-tab="shared">Shared</button>
+                    <button class="tab-btn" data-tab="settings">Settings</button>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <div id="dashboard-tab" class="tab-content active">
+                <!-- Needs Triage Section -->
+                <section class="section">
+                    <div class="section-header">
+                        <svg class="icon" viewBox="0 0 20 20">
+                            <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/>
+                        </svg>
+                        <h2 class="section-title">New in Feed</h2>
+                        <span class="section-badge">4</span>
+                        <span class="section-subtitle">New releases and announcements</span>
+                    </div>
+                    
+                    <div class="show-grid">
+                        <div class="show-card">
+                            <div class="show-header">
+                                <div class="show-poster">🐻</div>
+                                <div class="show-info">
+                                    <h3 class="show-title">The Bear</h3>
+                                    <p class="show-meta">S3E1 • Released today • 28min</p>
+                                    <span class="show-status status-new">New Episode</span>
+                                </div>
+                            </div>
+                            <div class="show-actions">
+                                <button class="action-btn btn-primary">NEXT</button>
+                                <button class="action-btn btn-secondary">LATER</button>
+                                <button class="action-btn btn-danger">ARCHIVE</button>
+                            </div>
+                        </div>
+
+                        <div class="show-card">
+                            <div class="show-header">
+                                <div class="show-poster">🐉</div>
+                                <div class="show-info">
+                                    <h3 class="show-title">House of the Dragon</h3>
+                                    <p class="show-meta">Season 2 announced • HBO</p>
+                                    <span class="show-status status-announcement">New Show</span>
+                                </div>
+                            </div>
+                            <div class="show-actions">
+                                <button class="action-btn btn-primary">NEXT</button>
+                                <button class="action-btn btn-secondary">LATER</button>
+                                <button class="action-btn btn-danger">ARCHIVE</button>
+                            </div>
+                        </div>
+
+                        <div class="show-card">
+                            <div class="show-header">
+                                <div class="show-poster">🕷️</div>
+                                <div class="show-info">
+                                    <h3 class="show-title">Wednesday</h3>
+                                    <p class="show-meta">S1E2 • Netflix • 45min</p>
+                                    <span class="show-status status-shared">Shared</span>
+                                </div>
+                            </div>
+                            <div class="show-actions">
+                                <button class="action-btn btn-primary">NEXT</button>
+                                <button class="action-btn btn-secondary">LATER</button>
+                                <button class="action-btn btn-danger">ARCHIVE</button>
+                            </div>
+                        </div>
+
+                        <div class="show-card">
+                            <div class="show-header">
+                                <div class="show-poster">⭐</div>
+                                <div class="show-info">
+                                    <h3 class="show-title">Andor</h3>
+                                    <p class="show-meta">S1E4 • Disney+ • 52min</p>
+                                    <span class="show-status status-new">Episode</span>
+                                </div>
+                            </div>
+                            <div class="show-actions">
+                                <button class="action-btn btn-primary">NEXT</button>
+                                <button class="action-btn btn-secondary">LATER</button>
+                                <button class="action-btn btn-danger">ARCHIVE</button>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Watch Next Section -->
+                <section class="section">
+                    <div class="section-header">
+                        <svg class="icon" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M12.395 2.553a1 1 0 00-1.45-.385c-.345.23-.614.558-.822.88-.214.33-.403.713-.57 1.116-.334.804-.614 1.768-.84 2.734a31.365 31.365 0 00-.613 3.58 2.64 2.64 0 01-.945-1.067c-.328-.68-.398-1.534-.398-2.654A1 1 0 005.05 6.05 6.981 6.981 0 003 11a7 7 0 1011.95-4.95c-.592-.591-.98-.985-1.348-1.467-.363-.476-.724-1.063-1.207-2.03zM12.12 15.12A3 3 0 017 13s.879.5 2.5.5c0-1 .5-4 1.25-4.5.5 1 .786 1.293 1.371 1.879A2.99 2.99 0 0113 13a2.99 2.99 0 01-.879 2.121z" clip-rule="evenodd"/>
+                        </svg>
+                        <h2 class="section-title">Watch Next</h2>
+                        <span class="section-badge">3</span>
+                        <span class="section-subtitle">Priority queue</span>
+                    </div>
+                    
+                    <div class="show-grid">
+                        <div class="show-card">
+                            <div class="show-poster">👾</div>
+                            <div class="show-content">
+                                <div class="show-info">
+                                    <h3 class="show-title">Stranger Things</h3>
+                                    <p class="show-meta">S4E8 • In progress • 1h 25min</p>
+                                    <span class="show-status status-shared">Shared</span>
+                                </div>
+                                <div class="show-actions">
+                                    <button class="action-btn btn-primary">WATCH</button>
+                                    <button class="action-btn btn-secondary">LATER</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="show-card">
+                            <div class="show-poster">⚖️</div>
+                            <div class="show-content">
+                                <div class="show-info">
+                                    <h3 class="show-title">Better Call Saul</h3>
+                                    <p class="show-meta">S6E1 • AMC • 47min</p>
+                                    <span class="show-status status-solo">Solo</span>
+                                </div>
+                                <div class="show-actions">
+                                    <button class="action-btn btn-primary">WATCH</button>
+                                    <button class="action-btn btn-secondary">LATER</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="show-card">
+                            <div class="show-poster">🧟</div>
+                            <div class="show-content">
+                                <div class="show-info">
+                                    <h3 class="show-title">The Last of Us</h3>
+                                    <p class="show-meta">S1E3 • HBO • 1h 16min</p>
+                                    <span class="show-status status-shared">Shared</span>
+                                </div>
+                                <div class="show-actions">
+                                    <button class="action-btn btn-primary">WATCH</button>
+                                    <button class="action-btn btn-secondary">LATER</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            </div>
+
+            <!-- Other Tab Content -->
+            <div id="library-tab" class="tab-content">
+                <div class="placeholder-content">
+                    <h3>Library view coming soon</h3>
+                </div>
+            </div>
+
+            <div id="shared-tab" class="tab-content">
+                <div class="placeholder-content">
+                    <h3>Shared content view coming soon</h3>
+                </div>
+            </div>
+
+            <div id="settings-tab" class="tab-content">
+                <div class="placeholder-content">
+                    <h3>Settings coming soon</h3>
+                </div>
+            </div>
+        </main>
+
+        <!-- Floating Add Button -->
+        <button class="floating-add">+</button>
+    </div>
+
+    <script>
+        // Tab functionality
+        function initializeTabs() {
+            const tabBtns = document.querySelectorAll('.tab-btn');
+            const tabContents = document.querySelectorAll('.tab-content');
+
+            if (tabBtns.length === 0 || tabContents.length === 0) {
+                console.warn('Tab elements not found');
+                return;
+            }
+
+            tabBtns.forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const targetTab = this.getAttribute('data-tab');
+                    
+                    if (!targetTab) {
+                        console.warn('No data-tab attribute found');
+                        return;
+                    }
+                    
+                    // Remove active class from all tabs
+                    tabBtns.forEach(b => b.classList.remove('active'));
+                    tabContents.forEach(content => content.classList.remove('active'));
+                    
+                    // Add active class to clicked tab
+                    this.classList.add('active');
+                    const targetContent = document.getElementById(targetTab + '-tab');
+                    if (targetContent) {
+                        targetContent.classList.add('active');
+                    } else {
+                        console.warn(`Target tab content not found: ${targetTab}-tab`);
+                    }
+                });
+            });
+        }
+
+        // Initialize when DOM is ready
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', initializeTabs);
+        } else {
+            initializeTabs();
+        }
+    </script>
+</body>
+</html>
