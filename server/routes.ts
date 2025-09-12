@@ -1,0 +1,166 @@
+import type { Express } from "express";
+import { createServer, type Server } from "http";
+import { storage } from "./storage";
+import { insertShowSchema, insertUserShowSchema } from "@shared/schema";
+
+export async function registerRoutes(app: Express): Promise<Server> {
+  // TVMaze API proxy routes
+  app.get("/api/shows/search", async (req, res) => {
+    try {
+      const { q } = req.query;
+      if (!q) {
+        return res.status(400).json({ error: "Query parameter 'q' is required" });
+      }
+
+      const response = await fetch(`https://api.tvmaze.com/search/shows?q=${encodeURIComponent(q as string)}`);
+      if (!response.ok) {
+        throw new Error(`TVMaze API error: ${response.status}`);
+      }
+
+      const data = await response.json();
+      res.json(data);
+    } catch (error) {
+      console.error("Error searching shows:", error);
+      res.status(500).json({ error: "Failed to search shows" });
+    }
+  });
+
+  app.get("/api/shows/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const response = await fetch(`https://api.tvmaze.com/shows/${id}`);
+      
+      if (!response.ok) {
+        if (response.status === 404) {
+          return res.status(404).json({ error: "Show not found" });
+        }
+        throw new Error(`TVMaze API error: ${response.status}`);
+      }
+
+      const show = await response.json();
+      res.json(show);
+    } catch (error) {
+      console.error("Error fetching show:", error);
+      res.status(500).json({ error: "Failed to fetch show" });
+    }
+  });
+
+  app.get("/api/shows/:id/episodes", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const response = await fetch(`https://api.tvmaze.com/shows/${id}/episodes`);
+      
+      if (!response.ok) {
+        throw new Error(`TVMaze API error: ${response.status}`);
+      }
+
+      const episodes = await response.json();
+      res.json(episodes);
+    } catch (error) {
+      console.error("Error fetching episodes:", error);
+      res.status(500).json({ error: "Failed to fetch episodes" });
+    }
+  });
+
+  // User show management routes
+  app.get("/api/user/shows", async (req, res) => {
+    try {
+      const { status } = req.query;
+      // For demo purposes, using a mock user ID
+      const userId = "demo-user";
+      
+      const shows = await storage.getUserShows(userId, status as string);
+      res.json(shows);
+    } catch (error) {
+      console.error("Error fetching user shows:", error);
+      res.status(500).json({ error: "Failed to fetch user shows" });
+    }
+  });
+
+  app.post("/api/user/shows", async (req, res) => {
+    try {
+      const userId = "demo-user"; // Mock user ID
+      const showData = req.body;
+
+      // Validate the request body
+      const validatedData = insertUserShowSchema.parse({
+        ...showData,
+        userId,
+      });
+
+      // Check if show already exists in user's collection
+      const existingUserShow = await storage.getUserShow(userId, validatedData.showId);
+      if (existingUserShow) {
+        return res.status(400).json({ error: "Show already in your collection" });
+      }
+
+      // Fetch show details from TVMaze API and store locally
+      const showResponse = await fetch(`https://api.tvmaze.com/shows/${validatedData.showId}`);
+      if (showResponse.ok) {
+        const showDetails = await showResponse.json();
+        const showToStore = insertShowSchema.parse({
+          id: showDetails.id,
+          name: showDetails.name,
+          summary: showDetails.summary,
+          image: showDetails.image,
+          network: showDetails.network,
+          genres: showDetails.genres || [],
+          status: showDetails.status,
+          premiered: showDetails.premiered,
+          rating: showDetails.rating,
+          runtime: showDetails.runtime,
+          officialSite: showDetails.officialSite,
+          language: showDetails.language,
+          type: showDetails.type,
+          updated: showDetails.updated,
+        });
+        
+        await storage.createShow(showToStore);
+      }
+
+      const userShow = await storage.addUserShow(validatedData);
+      res.status(201).json(userShow);
+    } catch (error) {
+      console.error("Error adding show:", error);
+      res.status(500).json({ error: "Failed to add show" });
+    }
+  });
+
+  app.patch("/api/user/shows/:showId", async (req, res) => {
+    try {
+      const userId = "demo-user"; // Mock user ID
+      const { showId } = req.params;
+      const updates = req.body;
+
+      const updatedUserShow = await storage.updateUserShow(userId, parseInt(showId), updates);
+      if (!updatedUserShow) {
+        return res.status(404).json({ error: "Show not found in your collection" });
+      }
+
+      res.json(updatedUserShow);
+    } catch (error) {
+      console.error("Error updating show:", error);
+      res.status(500).json({ error: "Failed to update show" });
+    }
+  });
+
+  app.delete("/api/user/shows/:showId", async (req, res) => {
+    try {
+      const userId = "demo-user"; // Mock user ID
+      const { showId } = req.params;
+
+      const success = await storage.removeUserShow(userId, parseInt(showId));
+      if (!success) {
+        return res.status(404).json({ error: "Show not found in your collection" });
+      }
+
+      res.status(204).send();
+    } catch (error) {
+      console.error("Error removing show:", error);
+      res.status(500).json({ error: "Failed to remove show" });
+    }
+  });
+
+  const httpServer = createServer(app);
+  return httpServer;
+}
