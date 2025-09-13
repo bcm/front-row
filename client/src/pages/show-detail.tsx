@@ -87,6 +87,59 @@ export default function ShowDetail() {
     },
   });
 
+  // Episode update mutation with optimistic updates
+  const updateEpisodeMutation = useMutation({
+    mutationFn: async ({ episodeId, status }: { episodeId: number; status: string }) => {
+      return apiRequest("PATCH", `/api/user/episodes/${episodeId}`, { status });
+    },
+    onMutate: async ({ episodeId, status }) => {
+      // Cancel any outgoing refetches to avoid overwriting our optimistic update
+      await queryClient.cancelQueries({ queryKey: ['/api/shows', id, 'user-episodes'] });
+
+      // Snapshot the previous value for rollback
+      const previousUserEpisodes = queryClient.getQueryData(['/api/shows', id, 'user-episodes']);
+
+      // Optimistically update the user episode status
+      queryClient.setQueryData(['/api/shows', id, 'user-episodes'], (old: any) => {
+        if (!old) return old;
+        return {
+          ...old,
+          [episodeId]: {
+            ...old[episodeId],
+            status,
+            triagedAt: new Date().toISOString(),
+            ...(status === "watched" && { watchedAt: new Date().toISOString() }),
+            ...(status !== "watched" && old[episodeId]?.watchedAt && { watchedAt: null })
+          }
+        };
+      });
+
+      // Return a context object with the snapshotted value
+      return { previousUserEpisodes };
+    },
+    onError: (err, variables, context) => {
+      // If the mutation fails, use the context returned from onMutate to roll back
+      if (context?.previousUserEpisodes) {
+        queryClient.setQueryData(['/api/shows', id, 'user-episodes'], context.previousUserEpisodes);
+      }
+      toast({
+        title: "Error",
+        description: "Failed to update episode. Please try again.",
+        variant: "destructive",
+      });
+    },
+    onSuccess: () => {
+      // Invalidate queries to ensure we have the latest data from server
+      queryClient.invalidateQueries({ queryKey: ['/api/shows', id, 'user-episodes'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/user/episodes'] });
+    },
+  });
+
+  const handleEpisodeStatusToggle = (episodeId: number, currentStatus: string) => {
+    const newStatus = currentStatus === "watched" ? "untriaged" : "watched";
+    updateEpisodeMutation.mutate({ episodeId, status: newStatus });
+  };
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-background">
@@ -227,14 +280,30 @@ export default function ShowDetail() {
 
   const getEpisodeStatusBadge = (episodeId: number) => {
     if (!userEpisodeStatuses || !userEpisodeStatuses[episodeId]) {
-      return null; // No status available
+      return (
+        <Badge 
+          className="bg-muted text-muted-foreground border border-muted-foreground/30 text-xs cursor-pointer hover:bg-green-500/20 hover:text-green-400 hover:border-green-500/30 transition-colors"
+          onClick={() => handleEpisodeStatusToggle(episodeId, "untriaged")}
+          data-testid={`badge-episode-status-${episodeId}`}
+        >
+          UNWATCHED
+        </Badge>
+      );
     }
 
     const status = userEpisodeStatuses[episodeId].status;
     
     switch (status) {
       case "watched":
-        return <Badge className="bg-green-500/20 text-green-400 border border-green-500/30 text-xs">WATCHED</Badge>;
+        return (
+          <Badge 
+            className="bg-green-500/20 text-green-400 border border-green-500/30 text-xs cursor-pointer hover:bg-muted hover:text-muted-foreground hover:border-muted-foreground/30 transition-colors"
+            onClick={() => handleEpisodeStatusToggle(episodeId, status)}
+            data-testid={`badge-episode-status-${episodeId}`}
+          >
+            WATCHED
+          </Badge>
+        );
       case "skipped":
         return <Badge className="bg-gray-500/20 text-gray-400 border border-gray-500/30 text-xs">SKIPPED</Badge>;
       case "next":
@@ -242,7 +311,15 @@ export default function ShowDetail() {
       case "later":
         return <Badge className="bg-yellow-500/20 text-yellow-400 border border-yellow-500/30 text-xs">LATER</Badge>;
       case "untriaged":
-        return <Badge className="bg-orange-500/20 text-orange-400 border border-orange-500/30 text-xs">NEW</Badge>;
+        return (
+          <Badge 
+            className="bg-orange-500/20 text-orange-400 border border-orange-500/30 text-xs cursor-pointer hover:bg-green-500/20 hover:text-green-400 hover:border-green-500/30 transition-colors"
+            onClick={() => handleEpisodeStatusToggle(episodeId, status)}
+            data-testid={`badge-episode-status-${episodeId}`}
+          >
+            NEW
+          </Badge>
+        );
       default:
         return null;
     }
