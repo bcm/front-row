@@ -74,16 +74,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Create Basic Auth header
       const credentials = Buffer.from(`${username}:${apiKey}`).toString('base64');
-      
-      console.log(`Making request to TVMaze User API for user: ${username}`);
       const response = await fetch(`https://api.tvmaze.com/v1/user/follows/shows?embed=show`, {
         headers: {
-          'Authorization': `Basic ${credentials}`,
-          'Content-Type': 'application/json'
+          'Accept': 'application/json',
+          'Authorization': `Basic ${credentials}`
         }
       });
       
-      console.log(`TVMaze API response status: ${response.status}`);
       
       if (!response.ok) {
         let errorMessage = `TVMaze User API error: ${response.status}`;
