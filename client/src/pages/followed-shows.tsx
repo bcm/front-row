@@ -42,6 +42,9 @@ export default function FollowedShows() {
         if (response.status === 401) {
           throw new Error("Invalid TVMaze API credentials. Please check your API key and username.");
         }
+        if (response.status === 404) {
+          throw new Error("TVMaze User API not found. You need a premium TVMaze account to access followed shows, or your username might be incorrect.");
+        }
         throw new Error("Failed to fetch followed shows");
       }
       return response.json() as Promise<FollowedShow[]>;

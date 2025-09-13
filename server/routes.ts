@@ -75,18 +75,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Create Basic Auth header
       const credentials = Buffer.from(`${username}:${apiKey}`).toString('base64');
       
-      const response = await fetch(`https://api.tvmaze.com/user/follows/shows?embed=show`, {
+      console.log(`Making request to TVMaze User API for user: ${username}`);
+      const response = await fetch(`https://api.tvmaze.com/user/follows/shows?embed[]=show`, {
         headers: {
           'Authorization': `Basic ${credentials}`,
           'Content-Type': 'application/json'
         }
       });
       
+      console.log(`TVMaze API response status: ${response.status}`);
+      
       if (!response.ok) {
+        let errorMessage = `TVMaze User API error: ${response.status}`;
+        try {
+          const errorData = await response.text();
+          console.log(`TVMaze API error response:`, errorData);
+          if (errorData) {
+            errorMessage += ` - ${errorData}`;
+          }
+        } catch (e) {
+          console.log('Could not read error response body');
+        }
+        
         if (response.status === 401) {
           return res.status(401).json({ error: "Invalid TVMaze API credentials" });
         }
-        throw new Error(`TVMaze User API error: ${response.status}`);
+        
+        if (response.status === 404) {
+          return res.status(404).json({ 
+            error: "TVMaze User API endpoint not found. This might mean the user doesn't have a premium account or the username is incorrect." 
+          });
+        }
+        
+        throw new Error(errorMessage);
       }
 
       const followedShows = await response.json();
