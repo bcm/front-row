@@ -67,14 +67,69 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { id } = req.params;
       const showId = parseInt(id);
+      const userId = "demo-user"; // Mock user ID
       
+      // Sync show details first
       const syncedShow = await storage.syncShowFromTVMaze(showId);
       
       if (!syncedShow) {
         return res.status(404).json({ error: "Show not found or failed to sync" });
       }
 
-      res.json(syncedShow);
+      // Sync episodes for this show
+      let episodesImported = 0;
+      try {
+        const response = await fetch(`https://api.tvmaze.com/shows/${showId}/episodes`);
+        
+        if (response.ok) {
+          const episodes = await response.json();
+          
+          for (const episode of episodes) {
+            try {
+              // Create episode
+              const episodeToStore = insertEpisodeSchema.parse({
+                id: episode.id,
+                showId: showId,
+                season: episode.season,
+                number: episode.number,
+                name: episode.name,
+                summary: episode.summary,
+                airdate: episode.airdate,
+                airstamp: episode.airstamp,
+                runtime: episode.runtime,
+                rating: episode.rating,
+                image: episode.image
+              });
+              
+              await storage.createEpisode(episodeToStore);
+
+              // Add user episode if user follows this show
+              const userShow = await storage.getUserShow(userId, showId);
+              if (userShow) {
+                const userEpisodeData = insertUserEpisodeSchema.parse({
+                  userId,
+                  episodeId: episode.id,
+                  status: "untriaged",
+                  addedAt: new Date()
+                });
+
+                await storage.addUserEpisode(userEpisodeData);
+                episodesImported++;
+              }
+            } catch (episodeError) {
+              console.error(`Error importing episode ${episode.id}:`, episodeError);
+            }
+          }
+        }
+      } catch (episodeError) {
+        console.error("Error syncing episodes:", episodeError);
+      }
+
+      res.json({ 
+        show: syncedShow, 
+        episodesImported,
+        message: `Show synced successfully. ${episodesImported} episodes imported.`
+      });
     } catch (error) {
       console.error("Error syncing show:", error);
       res.status(500).json({ error: "Failed to sync show" });

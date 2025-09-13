@@ -1,11 +1,13 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useParams } from "wouter";
-import { ArrowLeft, Star, Calendar, Clock, Globe, Tv, Users, Monitor, Play, Hash, ExternalLink } from "lucide-react";
+import { ArrowLeft, Star, Calendar, Clock, Globe, Tv, Users, Monitor, Play, Hash, ExternalLink, RefreshCw } from "lucide-react";
 import { Link } from "wouter";
 import Header from "@/components/header";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { TVMazeShow } from "@/lib/tvmaze";
+import { apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 
 interface ShowStats {
   totalEpisodes: number;
@@ -15,6 +17,8 @@ interface ShowStats {
 
 export default function ShowDetail() {
   const { id } = useParams<{ id: string }>();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
   
   const { data: show, isLoading, error } = useQuery<TVMazeShow>({
     queryKey: ['/api/shows', id],
@@ -31,6 +35,30 @@ export default function ShowDetail() {
       return response.json();
     },
     enabled: !!id,
+  });
+
+  const syncMutation = useMutation({
+    mutationFn: async () => {
+      return apiRequest("POST", `/api/shows/${id}/sync`, {});
+    },
+    onSuccess: (data: any) => {
+      // Invalidate and refetch show data and stats
+      queryClient.invalidateQueries({ queryKey: ['/api/shows', id] });
+      queryClient.invalidateQueries({ queryKey: ['/api/shows', id, 'stats'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/user/episodes'] });
+      
+      toast({
+        title: "Sync Complete",
+        description: data.message || `Show synced successfully. ${data.episodesImported || 0} episodes imported.`,
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Sync Failed",
+        description: error.message || "Failed to sync show data from TVMaze",
+        variant: "destructive",
+      });
+    },
   });
 
   if (isLoading) {
@@ -109,7 +137,7 @@ export default function ShowDetail() {
     
     let result = '';
     
-    if (hasSchedule) {
+    if (hasSchedule && show.schedule && show.schedule.days) {
       const days = show.schedule.days.join(', ');
       const time = show.schedule.time;
       
@@ -156,14 +184,25 @@ export default function ShowDetail() {
       <Header />
       
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Back Button */}
-        <div className="mb-6">
+        {/* Back Button and Actions */}
+        <div className="mb-6 flex items-center justify-between">
           <Link href="/library">
             <Button variant="outline" size="sm" data-testid="button-back-to-library">
               <ArrowLeft className="w-4 h-4 mr-2" />
               Back to Library
             </Button>
           </Link>
+          
+          <Button 
+            variant="outline" 
+            size="sm"
+            onClick={() => syncMutation.mutate()}
+            disabled={syncMutation.isPending}
+            data-testid="button-sync-show"
+          >
+            <RefreshCw className={`w-4 h-4 mr-2 ${syncMutation.isPending ? 'animate-spin' : ''}`} />
+            {syncMutation.isPending ? 'Syncing...' : 'Sync from TVMaze'}
+          </Button>
         </div>
 
         {/* Show Header */}
