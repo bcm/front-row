@@ -30,6 +30,13 @@ export default function Header({ onSearch }: HeaderProps) {
 
   const { data: searchResults, isLoading } = useQuery({
     queryKey: ['/api/search', debouncedSearch],
+    queryFn: async () => {
+      const response = await fetch(`/api/search?q=${encodeURIComponent(debouncedSearch)}`);
+      if (!response.ok) {
+        throw new Error('Search failed');
+      }
+      return response.json();
+    },
     enabled: debouncedSearch.length >= 2,
     staleTime: 1000 * 60 * 5, // 5 minutes
   });
