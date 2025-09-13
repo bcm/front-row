@@ -24,6 +24,8 @@ export default function EpisodeCard({ userEpisode, onStatusChange, variant = "de
         return <Badge className="bg-blue-500/20 text-blue-400 border border-blue-500/30">LATER</Badge>;
       case "watched":
         return <Badge className="bg-purple-500/20 text-purple-400 border border-purple-500/30">WATCHED</Badge>;
+      case "skipped":
+        return <Badge className="bg-gray-500/20 text-gray-400 border border-gray-500/30">SKIPPED</Badge>;
       default:
         return <Badge className="bg-gray-500/20 text-gray-400 border border-gray-500/30">{status}</Badge>;
     }

@@ -102,6 +102,31 @@ export default function Dashboard() {
     importEpisodesMutation.mutate();
   };
 
+  // Sync scrobbles mutation
+  const syncScrobblesMutation = useMutation({
+    mutationFn: async () => {
+      return apiRequest("POST", "/api/episodes/sync-scrobbles", {});
+    },
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/user/episodes"] });
+      toast({
+        title: "Scrobble sync completed",
+        description: `${data.updated} episodes updated from TVMaze scrobbles`,
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Sync failed",
+        description: error.message || "Failed to sync TVMaze scrobbles",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleSyncScrobbles = () => {
+    syncScrobblesMutation.mutate();
+  };
+
   return (
     <div className="min-h-screen bg-background">
       <Header />
@@ -114,14 +139,25 @@ export default function Dashboard() {
               <h1 className="text-3xl font-bold text-foreground">Episode Triage</h1>
               <p className="text-muted-foreground mt-1">Manage your episode viewing queue</p>
             </div>
-            <Button 
-              onClick={handleImportEpisodes}
-              disabled={importEpisodesMutation.isPending}
-              data-testid="button-import-episodes"
-            >
-              <Download className="w-4 h-4 mr-2" />
-              {importEpisodesMutation.isPending ? "Importing..." : "Import Episodes"}
-            </Button>
+            <div className="flex space-x-2">
+              <Button 
+                onClick={handleImportEpisodes}
+                disabled={importEpisodesMutation.isPending}
+                data-testid="button-import-episodes"
+              >
+                <Download className="w-4 h-4 mr-2" />
+                {importEpisodesMutation.isPending ? "Importing..." : "Import Episodes"}
+              </Button>
+              <Button 
+                onClick={handleSyncScrobbles}
+                disabled={syncScrobblesMutation.isPending}
+                variant="outline"
+                data-testid="button-sync-scrobbles"
+              >
+                <PlayCircle className="w-4 h-4 mr-2" />
+                {syncScrobblesMutation.isPending ? "Syncing..." : "Sync Watched"}
+              </Button>
+            </div>
           </div>
 
           {/* New in Feed Section */}

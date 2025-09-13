@@ -462,6 +462,115 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Sync episode watch status from TVMaze scrobbles
+  app.post("/api/episodes/sync-scrobbles", async (req, res) => {
+    try {
+      const apiKey = process.env.TVMAZE_API_KEY;
+      const username = process.env.TVMAZE_USERNAME;
+      const userId = "demo-user"; // Mock user ID
+      
+      if (!apiKey || !username) {
+        return res.status(500).json({ error: "TVMaze API credentials not configured" });
+      }
+
+      // Get all untriaged episodes
+      const untriagedEpisodes = await storage.getUserEpisodes(userId, "untriaged");
+      
+      if (untriagedEpisodes.length === 0) {
+        return res.json({ message: "No untriaged episodes to sync", updated: 0 });
+      }
+
+      // Group episodes by show ID to avoid duplicate API calls
+      const episodesByShow = new Map<number, typeof untriagedEpisodes>();
+      for (const userEpisode of untriagedEpisodes) {
+        const showId = userEpisode.episode.show.id;
+        if (!episodesByShow.has(showId)) {
+          episodesByShow.set(showId, []);
+        }
+        episodesByShow.get(showId)!.push(userEpisode);
+      }
+
+      let updatedCount = 0;
+      const credentials = Buffer.from(`${username}:${apiKey}`).toString('base64');
+
+      // Process each show
+      for (const [showId, showEpisodes] of Array.from(episodesByShow.entries())) {
+        try {
+          // Query TVMaze scrobble API for this show
+          const scrobbleResponse = await fetch(`https://api.tvmaze.com/v1/scrobble/shows/${showId}`, {
+            headers: {
+              'Accept': 'application/json',
+              'Authorization': `Basic ${credentials}`
+            }
+          });
+
+          if (!scrobbleResponse.ok) {
+            if (scrobbleResponse.status === 404) {
+              // No scrobbles for this show, skip it
+              console.log(`No scrobbles found for show ${showId}`);
+              continue;
+            }
+            console.error(`Error fetching scrobbles for show ${showId}: ${scrobbleResponse.status}`);
+            continue;
+          }
+
+          const scrobbleData = await scrobbleResponse.json();
+          
+          // Process each episode for this show
+          for (const userEpisode of showEpisodes) {
+            const episodeId = userEpisode.episode.id;
+            
+            // Find scrobble data for this episode
+            const episodeScrobble = scrobbleData.find((scrobble: any) => 
+              scrobble.episode_id === episodeId
+            );
+
+            if (episodeScrobble) {
+              let newStatus = null;
+              let watchedAt = null;
+
+              // Mark type 0 = watched, Mark type 2 = skipped
+              if (episodeScrobble.marked_at && episodeScrobble.type === 0) {
+                newStatus = "watched";
+                watchedAt = new Date(episodeScrobble.marked_at);
+              } else if (episodeScrobble.marked_at && episodeScrobble.type === 2) {
+                newStatus = "skipped";
+              }
+
+              if (newStatus) {
+                const updates: any = { 
+                  status: newStatus,
+                  triagedAt: new Date()
+                };
+                
+                if (watchedAt) {
+                  updates.watchedAt = watchedAt;
+                }
+
+                await storage.updateUserEpisode(userId, episodeId, updates);
+                updatedCount++;
+                console.log(`Updated episode ${episodeId} to ${newStatus}`);
+              }
+            }
+          }
+        } catch (error) {
+          console.error(`Error processing scrobbles for show ${showId}:`, error);
+          continue;
+        }
+      }
+
+      res.json({ 
+        message: `Sync completed: ${updatedCount} episodes updated`,
+        updated: updatedCount,
+        totalProcessed: untriagedEpisodes.length
+      });
+
+    } catch (error) {
+      console.error("Error syncing scrobbles:", error);
+      res.status(500).json({ error: "Failed to sync scrobbles" });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }
