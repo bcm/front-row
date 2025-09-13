@@ -23,7 +23,7 @@ interface HeaderProps {
 }
 
 export default function Header({ onSearch }: HeaderProps) {
-  const [location] = useLocation();
+  const [location, setLocation] = useLocation();
   const [searchQuery, setSearchQuery] = useState("");
   const [showDropdown, setShowDropdown] = useState(false);
   const debouncedSearch = useDebounce(searchQuery, 300);
@@ -53,11 +53,11 @@ export default function Header({ onSearch }: HeaderProps) {
   const handleResultClick = (result: SearchResult) => {
     setSearchQuery("");
     setShowDropdown(false);
-    // Navigate to show or episode detail page
+    // Navigate to show or episode detail page using wouter
     if (result.resultType === 'show') {
-      window.location.href = `/show/${result.id}`;
+      setLocation(`/show/${result.id}`);
     } else {
-      window.location.href = `/episode/${result.id}`;
+      setLocation(`/episode/${result.id}`);
     }
   };
 
