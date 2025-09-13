@@ -1,7 +1,7 @@
 import { type User, type InsertUser, type Show, type InsertShow, type UserShow, type InsertUserShow, type Episode, type InsertEpisode } from "@shared/schema";
 import { users, shows, userShows, episodes } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, ilike, inArray, desc } from "drizzle-orm";
+import { eq, and, ilike, inArray, desc, asc } from "drizzle-orm";
 import { randomUUID } from "crypto";
 
 export interface IStorage {
@@ -324,7 +324,7 @@ export class DatabaseStorage implements IStorage {
       .from(userShows)
       .innerJoin(shows, eq(userShows.showId, shows.id))
       .where(whereClause)
-      .orderBy(desc(userShows.priority), desc(userShows.addedAt));
+      .orderBy(asc(shows.name));
 
     return results.map(row => ({
       id: row.id,
