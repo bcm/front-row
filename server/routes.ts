@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { insertShowSchema, insertUserShowSchema } from "@shared/schema";
+import { insertShowSchema, insertUserShowSchema, insertEpisodeSchema, insertUserEpisodeSchema } from "@shared/schema";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // TVMaze API proxy routes
@@ -321,6 +321,144 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error removing show:", error);
       res.status(500).json({ error: "Failed to remove show" });
+    }
+  });
+
+  // Import episodes for all followed shows
+  app.post("/api/episodes/import", async (req, res) => {
+    try {
+      const userId = "demo-user"; // Mock user ID
+      
+      // Get all user shows (followed shows)
+      const userShows = await storage.getUserShows(userId);
+      
+      if (userShows.length === 0) {
+        return res.json({ 
+          message: "No followed shows found. Import shows first.", 
+          imported: 0,
+          total: 0 
+        });
+      }
+
+      let importedCount = 0;
+      let skippedCount = 0;
+      let totalProcessed = 0;
+
+      // Process each followed show
+      for (const userShow of userShows) {
+        try {
+          console.log(`Importing episodes for show: ${userShow.show.name} (ID: ${userShow.showId})`);
+          
+          // Fetch episodes from TVMaze API
+          const response = await fetch(`https://api.tvmaze.com/shows/${userShow.showId}/episodes`);
+          
+          if (!response.ok) {
+            console.error(`Failed to fetch episodes for show ${userShow.showId}: ${response.status}`);
+            continue;
+          }
+
+          const episodes = await response.json();
+          console.log(`Found ${episodes.length} episodes for ${userShow.show.name}`);
+
+          // Process each episode
+          for (const episode of episodes) {
+            try {
+              // Prepare episode data for storage
+              const episodeToStore = insertEpisodeSchema.parse({
+                id: episode.id,
+                showId: userShow.showId,
+                season: episode.season,
+                number: episode.number,
+                name: episode.name,
+                summary: episode.summary,
+                airdate: episode.airdate,
+                airstamp: episode.airstamp,
+                runtime: episode.runtime,
+                rating: episode.rating,
+                image: episode.image
+              });
+              
+              // Store episode in database (will skip if already exists due to onConflictDoUpdate)
+              await storage.createEpisode(episodeToStore);
+
+              // Create user episode with "untriaged" status (addUserEpisode handles duplicates)
+              const userEpisodeData = insertUserEpisodeSchema.parse({
+                userId,
+                episodeId: episode.id,
+                status: "untriaged",
+                addedAt: new Date()
+              });
+
+              const userEpisode = await storage.addUserEpisode(userEpisodeData);
+              if (userEpisode.id) {
+                importedCount++;
+              } else {
+                skippedCount++;
+              }
+              
+              totalProcessed++;
+            } catch (episodeError) {
+              console.error(`Error processing episode ${episode.id} for show ${userShow.show.name}:`, episodeError);
+              // Continue with other episodes
+            }
+          }
+        } catch (showError) {
+          console.error(`Error processing show ${userShow.show.name}:`, showError);
+          // Continue with other shows
+        }
+      }
+
+      res.json({ 
+        message: "Episode import completed", 
+        imported: importedCount,
+        skipped: skippedCount,
+        totalProcessed,
+        showsProcessed: userShows.length
+      });
+    } catch (error) {
+      console.error("Error importing episodes:", error);
+      res.status(500).json({ error: "Failed to import episodes" });
+    }
+  });
+
+  // Get user episodes with filtering by status
+  app.get("/api/user/episodes", async (req, res) => {
+    try {
+      const { status } = req.query;
+      const userId = "demo-user"; // Mock user ID
+      
+      const episodes = await storage.getUserEpisodes(userId, status as string);
+      res.json(episodes);
+    } catch (error) {
+      console.error("Error fetching user episodes:", error);
+      res.status(500).json({ error: "Failed to fetch user episodes" });
+    }
+  });
+
+  // Update user episode status
+  app.patch("/api/user/episodes/:episodeId", async (req, res) => {
+    try {
+      const userId = "demo-user"; // Mock user ID
+      const { episodeId } = req.params;
+      const updates = req.body;
+
+      // Add timestamp fields based on status
+      if (updates.status === "watched" && !updates.watchedAt) {
+        updates.watchedAt = new Date();
+      }
+      if (updates.status !== "untriaged" && !updates.triagedAt) {
+        updates.triagedAt = new Date();
+      }
+
+      const updatedUserEpisode = await storage.updateUserEpisode(userId, parseInt(episodeId), updates);
+      if (!updatedUserEpisode) {
+        return res.status(404).json({ error: "Episode not found in your collection" });
+      }
+
+      res.json(updatedUserEpisode);
+    } catch (error) {
+      console.error("Error updating user episode:", error);
+      res.status(500).json({ error: "Failed to update user episode" });
     }
   });
 

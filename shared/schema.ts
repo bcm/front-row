@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, timestamp, jsonb, boolean } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, timestamp, jsonb, boolean, unique } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -60,7 +60,9 @@ export const userEpisodes = pgTable("user_episodes", {
   watchedAt: timestamp("watched_at"),
   triagedAt: timestamp("triaged_at"),
   addedAt: timestamp("added_at").defaultNow(),
-});
+}, (table) => ({
+  uniqueUserEpisode: unique().on(table.userId, table.episodeId),
+}));
 
 export const insertUserSchema = createInsertSchema(users).pick({
   username: true,

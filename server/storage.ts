@@ -493,7 +493,20 @@ export class DatabaseStorage implements IStorage {
     const [newUserEpisode] = await db
       .insert(userEpisodes)
       .values([userEpisode])
+      .onConflictDoNothing({
+        target: [userEpisodes.userId, userEpisodes.episodeId],
+      })
       .returning();
+    
+    // If no row was inserted (conflict), fetch the existing one
+    if (!newUserEpisode) {
+      const [existingUserEpisode] = await db
+        .select()
+        .from(userEpisodes)
+        .where(and(eq(userEpisodes.userId, userEpisode.userId), eq(userEpisodes.episodeId, userEpisode.episodeId)));
+      return existingUserEpisode;
+    }
+    
     return newUserEpisode;
   }
 
