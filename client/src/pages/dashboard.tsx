@@ -285,7 +285,7 @@ export default function Dashboard() {
               ) : (
                 <div className="col-span-full text-center py-8">
                   <AlertTriangle className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
-                  <h3 className="text-lg font-semibold text-muted-foreground mb-2">No untriaged episodes</h3>
+                  <h3 className="text-lg font-semibold text-muted-foreground mb-2">No new episodes</h3>
                   <p className="text-muted-foreground">New episodes will appear here for triage</p>
                 </div>
               )}
