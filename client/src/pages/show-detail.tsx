@@ -596,9 +596,11 @@ export default function ShowDetail() {
                                 <div className="flex-1 min-w-0">
                                   <div className="flex items-start justify-between">
                                     <div className="flex-1 min-w-0">
-                                      <h4 className="font-medium text-foreground truncate">
-                                        {episode.number ? `${episode.number}. ` : ''}{episode.name || `Episode ${episode.number}`}
-                                      </h4>
+                                      <Link href={`/episode/${episode.id}`}>
+                                        <h4 className="font-medium text-foreground truncate hover:text-primary transition-colors cursor-pointer">
+                                          {episode.number ? `${episode.number}. ` : ''}{episode.name || `Episode ${episode.number}`}
+                                        </h4>
+                                      </Link>
                                       {episode.summary && (
                                         <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
                                           {episode.summary.replace(/<[^>]*>/g, '')}

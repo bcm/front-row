@@ -86,9 +86,11 @@ export default function EpisodeCard({ userEpisode, onStatusChange, variant = "de
                 {show.name}
               </h2>
             </Link>
-            <h3 className="font-semibold text-lg truncate text-foreground mb-1" data-testid={`text-episode-title-${episode.id}`}>
-              {getEpisodeTitle()}
-            </h3>
+            <Link href={`/episode/${episode.id}`}>
+              <h3 className="font-semibold text-lg truncate text-foreground mb-1 hover:text-primary transition-colors cursor-pointer" data-testid={`text-episode-title-${episode.id}`}>
+                {getEpisodeTitle()}
+              </h3>
+            </Link>
             {episode.summary && (
               <p className="text-sm text-muted-foreground line-clamp-2 mb-3" data-testid={`text-episode-summary-${episode.id}`}>
                 {episode.summary.replace(/<[^>]*>/g, '')}
@@ -167,9 +169,11 @@ export default function EpisodeCard({ userEpisode, onStatusChange, variant = "de
             }}
           />
           <div className="flex-1 min-w-0">
-            <h4 className="font-medium text-xs truncate text-foreground" data-testid={`text-episode-title-${episode.id}`}>
-              {getEpisodeTitle()}
-            </h4>
+            <Link href={`/episode/${episode.id}`}>
+              <h4 className="font-medium text-xs truncate text-foreground hover:text-primary transition-colors cursor-pointer" data-testid={`text-episode-title-${episode.id}`}>
+                {getEpisodeTitle()}
+              </h4>
+            </Link>
             {episode.summary && (
               <p className="text-xs text-muted-foreground line-clamp-1 mt-1" data-testid={`text-episode-summary-${episode.id}`}>
                 {episode.summary.replace(/<[^>]*>/g, '')}
@@ -213,9 +217,11 @@ export default function EpisodeCard({ userEpisode, onStatusChange, variant = "de
             }}
           />
           <div className="flex-1 min-w-0">
-            <h3 className="font-semibold text-sm truncate text-foreground mb-1" data-testid={`text-episode-title-${episode.id}`}>
-              {getEpisodeTitle()}
-            </h3>
+            <Link href={`/episode/${episode.id}`}>
+              <h3 className="font-semibold text-sm truncate text-foreground mb-1 hover:text-primary transition-colors cursor-pointer" data-testid={`text-episode-title-${episode.id}`}>
+                {getEpisodeTitle()}
+              </h3>
+            </Link>
             {episode.summary && (
               <p className="text-xs text-muted-foreground line-clamp-2" data-testid={`text-episode-summary-${episode.id}`}>
                 {episode.summary.replace(/<[^>]*>/g, '')}
@@ -277,9 +283,11 @@ export default function EpisodeCard({ userEpisode, onStatusChange, variant = "de
           }}
         />
         <div className="flex-1 min-w-0">
-          <h3 className="font-semibold text-lg truncate text-foreground mb-1" data-testid={`text-episode-title-${episode.id}`}>
-            {getEpisodeTitle()}
-          </h3>
+          <Link href={`/episode/${episode.id}`}>
+            <h3 className="font-semibold text-lg truncate text-foreground mb-1 hover:text-primary transition-colors cursor-pointer" data-testid={`text-episode-title-${episode.id}`}>
+              {getEpisodeTitle()}
+            </h3>
+          </Link>
           {episode.summary && (
             <p className="text-sm text-muted-foreground line-clamp-2" data-testid={`text-episode-summary-${episode.id}`}>
               {episode.summary.replace(/<[^>]*>/g, '')}
