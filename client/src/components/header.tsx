@@ -1,14 +1,14 @@
 import { useState } from "react";
 import { Search, Tv } from "lucide-react";
+import { Link, useLocation } from "wouter";
 import { cn } from "@/lib/utils";
 
 interface HeaderProps {
-  activeTab: string;
-  onTabChange: (tab: string) => void;
   onSearch?: (query: string) => void;
 }
 
-export default function Header({ activeTab, onTabChange, onSearch }: HeaderProps) {
+export default function Header({ onSearch }: HeaderProps) {
+  const [location] = useLocation();
   const [searchQuery, setSearchQuery] = useState("");
 
   const handleSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -20,11 +20,21 @@ export default function Header({ activeTab, onTabChange, onSearch }: HeaderProps
   };
 
   const tabs = [
-    { id: "dashboard", label: "Dashboard" },
-    { id: "library", label: "Library" },
-    { id: "shared", label: "Shared" },
-    { id: "settings", label: "Settings" },
+    { id: "dashboard", label: "Dashboard", href: "/" },
+    { id: "library", label: "Library", href: "/library" },
+    { id: "shared", label: "Shared", href: "/shared" },
+    { id: "settings", label: "Settings", href: "/settings" },
   ];
+
+  const getActiveTab = () => {
+    if (location === "/" || location === "/dashboard") return "dashboard";
+    if (location === "/library") return "library";
+    if (location === "/shared") return "shared";
+    if (location === "/settings") return "settings";
+    return "dashboard";
+  };
+
+  const activeTab = getActiveTab();
 
   return (
     <header className="bg-card border-b border-border">
@@ -56,9 +66,9 @@ export default function Header({ activeTab, onTabChange, onSearch }: HeaderProps
           {/* Tab Navigation */}
           <nav className="hidden sm:flex space-x-1">
             {tabs.map((tab) => (
-              <button 
+              <Link 
                 key={tab.id}
-                onClick={() => onTabChange(tab.id)}
+                href={tab.href}
                 data-testid={`button-tab-${tab.id}`}
                 className={cn(
                   "px-4 py-2 rounded-md text-sm font-medium transition-colors",
@@ -68,7 +78,7 @@ export default function Header({ activeTab, onTabChange, onSearch }: HeaderProps
                 )}
               >
                 {tab.label}
-              </button>
+              </Link>
             ))}
           </nav>
         </div>
@@ -90,9 +100,9 @@ export default function Header({ activeTab, onTabChange, onSearch }: HeaderProps
           {/* Mobile Tab Navigation */}
           <div className="flex space-x-1 mt-4 overflow-x-auto">
             {tabs.map((tab) => (
-              <button 
+              <Link 
                 key={tab.id}
-                onClick={() => onTabChange(tab.id)}
+                href={tab.href}
                 data-testid={`button-tab-${tab.id}-mobile`}
                 className={cn(
                   "px-4 py-2 rounded-md text-sm font-medium whitespace-nowrap",
@@ -102,7 +112,7 @@ export default function Header({ activeTab, onTabChange, onSearch }: HeaderProps
                 )}
               >
                 {tab.label}
-              </button>
+              </Link>
             ))}
           </div>
         </div>
