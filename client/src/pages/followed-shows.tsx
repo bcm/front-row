@@ -286,11 +286,7 @@ export default function FollowedShows() {
                     </p>
                     <div className="flex items-center justify-between">
                       <div className="flex items-center space-x-2">
-                        {libraryShow.status !== "later" && (
-                          <span className="bg-secondary text-secondary-foreground px-2 py-1 rounded text-xs" data-testid={`text-user-status-${libraryShow.showId}`}>
-                            {libraryShow.status}
-                          </span>
-                        )}
+                        {/* Status functionality removed */}
                       </div>
                       <Tooltip>
                         <TooltipTrigger asChild>

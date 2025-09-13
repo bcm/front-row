@@ -121,9 +121,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 name: episode.name,
                 summary: episode.summary,
                 airdate: episode.airdate,
-                airstamp: episode.airstamp,
                 runtime: episode.runtime,
-                rating: episode.rating,
                 image: episode.image
               });
               
@@ -611,9 +609,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 name: episode.name,
                 summary: episode.summary,
                 airdate: episode.airdate,
-                airstamp: episode.airstamp,
                 runtime: episode.runtime,
-                rating: episode.rating,
                 image: episode.image
               });
               
