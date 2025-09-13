@@ -27,6 +27,9 @@ export default function ShowCard({ userShow, onStatusChange, variant = "default"
   };
 
   const getNetworkInfo = () => {
+    if (show.webChannel?.name) {
+      return show.webChannel.name;
+    }
     if (show.network?.name) {
       return show.network.name;
     }
