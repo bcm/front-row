@@ -124,15 +124,15 @@ export default function Dashboard() {
             </Button>
           </div>
 
-          {/* Untriaged Episodes Section */}
+          {/* New in Feed Section */}
           <section>
             <div className="flex items-center justify-between mb-6">
               <div className="flex items-center space-x-3">
                 <div className="w-6 h-6 bg-yellow-500 rounded-full flex items-center justify-center">
                   <AlertTriangle className="w-4 h-4 text-white" />
                 </div>
-                <h2 className="text-2xl font-bold" data-testid="text-section-title-untriaged">Untriaged Episodes</h2>
-                <span className="bg-yellow-500 text-white px-2 py-1 rounded-full text-xs font-bold" data-testid="text-untriaged-count">
+                <h2 className="text-2xl font-bold" data-testid="text-section-title-new-feed">New in Feed</h2>
+                <span className="bg-yellow-500 text-white px-2 py-1 rounded-full text-xs font-bold" data-testid="text-new-feed-count">
                   {untriagedEpisodes?.length || 0}
                 </span>
               </div>
@@ -279,56 +279,6 @@ export default function Dashboard() {
             </div>
           </section>
 
-          {/* Recently Watched Section */}
-          <section>
-            <div className="flex items-center justify-between mb-6">
-              <div className="flex items-center space-x-3">
-                <div className="w-6 h-6 bg-purple-500 rounded-full flex items-center justify-center">
-                  <Eye className="w-4 h-4 text-white" />
-                </div>
-                <h2 className="text-2xl font-bold" data-testid="text-section-title-watched">Recently Watched</h2>
-                <span className="bg-purple-500 text-white px-2 py-1 rounded-full text-xs font-bold" data-testid="text-watched-count">
-                  {watchedEpisodes?.length || 0}
-                </span>
-              </div>
-              <p className="text-muted-foreground text-sm">Your viewing history</p>
-            </div>
-            
-            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-4">
-              {watchedLoading ? (
-                Array.from({ length: 8 }).map((_, i) => (
-                  <div key={i} className="bg-card rounded-lg p-3 animate-pulse">
-                    <div className="flex space-x-2 mb-2">
-                      <div className="w-12 h-8 bg-muted rounded-md"></div>
-                      <div className="flex-1 space-y-1">
-                        <div className="h-3 bg-muted rounded"></div>
-                        <div className="h-2 bg-muted rounded w-2/3"></div>
-                      </div>
-                    </div>
-                    <div className="h-5 bg-muted rounded w-16"></div>
-                  </div>
-                ))
-              ) : watchedEpisodes && watchedEpisodes.length > 0 ? (
-                watchedEpisodes
-                  .sort((a, b) => new Date(b.watchedAt || 0).getTime() - new Date(a.watchedAt || 0).getTime())
-                  .slice(0, 16)
-                  .map((userEpisode) => (
-                    <EpisodeCard
-                      key={userEpisode.id}
-                      userEpisode={userEpisode}
-                      onStatusChange={handleEpisodeStatusChange}
-                      variant="compact"
-                    />
-                  ))
-              ) : (
-                <div className="col-span-full text-center py-8">
-                  <Eye className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
-                  <h3 className="text-lg font-semibold text-muted-foreground mb-2">No watched episodes</h3>
-                  <p className="text-muted-foreground">Episodes you mark as "Watched" will appear here</p>
-                </div>
-              )}
-            </div>
-          </section>
         </div>
       </main>
 

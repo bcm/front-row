@@ -17,7 +17,7 @@ export default function EpisodeCard({ userEpisode, onStatusChange, variant = "de
   const getStatusBadge = (status: string) => {
     switch (status) {
       case "untriaged":
-        return <Badge className="bg-yellow-500/20 text-yellow-400 border border-yellow-500/30">UNTRIAGED</Badge>;
+        return null; // Don't show badge for untriaged episodes
       case "next":
         return <Badge className="bg-green-500/20 text-green-400 border border-green-500/30">NEXT</Badge>;
       case "later":
@@ -41,6 +41,13 @@ export default function EpisodeCard({ userEpisode, onStatusChange, variant = "de
     return `Season ${episode.season}, Episode ${episode.number}`;
   };
 
+  const getSeasonEpisodeFormat = () => {
+    if (episode.season && episode.number) {
+      return `${episode.season}x${episode.number}`;
+    }
+    return null;
+  };
+
   if (variant === "compact") {
     return (
       <div className="episode-card bg-card hover:bg-card/80 rounded-lg p-3 transition-all duration-200 cursor-pointer" data-testid={`card-episode-${episode.id}`}>
@@ -58,12 +65,22 @@ export default function EpisodeCard({ userEpisode, onStatusChange, variant = "de
             <h4 className="font-medium text-xs truncate text-foreground" data-testid={`text-episode-title-${episode.id}`}>
               {getEpisodeTitle()}
             </h4>
-            <p className="text-xs text-muted-foreground truncate" data-testid={`text-episode-show-${episode.id}`}>
-              {show.name}
-            </p>
+            <div className="flex items-center space-x-2 text-xs text-muted-foreground truncate">
+              <span data-testid={`text-episode-show-${episode.id}`}>{show.name}</span>
+              {getSeasonEpisodeFormat() && (
+                <span className="font-medium" data-testid={`text-episode-number-${episode.id}`}>
+                  {getSeasonEpisodeFormat()}
+                </span>
+              )}
+            </div>
+            {episode.summary && (
+              <p className="text-xs text-muted-foreground line-clamp-1 mt-1" data-testid={`text-episode-summary-${episode.id}`}>
+                {episode.summary.replace(/<[^>]*>/g, '')}
+              </p>
+            )}
           </div>
         </div>
-        {getStatusBadge(userEpisode.status)}
+        {getStatusBadge(userEpisode.status) && getStatusBadge(userEpisode.status)}
       </div>
     );
   }
@@ -88,10 +105,15 @@ export default function EpisodeCard({ userEpisode, onStatusChange, variant = "de
             <h3 className="font-semibold text-sm truncate text-foreground mb-1" data-testid={`text-episode-title-${episode.id}`}>
               {getEpisodeTitle()}
             </h3>
-            <p className="text-sm text-muted-foreground truncate mb-1" data-testid={`text-episode-show-${episode.id}`}>
-              {show.name}
-            </p>
-            <div className="flex items-center space-x-3 text-xs text-muted-foreground">
+            <div className="flex items-center space-x-2 text-sm text-muted-foreground truncate mb-1">
+              <span data-testid={`text-episode-show-${episode.id}`}>{show.name}</span>
+              {getSeasonEpisodeFormat() && (
+                <span className="font-medium" data-testid={`text-episode-number-${episode.id}`}>
+                  {getSeasonEpisodeFormat()}
+                </span>
+              )}
+            </div>
+            <div className="flex items-center space-x-3 text-xs text-muted-foreground mb-2">
               <span className="flex items-center space-x-1">
                 <Calendar className="w-3 h-3" />
                 <span>{formatAirdate(episode.airdate)}</span>
@@ -103,11 +125,16 @@ export default function EpisodeCard({ userEpisode, onStatusChange, variant = "de
                 </span>
               )}
             </div>
+            {episode.summary && (
+              <p className="text-xs text-muted-foreground line-clamp-2" data-testid={`text-episode-summary-${episode.id}`}>
+                {episode.summary.replace(/<[^>]*>/g, '')}
+              </p>
+            )}
           </div>
         </div>
         
         <div className="flex items-center justify-between">
-          {getStatusBadge(userEpisode.status)}
+          {getStatusBadge(userEpisode.status) && getStatusBadge(userEpisode.status)}
           <div className="flex space-x-1">
             <Button 
               size="sm" 
@@ -148,9 +175,14 @@ export default function EpisodeCard({ userEpisode, onStatusChange, variant = "de
           <h3 className="font-semibold text-lg truncate text-foreground mb-1" data-testid={`text-episode-title-${episode.id}`}>
             {getEpisodeTitle()}
           </h3>
-          <p className="text-sm text-muted-foreground truncate mb-2" data-testid={`text-episode-show-${episode.id}`}>
-            {show.name}
-          </p>
+          <div className="flex items-center space-x-2 text-sm text-muted-foreground truncate mb-2">
+            <span data-testid={`text-episode-show-${episode.id}`}>{show.name}</span>
+            {getSeasonEpisodeFormat() && (
+              <span className="font-medium" data-testid={`text-episode-number-${episode.id}`}>
+                {getSeasonEpisodeFormat()}
+              </span>
+            )}
+          </div>
           <div className="flex items-center space-x-4 text-sm text-muted-foreground mb-3">
             <span className="flex items-center space-x-1">
               <Calendar className="w-4 h-4" />
@@ -172,7 +204,7 @@ export default function EpisodeCard({ userEpisode, onStatusChange, variant = "de
       </div>
       
       <div className="flex items-center justify-between">
-        {getStatusBadge(userEpisode.status)}
+        <div>{getStatusBadge(userEpisode.status)}</div>
         <div className="flex space-x-2">
           <Button 
             size="sm" 
