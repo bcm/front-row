@@ -68,6 +68,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { id } = req.params;
       const showId = parseInt(id);
       const userId = "demo-user"; // Mock user ID
+      const apiKey = process.env.TVMAZE_API_KEY;
+      const username = process.env.TVMAZE_USERNAME;
       
       // Sync show details first
       const syncedShow = await storage.syncShowFromTVMaze(showId);
@@ -76,8 +78,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "Show not found or failed to sync" });
       }
 
+      // Fetch user's marked state from scrobble API if credentials are available
+      let scrobbleData = [];
+      if (apiKey && username) {
+        try {
+          const credentials = Buffer.from(`${username}:${apiKey}`).toString('base64');
+          const scrobbleResponse = await fetch(`https://api.tvmaze.com/v1/scrobble/shows/${showId}`, {
+            headers: {
+              'Accept': 'application/json',
+              'Authorization': `Basic ${credentials}`
+            }
+          });
+
+          if (scrobbleResponse.ok) {
+            scrobbleData = await scrobbleResponse.json();
+            console.log(`Found ${scrobbleData.length} scrobble entries for show ${showId}`);
+          } else if (scrobbleResponse.status !== 404) {
+            console.error(`Error fetching scrobbles for show ${showId}: ${scrobbleResponse.status}`);
+          }
+        } catch (scrobbleError) {
+          console.error("Error fetching scrobble data:", scrobbleError);
+        }
+      }
+
       // Sync episodes for this show
       let episodesImported = 0;
+      let episodesUpdated = 0;
       try {
         const response = await fetch(`https://api.tvmaze.com/shows/${showId}/episodes`);
         
@@ -106,14 +132,48 @@ export async function registerRoutes(app: Express): Promise<Server> {
               // Add user episode if user follows this show
               const userShow = await storage.getUserShow(userId, showId);
               if (userShow) {
+                // Check if there's scrobble data for this episode
+                const episodeScrobble = scrobbleData.find((scrobble: any) => 
+                  scrobble.episode_id === episode.id
+                );
+
+                let initialStatus = "untriaged";
+                let watchedAt = null;
+
+                // If scrobble data exists, set status accordingly
+                if (episodeScrobble) {
+                  // Mark type 0 = watched, Mark type 2 = skipped
+                  if (episodeScrobble.marked_at && episodeScrobble.type === 0) {
+                    initialStatus = "watched";
+                    watchedAt = new Date(episodeScrobble.marked_at);
+                  } else if (episodeScrobble.marked_at && episodeScrobble.type === 2) {
+                    initialStatus = "skipped";
+                  }
+                }
+
                 const userEpisodeData = insertUserEpisodeSchema.parse({
                   userId,
                   episodeId: episode.id,
-                  status: "untriaged",
-                  addedAt: new Date()
+                  status: initialStatus,
+                  addedAt: new Date(),
+                  ...(watchedAt && { watchedAt })
                 });
 
-                await storage.addUserEpisode(userEpisodeData);
+                const userEpisode = await storage.addUserEpisode(userEpisodeData);
+                
+                // If episode already existed and we have scrobble data, update its status
+                if (episodeScrobble && userEpisode.id) {
+                  const existingUserEpisode = await storage.getUserEpisode(userId, episode.id);
+                  if (existingUserEpisode && existingUserEpisode.status !== initialStatus) {
+                    const updates: any = { status: initialStatus };
+                    if (watchedAt) {
+                      updates.watchedAt = watchedAt;
+                    }
+                    await storage.updateUserEpisode(userId, episode.id, updates);
+                    episodesUpdated++;
+                  }
+                }
+                
                 episodesImported++;
               }
             } catch (episodeError) {
@@ -125,10 +185,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.error("Error syncing episodes:", episodeError);
       }
 
+      const message = episodesUpdated > 0 
+        ? `Show synced successfully. ${episodesImported} episodes imported, ${episodesUpdated} episodes updated from scrobble data.`
+        : `Show synced successfully. ${episodesImported} episodes imported.`;
+
       res.json({ 
         show: syncedShow, 
         episodesImported,
-        message: `Show synced successfully. ${episodesImported} episodes imported.`
+        episodesUpdated,
+        message
       });
     } catch (error) {
       console.error("Error syncing show:", error);
