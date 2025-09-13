@@ -257,11 +257,6 @@ export default function FollowedShows() {
                           {libraryShow.status}
                         </span>
                       )}
-                      {libraryShow.show.status && (
-                        <Badge className={getStatusColor(libraryShow.show.status)} data-testid={`badge-show-status-${libraryShow.showId}`}>
-                          {libraryShow.show.status}
-                        </Badge>
-                      )}
                     </div>
                   </div>
                 </div>
