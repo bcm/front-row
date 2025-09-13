@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { useParams } from "wouter";
-import { ArrowLeft, Star, Calendar, Clock, Globe, Tv, Users, Monitor, Play, Hash } from "lucide-react";
+import { ArrowLeft, Star, Calendar, Clock, Globe, Tv, Users, Monitor, Play, Hash, ExternalLink } from "lucide-react";
 import { Link } from "wouter";
 import Header from "@/components/header";
 import { Button } from "@/components/ui/button";
@@ -270,6 +270,19 @@ export default function ShowDetail() {
                   </a>
                 </div>
               )}
+
+              <div className="flex items-center space-x-2 md:col-span-2">
+                <ExternalLink className="w-5 h-5 text-muted-foreground" />
+                <a 
+                  href={`https://www.tvmaze.com/shows/${show.id}`} 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="text-primary hover:text-primary/80 underline"
+                  data-testid={`link-show-tvmaze-${show.id}`}
+                >
+                  View on TVMaze
+                </a>
+              </div>
             </div>
 
             {/* Summary */}
