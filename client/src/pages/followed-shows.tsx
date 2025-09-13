@@ -231,9 +231,11 @@ export default function FollowedShows() {
                       {libraryShow.show.webChannel?.name || libraryShow.show.network?.name || "Unknown Network"}
                     </p>
                     <div className="flex items-center space-x-2">
-                      <span className="bg-secondary text-secondary-foreground px-2 py-1 rounded text-xs" data-testid={`text-user-status-${libraryShow.showId}`}>
-                        {libraryShow.status}
-                      </span>
+                      {libraryShow.status !== "later" && (
+                        <span className="bg-secondary text-secondary-foreground px-2 py-1 rounded text-xs" data-testid={`text-user-status-${libraryShow.showId}`}>
+                          {libraryShow.status}
+                        </span>
+                      )}
                       {libraryShow.show.status && (
                         <span className="bg-accent text-accent-foreground px-2 py-1 rounded text-xs" data-testid={`text-show-status-${libraryShow.showId}`}>
                           {libraryShow.show.status}
