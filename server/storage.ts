@@ -1,7 +1,7 @@
 import { type User, type InsertUser, type Show, type InsertShow, type UserShow, type InsertUserShow, type Episode, type InsertEpisode, type UserEpisode, type InsertUserEpisode } from "@shared/schema";
 import { users, shows, userShows, episodes, userEpisodes } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, ilike, inArray, desc, asc } from "drizzle-orm";
+import { eq, and, ilike, inArray, desc, asc, lte, sql } from "drizzle-orm";
 
 export interface IStorage {
   // User methods
@@ -225,9 +225,19 @@ export class DatabaseStorage implements IStorage {
 
   // User episode methods
   async getUserEpisodes(userId: string, status?: string): Promise<(UserEpisode & { episode: Episode & { show: Show } })[]> {
+    // Get today's date in YYYY-MM-DD format for comparison
+    const today = new Date().toISOString().split('T')[0];
+    
+    // Base conditions: user ID and only aired episodes
+    const baseConditions = and(
+      eq(userEpisodes.userId, userId),
+      lte(episodes.airdate, today)
+    );
+    
+    // Add status filter if provided
     const whereClause = status 
-      ? and(eq(userEpisodes.userId, userId), eq(userEpisodes.status, status))
-      : eq(userEpisodes.userId, userId);
+      ? and(baseConditions, eq(userEpisodes.status, status))
+      : baseConditions;
 
     const results = await db
       .select({
