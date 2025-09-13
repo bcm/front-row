@@ -31,7 +31,7 @@ Preferred communication style: Simple, everyday language.
 The application uses four main entities:
 - **Users**: Authentication and user management
 - **Shows**: TV show metadata from TVMaze API
-- **UserShows**: Many-to-many relationship tracking user's show collections with status, priority, and progress
+- **UserShows**: Many-to-many relationship tracking user's show collections with status and timestamps (simplified from previous version)
 - **Episodes**: Episode information linked to shows for tracking purposes
 
 ### Data Layer
@@ -55,7 +55,8 @@ Currently implemented with basic session-based authentication structure, though 
 - **Episode Linking**: All episode names throughout the application now link to their respective episode detail pages
 - **Scrobble API Integration**: Enhanced show sync process to automatically apply user's personal watch status from TVMaze scrobble API
 - **Status Management**: Complete episode status cycling functionality (UNWATCHED → NEXT → LATER → WATCHED → UNWATCHED) across all pages
-- **Navigation Enhancement**: Improved navigation flows between dashboard, show details, and episode details
+- **Navigation Enhancement**: Improved navigation flows between dashboard, show details, and episode details with breadcrumb navigation
+- **Database Cleanup**: Removed 5 unused columns from user_shows table (currentSeason, currentEpisode, watchedAt, priority, isShared) to simplify schema and improve performance
 
 ## External Dependencies
 
