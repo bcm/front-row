@@ -73,23 +73,70 @@ export default function Dashboard() {
     },
   });
 
-  // Episode update mutation
+  // Episode update mutation with optimistic updates
   const updateEpisodeMutation = useMutation({
     mutationFn: async ({ episodeId, status }: { episodeId: number; status: string }) => {
       return apiRequest("PATCH", `/api/user/episodes/${episodeId}`, { status });
     },
+    onMutate: async ({ episodeId, status }) => {
+      // Cancel any outgoing refetches to avoid overwriting our optimistic update
+      await queryClient.cancelQueries({ queryKey: ["/api/user/episodes"] });
+
+      // Snapshot the previous values for rollback
+      const previousData = {
+        untriaged: queryClient.getQueryData(["/api/user/episodes", "untriaged"]),
+        next: queryClient.getQueryData(["/api/user/episodes", "next"]),
+        later: queryClient.getQueryData(["/api/user/episodes", "later"]),
+        watched: queryClient.getQueryData(["/api/user/episodes", "watched"]),
+      };
+
+      // Find the episode in all query caches and update optimistically
+      Object.entries(previousData).forEach(([currentStatus, data]: [string, any]) => {
+        if (data && Array.isArray(data)) {
+          const episodeIndex = data.findIndex((ep: any) => ep.episode.id === episodeId);
+          if (episodeIndex !== -1) {
+            const episode = data[episodeIndex];
+            
+            // Remove from current status cache
+            const updatedCurrentData = data.filter((_: any, index: number) => index !== episodeIndex);
+            queryClient.setQueryData(["/api/user/episodes", currentStatus], updatedCurrentData);
+            
+            // Add to new status cache with updated status and timestamps
+            const updatedEpisode = {
+              ...episode,
+              status,
+              triagedAt: new Date().toISOString(),
+              ...(status === "watched" && { watchedAt: new Date().toISOString() })
+            };
+            
+            const newStatusData = queryClient.getQueryData(["/api/user/episodes", status]) as any[] || [];
+            queryClient.setQueryData(["/api/user/episodes", status], [...newStatusData, updatedEpisode]);
+          }
+        }
+      });
+
+      // Return a context object with the snapshotted value
+      return { previousData };
+    },
+    onError: (err, variables, context) => {
+      // If the mutation fails, use the context returned from onMutate to roll back
+      if (context?.previousData) {
+        Object.entries(context.previousData).forEach(([status, data]) => {
+          queryClient.setQueryData(["/api/user/episodes", status], data);
+        });
+      }
+      toast({
+        title: "Error",
+        description: "Failed to update episode. Please try again.",
+        variant: "destructive",
+      });
+    },
     onSuccess: () => {
+      // Invalidate queries to ensure we have the latest data from server
       queryClient.invalidateQueries({ queryKey: ["/api/user/episodes"] });
       toast({
         title: "Episode updated",
         description: "The episode status has been updated.",
-      });
-    },
-    onError: (error: any) => {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to update episode",
-        variant: "destructive",
       });
     },
   });
