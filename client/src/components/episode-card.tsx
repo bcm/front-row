@@ -35,10 +35,11 @@ export default function EpisodeCard({ userEpisode, onStatusChange, variant = "de
   };
 
   const getEpisodeTitle = () => {
+    const seasonEpisode = getSeasonEpisodeFormat();
     if (episode.name) {
-      return episode.name;
+      return seasonEpisode ? `${seasonEpisode}: ${episode.name}` : episode.name;
     }
-    return `Season ${episode.season}, Episode ${episode.number}`;
+    return seasonEpisode || `Season ${episode.season}, Episode ${episode.number}`;
   };
 
   const getSeasonEpisodeFormat = () => {
@@ -68,14 +69,6 @@ export default function EpisodeCard({ userEpisode, onStatusChange, variant = "de
             <h3 className="font-semibold text-lg truncate text-foreground mb-1" data-testid={`text-episode-title-${episode.id}`}>
               {getEpisodeTitle()}
             </h3>
-            <div className="flex items-center space-x-2 text-sm text-muted-foreground truncate mb-2">
-              <span data-testid={`text-episode-show-${episode.id}`}>{show.name}</span>
-              {getSeasonEpisodeFormat() && (
-                <span className="font-medium" data-testid={`text-episode-number-${episode.id}`}>
-                  {getSeasonEpisodeFormat()}
-                </span>
-              )}
-            </div>
             {episode.summary && (
               <p className="text-sm text-muted-foreground line-clamp-2 mb-3" data-testid={`text-episode-summary-${episode.id}`}>
                 {episode.summary.replace(/<[^>]*>/g, '')}
@@ -153,14 +146,6 @@ export default function EpisodeCard({ userEpisode, onStatusChange, variant = "de
             <h4 className="font-medium text-xs truncate text-foreground" data-testid={`text-episode-title-${episode.id}`}>
               {getEpisodeTitle()}
             </h4>
-            <div className="flex items-center space-x-2 text-xs text-muted-foreground truncate">
-              <span data-testid={`text-episode-show-${episode.id}`}>{show.name}</span>
-              {getSeasonEpisodeFormat() && (
-                <span className="font-medium" data-testid={`text-episode-number-${episode.id}`}>
-                  {getSeasonEpisodeFormat()}
-                </span>
-              )}
-            </div>
             {episode.summary && (
               <p className="text-xs text-muted-foreground line-clamp-1 mt-1" data-testid={`text-episode-summary-${episode.id}`}>
                 {episode.summary.replace(/<[^>]*>/g, '')}
@@ -207,14 +192,6 @@ export default function EpisodeCard({ userEpisode, onStatusChange, variant = "de
             <h3 className="font-semibold text-sm truncate text-foreground mb-1" data-testid={`text-episode-title-${episode.id}`}>
               {getEpisodeTitle()}
             </h3>
-            <div className="flex items-center space-x-2 text-sm text-muted-foreground truncate mb-1">
-              <span data-testid={`text-episode-show-${episode.id}`}>{show.name}</span>
-              {getSeasonEpisodeFormat() && (
-                <span className="font-medium" data-testid={`text-episode-number-${episode.id}`}>
-                  {getSeasonEpisodeFormat()}
-                </span>
-              )}
-            </div>
             {episode.summary && (
               <p className="text-xs text-muted-foreground line-clamp-2" data-testid={`text-episode-summary-${episode.id}`}>
                 {episode.summary.replace(/<[^>]*>/g, '')}
@@ -276,14 +253,6 @@ export default function EpisodeCard({ userEpisode, onStatusChange, variant = "de
           <h3 className="font-semibold text-lg truncate text-foreground mb-1" data-testid={`text-episode-title-${episode.id}`}>
             {getEpisodeTitle()}
           </h3>
-          <div className="flex items-center space-x-2 text-sm text-muted-foreground truncate mb-2">
-            <span data-testid={`text-episode-show-${episode.id}`}>{show.name}</span>
-            {getSeasonEpisodeFormat() && (
-              <span className="font-medium" data-testid={`text-episode-number-${episode.id}`}>
-                {getSeasonEpisodeFormat()}
-              </span>
-            )}
-          </div>
           {episode.summary && (
             <p className="text-sm text-muted-foreground line-clamp-2" data-testid={`text-episode-summary-${episode.id}`}>
               {episode.summary.replace(/<[^>]*>/g, '')}
