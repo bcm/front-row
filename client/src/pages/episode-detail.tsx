@@ -79,10 +79,8 @@ export default function EpisodeDetail() {
     },
   });
 
-  const handleEpisodeStatusToggle = () => {
+  const handleEpisodeStatusToggle = (currentStatus: string) => {
     if (!episodeData) return;
-    
-    const currentStatus = episodeData.userEpisode?.status || "untriaged";
     
     // Cycle through all possible statuses: untriaged → next → later → watched → untriaged
     let newStatus: string;
@@ -108,25 +106,79 @@ export default function EpisodeDetail() {
     updateEpisodeMutation.mutate({ episodeId: episodeData.id, status: newStatus });
   };
 
-  const handleStatusChange = (newStatus: string) => {
-    if (!episodeData) return;
-    updateEpisodeMutation.mutate({ episodeId: episodeData.id, status: newStatus });
-  };
+  const getEpisodeStatusBadge = () => {
+    if (!episodeData) return null;
+    
+    // Don't show status badge for episodes that haven't aired yet
+    if (episodeData.airdate) {
+      const airDate = new Date(episodeData.airdate);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0); // Reset time to compare just dates
+      
+      if (airDate > today) {
+        return null; // Episode hasn't aired yet
+      }
+    }
 
-  const getStatusBadge = (status?: string) => {
-    if (!status || status === "untriaged") return null;
+    const status = episodeData.userEpisode?.status;
+    
+    if (!status) {
+      return (
+        <Badge 
+          className="bg-muted text-muted-foreground border border-muted-foreground/30 text-xs cursor-pointer hover:bg-blue-500/20 hover:text-blue-400 hover:border-blue-500/30 transition-colors"
+          onClick={() => handleEpisodeStatusToggle("untriaged")}
+          data-testid={`badge-episode-status-${episodeData.id}`}
+        >
+          UNWATCHED
+        </Badge>
+      );
+    }
     
     switch (status) {
-      case "next":
-        return <Badge className="bg-blue-500/20 text-blue-400 border border-blue-500/30">NEXT</Badge>;
-      case "later":
-        return <Badge className="bg-orange-500/20 text-orange-400 border border-orange-500/30">LATER</Badge>;
       case "watched":
-        return <Badge className="bg-purple-500/20 text-purple-400 border border-purple-500/30">WATCHED</Badge>;
+        return (
+          <Badge 
+            className="bg-green-500/20 text-green-400 border border-green-500/30 text-xs cursor-pointer hover:bg-muted hover:text-muted-foreground hover:border-muted-foreground/30 transition-colors"
+            onClick={() => handleEpisodeStatusToggle(status)}
+            data-testid={`badge-episode-status-${episodeData.id}`}
+          >
+            WATCHED
+          </Badge>
+        );
       case "skipped":
-        return <Badge className="bg-gray-500/20 text-gray-400 border border-gray-500/30">SKIPPED</Badge>;
+        return <Badge className="bg-gray-500/20 text-gray-400 border border-gray-500/30 text-xs">SKIPPED</Badge>;
+      case "next":
+        return (
+          <Badge 
+            className="bg-blue-500/20 text-blue-400 border border-blue-500/30 text-xs cursor-pointer hover:bg-yellow-500/20 hover:text-yellow-400 hover:border-yellow-500/30 transition-colors"
+            onClick={() => handleEpisodeStatusToggle(status)}
+            data-testid={`badge-episode-status-${episodeData.id}`}
+          >
+            NEXT
+          </Badge>
+        );
+      case "later":
+        return (
+          <Badge 
+            className="bg-yellow-500/20 text-yellow-400 border border-yellow-500/30 text-xs cursor-pointer hover:bg-green-500/20 hover:text-green-400 hover:border-green-500/30 transition-colors"
+            onClick={() => handleEpisodeStatusToggle(status)}
+            data-testid={`badge-episode-status-${episodeData.id}`}
+          >
+            LATER
+          </Badge>
+        );
+      case "untriaged":
+        return (
+          <Badge 
+            className="bg-orange-500/20 text-orange-400 border border-orange-500/30 text-xs cursor-pointer hover:bg-blue-500/20 hover:text-blue-400 hover:border-blue-500/30 transition-colors"
+            onClick={() => handleEpisodeStatusToggle(status)}
+            data-testid={`badge-episode-status-${episodeData.id}`}
+          >
+            NEW
+          </Badge>
+        );
       default:
-        return <Badge className="bg-gray-500/20 text-gray-400 border border-gray-500/30">{status.toUpperCase()}</Badge>;
+        return null;
     }
   };
 
@@ -242,54 +294,9 @@ export default function EpisodeDetail() {
               </h1>
             </div>
 
-            {/* Status and Actions */}
-            <div className="flex flex-wrap items-center gap-3">
-              {getStatusBadge(episodeData.userEpisode?.status)}
-              
-              <Button 
-                onClick={handleEpisodeStatusToggle}
-                disabled={updateEpisodeMutation.isPending}
-                data-testid="button-toggle-status"
-              >
-                {updateEpisodeMutation.isPending ? "Updating..." : "Toggle Status"}
-              </Button>
-              
-              <div className="flex gap-2">
-                {episodeData.userEpisode?.status !== "next" && (
-                  <Button 
-                    size="sm" 
-                    variant="outline"
-                    onClick={() => handleStatusChange("next")}
-                    disabled={updateEpisodeMutation.isPending}
-                    data-testid="button-next"
-                  >
-                    <Play className="w-4 h-4 mr-2" />
-                    Watch Next
-                  </Button>
-                )}
-                {episodeData.userEpisode?.status !== "later" && (
-                  <Button 
-                    size="sm" 
-                    variant="outline"
-                    onClick={() => handleStatusChange("later")}
-                    disabled={updateEpisodeMutation.isPending}
-                    data-testid="button-later"
-                  >
-                    Watch Later
-                  </Button>
-                )}
-                {episodeData.userEpisode?.status !== "watched" && (
-                  <Button 
-                    size="sm" 
-                    variant="outline"
-                    onClick={() => handleStatusChange("watched")}
-                    disabled={updateEpisodeMutation.isPending}
-                    data-testid="button-watched"
-                  >
-                    Mark Watched
-                  </Button>
-                )}
-              </div>
+            {/* Status */}
+            <div className="flex items-center gap-3">
+              {getEpisodeStatusBadge()}
             </div>
 
             {/* Episode Metadata */}
