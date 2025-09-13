@@ -261,6 +261,21 @@ export default function FollowedShows() {
                   </div>
                 </div>
                 
+                {/* Summary */}
+                {libraryShow.show.summary && (
+                  <div className="text-xs text-muted-foreground leading-relaxed mb-3">
+                    <div
+                      className="line-clamp-3"
+                      dangerouslySetInnerHTML={{
+                        __html: libraryShow.show.summary
+                          .replace(/<[^>]*>/g, "")
+                          .substring(0, 120) + (libraryShow.show.summary.length > 120 ? "..." : "")
+                      }}
+                      data-testid={`text-summary-${libraryShow.showId}`}
+                    />
+                  </div>
+                )}
+
                 {/* Genres */}
                 {libraryShow.show.genres && libraryShow.show.genres.length > 0 && (
                   <div className="mb-3">
@@ -280,21 +295,6 @@ export default function FollowedShows() {
                         </span>
                       )}
                     </div>
-                  </div>
-                )}
-
-                {/* Summary */}
-                {libraryShow.show.summary && (
-                  <div className="text-xs text-muted-foreground leading-relaxed">
-                    <div
-                      className="line-clamp-3"
-                      dangerouslySetInnerHTML={{
-                        __html: libraryShow.show.summary
-                          .replace(/<[^>]*>/g, "")
-                          .substring(0, 120) + (libraryShow.show.summary.length > 120 ? "..." : "")
-                      }}
-                      data-testid={`text-summary-${libraryShow.showId}`}
-                    />
                   </div>
                 )}
               </div>
