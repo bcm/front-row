@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 interface EpisodeCardProps {
   userEpisode: UserEpisode & { episode: Episode & { show: Show } };
   onStatusChange: (episodeId: number, status: string) => void;
-  variant?: "default" | "compact" | "priority";
+  variant?: "default" | "compact" | "priority" | "wide";
 }
 
 export default function EpisodeCard({ userEpisode, onStatusChange, variant = "default" }: EpisodeCardProps) {
@@ -59,6 +59,94 @@ export default function EpisodeCard({ userEpisode, onStatusChange, variant = "de
     }
     return null;
   };
+
+  if (variant === "wide") {
+    return (
+      <div className="episode-card bg-card hover:bg-card/80 rounded-lg p-4 transition-all duration-200" data-testid={`card-episode-${episode.id}`}>
+        <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+          {/* Image */}
+          <img 
+            src={episode.image?.medium || show.image?.medium || "/placeholder-show.jpg"}
+            alt={`${show.name} poster`}
+            className="w-full sm:w-32 h-48 sm:h-24 object-cover rounded-md flex-shrink-0"
+            onError={(e) => {
+              const target = e.target as HTMLImageElement;
+              target.src = "https://via.placeholder.com/200x150/374151/9ca3af?text=" + encodeURIComponent(show.name);
+            }}
+          />
+          
+          {/* Content */}
+          <div className="flex-1 min-w-0">
+            <h3 className="font-semibold text-lg truncate text-foreground mb-1" data-testid={`text-episode-title-${episode.id}`}>
+              {getEpisodeTitle()}
+            </h3>
+            <div className="flex items-center space-x-2 text-sm text-muted-foreground truncate mb-2">
+              <span data-testid={`text-episode-show-${episode.id}`}>{show.name}</span>
+              {getSeasonEpisodeFormat() && (
+                <span className="font-medium" data-testid={`text-episode-number-${episode.id}`}>
+                  {getSeasonEpisodeFormat()}
+                </span>
+              )}
+            </div>
+            {episode.summary && (
+              <p className="text-sm text-muted-foreground line-clamp-2 mb-3" data-testid={`text-episode-summary-${episode.id}`}>
+                {episode.summary.replace(/<[^>]*>/g, '')}
+              </p>
+            )}
+          </div>
+          
+          {/* Airdate, Runtime and Actions */}
+          <div className="flex flex-col sm:flex-row sm:items-center gap-4 flex-shrink-0">
+            <div className="space-y-1 text-sm text-muted-foreground">
+              <div className="flex items-center space-x-1">
+                <Calendar className="w-4 h-4" />
+                <span>{formatAirdate(episode.airdate)}</span>
+              </div>
+              {episode.runtime && (
+                <div className="flex items-center space-x-1">
+                  <Clock className="w-4 h-4" />
+                  <span>{episode.runtime} min</span>
+                </div>
+              )}
+            </div>
+            
+            <div className="flex flex-wrap gap-2">
+              {getStatusBadge(userEpisode.status, variant) && getStatusBadge(userEpisode.status, variant)}
+              {userEpisode.status !== "next" && (
+                <Button 
+                  size="sm" 
+                  onClick={() => onStatusChange(episode.id, "next")}
+                  data-testid={`button-next-${episode.id}`}
+                >
+                  <ArrowRight className="w-4 h-4 mr-1" />
+                  Watch Next
+                </Button>
+              )}
+              {userEpisode.status !== "later" && (
+                <Button 
+                  size="sm" 
+                  variant="outline"
+                  onClick={() => onStatusChange(episode.id, "later")}
+                  data-testid={`button-later-${episode.id}`}
+                >
+                  Later
+                </Button>
+              )}
+              <Button 
+                size="sm" 
+                variant="outline"
+                onClick={() => onStatusChange(episode.id, "watched")}
+                data-testid={`button-watched-${episode.id}`}
+              >
+                <Eye className="w-4 h-4 mr-1" />
+                Watched
+              </Button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (variant === "compact") {
     return (

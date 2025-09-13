@@ -239,22 +239,28 @@ export default function Dashboard() {
               <p className="text-muted-foreground text-sm">Episodes that need your attention</p>
             </div>
             
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div className="space-y-4">
               {untriagedLoading ? (
                 Array.from({ length: 4 }).map((_, i) => (
                   <div key={i} className="bg-card rounded-lg p-4 animate-pulse">
-                    <div className="flex space-x-3 mb-4">
-                      <div className="w-20 h-14 bg-muted rounded-md"></div>
+                    <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+                      <div className="w-full sm:w-32 h-48 sm:h-24 bg-muted rounded-md flex-shrink-0"></div>
                       <div className="flex-1 space-y-2">
                         <div className="h-4 bg-muted rounded"></div>
                         <div className="h-3 bg-muted rounded w-3/4"></div>
                         <div className="h-3 bg-muted rounded w-1/2"></div>
                       </div>
-                    </div>
-                    <div className="flex space-x-2">
-                      <div className="h-8 bg-muted rounded w-20"></div>
-                      <div className="flex-1 h-8 bg-muted rounded"></div>
-                      <div className="flex-1 h-8 bg-muted rounded"></div>
+                      <div className="flex flex-col sm:flex-row sm:items-center gap-4 flex-shrink-0">
+                        <div className="space-y-1">
+                          <div className="h-4 bg-muted rounded w-24"></div>
+                          <div className="h-4 bg-muted rounded w-20"></div>
+                        </div>
+                        <div className="flex gap-2">
+                          <div className="h-8 bg-muted rounded w-20"></div>
+                          <div className="h-8 bg-muted rounded w-16"></div>
+                          <div className="h-8 bg-muted rounded w-20"></div>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 ))
@@ -280,6 +286,7 @@ export default function Dashboard() {
                       key={userEpisode.id}
                       userEpisode={userEpisode}
                       onStatusChange={handleEpisodeStatusChange}
+                      variant="wide"
                     />
                   ))
               ) : (
@@ -309,22 +316,25 @@ export default function Dashboard() {
             
             <div className="space-y-6">
               {nextLoading ? (
-                <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
+                <div className="space-y-4">
                   {Array.from({ length: 3 }).map((_, i) => (
-                    <div key={i} className="bg-card rounded-lg p-4 animate-pulse border-l-4 border-green-500">
-                      <div className="flex space-x-3 mb-4">
-                        <div className="w-16 h-12 bg-muted rounded-md"></div>
+                    <div key={i} className="bg-card rounded-lg p-4 animate-pulse">
+                      <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+                        <div className="w-full sm:w-32 h-48 sm:h-24 bg-muted rounded-md flex-shrink-0"></div>
                         <div className="flex-1 space-y-2">
                           <div className="h-4 bg-muted rounded"></div>
                           <div className="h-3 bg-muted rounded w-3/4"></div>
                           <div className="h-3 bg-muted rounded w-1/2"></div>
                         </div>
-                      </div>
-                      <div className="flex justify-between">
-                        <div className="h-6 bg-muted rounded w-16"></div>
-                        <div className="flex space-x-1">
-                          <div className="h-8 bg-muted rounded w-20"></div>
-                          <div className="h-8 bg-muted rounded w-16"></div>
+                        <div className="flex flex-col sm:flex-row sm:items-center gap-4 flex-shrink-0">
+                          <div className="space-y-1">
+                            <div className="h-4 bg-muted rounded w-24"></div>
+                            <div className="h-4 bg-muted rounded w-20"></div>
+                          </div>
+                          <div className="flex gap-2">
+                            <div className="h-8 bg-muted rounded w-20"></div>
+                            <div className="h-8 bg-muted rounded w-16"></div>
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -347,7 +357,7 @@ export default function Dashboard() {
                     <h3 className="text-lg font-semibold text-foreground border-b border-border pb-2">
                       {showName}
                     </h3>
-                    <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
+                    <div className="space-y-4">
                       {showEpisodes
                         .sort((a, b) => {
                           // Sort by season number first
@@ -365,7 +375,7 @@ export default function Dashboard() {
                             key={userEpisode.id}
                             userEpisode={userEpisode}
                             onStatusChange={handleEpisodeStatusChange}
-                            variant="priority"
+                            variant="wide"
                           />
                         ))}
                     </div>
@@ -398,17 +408,27 @@ export default function Dashboard() {
             
             <div className="space-y-6">
               {laterLoading ? (
-                <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-4">
-                  {Array.from({ length: 8 }).map((_, i) => (
-                    <div key={i} className="bg-card rounded-lg p-3 animate-pulse">
-                      <div className="flex space-x-2 mb-2">
-                        <div className="w-12 h-8 bg-muted rounded-md"></div>
-                        <div className="flex-1 space-y-1">
-                          <div className="h-3 bg-muted rounded"></div>
-                          <div className="h-2 bg-muted rounded w-2/3"></div>
+                <div className="space-y-4">
+                  {Array.from({ length: 6 }).map((_, i) => (
+                    <div key={i} className="bg-card rounded-lg p-4 animate-pulse">
+                      <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+                        <div className="w-full sm:w-32 h-48 sm:h-24 bg-muted rounded-md flex-shrink-0"></div>
+                        <div className="flex-1 space-y-2">
+                          <div className="h-4 bg-muted rounded"></div>
+                          <div className="h-3 bg-muted rounded w-3/4"></div>
+                          <div className="h-3 bg-muted rounded w-1/2"></div>
+                        </div>
+                        <div className="flex flex-col sm:flex-row sm:items-center gap-4 flex-shrink-0">
+                          <div className="space-y-1">
+                            <div className="h-4 bg-muted rounded w-24"></div>
+                            <div className="h-4 bg-muted rounded w-20"></div>
+                          </div>
+                          <div className="flex gap-2">
+                            <div className="h-8 bg-muted rounded w-20"></div>
+                            <div className="h-8 bg-muted rounded w-16"></div>
+                          </div>
                         </div>
                       </div>
-                      <div className="h-5 bg-muted rounded w-16"></div>
                     </div>
                   ))}
                 </div>
@@ -429,7 +449,7 @@ export default function Dashboard() {
                     <h3 className="text-lg font-semibold text-foreground border-b border-border pb-2">
                       {showName}
                     </h3>
-                    <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-4">
+                    <div className="space-y-4">
                       {showEpisodes
                         .sort((a, b) => {
                           // Sort by season number
@@ -447,7 +467,7 @@ export default function Dashboard() {
                             key={userEpisode.id}
                             userEpisode={userEpisode}
                             onStatusChange={handleEpisodeStatusChange}
-                            variant="compact"
+                            variant="wide"
                           />
                         ))}
                     </div>
