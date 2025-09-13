@@ -211,8 +211,21 @@ export default function EpisodeDetail() {
   };
 
   const formatRating = (rating?: { average?: number }) => {
-    if (!rating?.average) return null;
+    if (!rating?.average) return 'N/A';
     return `${rating.average}/10`;
+  };
+
+  const getStatusColor = (status?: string) => {
+    switch (status) {
+      case 'Running':
+        return 'bg-green-500/20 text-green-400 border-green-500/30';
+      case 'Ended':
+        return 'bg-red-500/20 text-red-400 border-red-500/30';
+      case 'To Be Determined':
+        return 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30';
+      default:
+        return 'bg-gray-500/20 text-gray-400 border-gray-500/30';
+    }
   };
 
   if (isLoading) {
@@ -379,7 +392,7 @@ export default function EpisodeDetail() {
                       </span>
                     )}
                     {show.status && (
-                      <Badge variant="outline" className="text-xs">
+                      <Badge className={getStatusColor(show.status)} data-testid={`badge-show-status-${show.id}`}>
                         {show.status}
                       </Badge>
                     )}
@@ -406,9 +419,9 @@ export default function EpisodeDetail() {
                     </div>
                   )}
                   {show.rating?.average && (
-                    <div className="flex items-center space-x-1">
-                      <Star className="w-4 h-4" />
-                      <span>{formatRating(show.rating)}</span>
+                    <div className="flex items-center space-x-1" data-testid={`text-show-rating-${show.id}`}>
+                      <Star className="w-5 h-5 text-yellow-500" />
+                      <span className="text-foreground font-medium">{formatRating(show.rating)}</span>
                     </div>
                   )}
                 </div>
