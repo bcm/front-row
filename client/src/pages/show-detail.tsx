@@ -298,7 +298,20 @@ export default function ShowDetail() {
     return grouped;
   };
 
-  const getEpisodeStatusBadge = (episodeId: number) => {
+  const getEpisodeStatusBadge = (episode: any) => {
+    // Don't show status badge for episodes that haven't aired yet
+    if (episode.airdate) {
+      const airDate = new Date(episode.airdate);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0); // Reset time to compare just dates
+      
+      if (airDate > today) {
+        return null; // Episode hasn't aired yet
+      }
+    }
+
+    const episodeId = episode.id;
+    
     if (!userEpisodeStatuses || !userEpisodeStatuses[episodeId]) {
       return (
         <Badge 
@@ -593,7 +606,7 @@ export default function ShowDetail() {
                                       )}
                                     </div>
                                     <div className="flex flex-col items-end text-sm text-muted-foreground ml-4 flex-shrink-0 space-y-1">
-                                      {getEpisodeStatusBadge(episode.id)}
+                                      {getEpisodeStatusBadge(episode)}
                                       {episode.airdate && (
                                         <span>{new Date(episode.airdate).toLocaleDateString('en-US')}</span>
                                       )}
