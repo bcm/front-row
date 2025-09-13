@@ -1,12 +1,13 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
-import { UserShow, Show } from "@shared/schema";
+import { UserEpisode, Episode, Show } from "@shared/schema";
 import Header from "@/components/header";
-import ShowCard from "@/components/show-card";
+import EpisodeCard from "@/components/episode-card";
 import FloatingAddButton from "@/components/floating-add-button";
 import AddShowDialog from "@/components/add-show-dialog";
-import { Star, Flame, Clock } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { AlertTriangle, PlayCircle, Clock, Eye, Download } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 export default function Dashboard() {
@@ -14,61 +15,91 @@ export default function Dashboard() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  const { data: newShows, isLoading: newShowsLoading } = useQuery({
-    queryKey: ["/api/user/shows", "new"],
+  // Episode queries
+  const { data: untriagedEpisodes, isLoading: untriagedLoading } = useQuery({
+    queryKey: ["/api/user/episodes", "untriaged"],
     queryFn: async () => {
-      const response = await fetch("/api/user/shows?status=new");
-      if (!response.ok) throw new Error("Failed to fetch new shows");
-      return response.json() as Promise<(UserShow & { show: Show })[]>;
+      const response = await fetch("/api/user/episodes?status=untriaged");
+      if (!response.ok) throw new Error("Failed to fetch untriaged episodes");
+      return response.json() as Promise<(UserEpisode & { episode: Episode & { show: Show } })[]>;
     },
   });
 
-  const { data: watchingShows, isLoading: watchingShowsLoading } = useQuery({
-    queryKey: ["/api/user/shows", "watching"],
+  const { data: nextEpisodes, isLoading: nextLoading } = useQuery({
+    queryKey: ["/api/user/episodes", "next"],
     queryFn: async () => {
-      const response = await fetch("/api/user/shows?status=watching");
-      if (!response.ok) throw new Error("Failed to fetch watching shows");
-      return response.json() as Promise<(UserShow & { show: Show })[]>;
+      const response = await fetch("/api/user/episodes?status=next");
+      if (!response.ok) throw new Error("Failed to fetch next episodes");
+      return response.json() as Promise<(UserEpisode & { episode: Episode & { show: Show } })[]>;
     },
   });
 
-  const { data: laterShows, isLoading: laterShowsLoading } = useQuery({
-    queryKey: ["/api/user/shows", "later"],
+  const { data: laterEpisodes, isLoading: laterLoading } = useQuery({
+    queryKey: ["/api/user/episodes", "later"],
     queryFn: async () => {
-      const response = await fetch("/api/user/shows?status=later");
-      if (!response.ok) throw new Error("Failed to fetch later shows");
-      return response.json() as Promise<(UserShow & { show: Show })[]>;
+      const response = await fetch("/api/user/episodes?status=later");
+      if (!response.ok) throw new Error("Failed to fetch later episodes");
+      return response.json() as Promise<(UserEpisode & { episode: Episode & { show: Show } })[]>;
     },
   });
 
-  const updateShowMutation = useMutation({
-    mutationFn: async ({ showId, status, priority }: { showId: number; status: string; priority?: number }) => {
-      const updates: any = { status };
-      if (priority !== undefined) {
-        updates.priority = priority;
-      }
-      
-      return apiRequest("PATCH", `/api/user/shows/${showId}`, updates);
+  const { data: watchedEpisodes, isLoading: watchedLoading } = useQuery({
+    queryKey: ["/api/user/episodes", "watched"],
+    queryFn: async () => {
+      const response = await fetch("/api/user/episodes?status=watched");
+      if (!response.ok) throw new Error("Failed to fetch watched episodes");
+      return response.json() as Promise<(UserEpisode & { episode: Episode & { show: Show } })[]>;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/user/shows"] });
+  });
+
+  // Episode import mutation
+  const importEpisodesMutation = useMutation({
+    mutationFn: async () => {
+      return apiRequest("POST", "/api/episodes/import", {});
+    },
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/user/episodes"] });
       toast({
-        title: "Show updated",
-        description: "The show status has been updated.",
+        title: "Episodes imported",
+        description: `Successfully imported ${data.imported} episodes (${data.skipped} skipped)`,
       });
     },
     onError: (error: any) => {
       toast({
-        title: "Error",
-        description: error.message || "Failed to update show",
+        title: "Import failed",
+        description: error.message || "Failed to import episodes",
         variant: "destructive",
       });
     },
   });
 
-  const handleStatusChange = (showId: number, status: string) => {
-    const priority = status === "watching" ? 1 : 0;
-    updateShowMutation.mutate({ showId, status, priority });
+  // Episode update mutation
+  const updateEpisodeMutation = useMutation({
+    mutationFn: async ({ episodeId, status }: { episodeId: number; status: string }) => {
+      return apiRequest("PATCH", `/api/user/episodes/${episodeId}`, { status });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/user/episodes"] });
+      toast({
+        title: "Episode updated",
+        description: "The episode status has been updated.",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to update episode",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleEpisodeStatusChange = (episodeId: number, status: string) => {
+    updateEpisodeMutation.mutate({ episodeId, status });
+  };
+
+  const handleImportEpisodes = () => {
+    importEpisodesMutation.mutate();
   };
 
   return (
@@ -76,110 +107,125 @@ export default function Dashboard() {
       <Header />
       
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="space-y-10">
-          {/* New in Feed Section */}
+        <div className="space-y-8">
+          {/* Import Episodes Button */}
+          <div className="flex justify-between items-center">
+            <div>
+              <h1 className="text-3xl font-bold text-foreground">Episode Triage</h1>
+              <p className="text-muted-foreground mt-1">Manage your episode viewing queue</p>
+            </div>
+            <Button 
+              onClick={handleImportEpisodes}
+              disabled={importEpisodesMutation.isPending}
+              data-testid="button-import-episodes"
+            >
+              <Download className="w-4 h-4 mr-2" />
+              {importEpisodesMutation.isPending ? "Importing..." : "Import Episodes"}
+            </Button>
+          </div>
+
+          {/* Untriaged Episodes Section */}
           <section>
             <div className="flex items-center justify-between mb-6">
               <div className="flex items-center space-x-3">
-                <div className="w-6 h-6 bg-primary rounded-full flex items-center justify-center">
-                  <Star className="w-4 h-4 text-primary-foreground" />
+                <div className="w-6 h-6 bg-yellow-500 rounded-full flex items-center justify-center">
+                  <AlertTriangle className="w-4 h-4 text-white" />
                 </div>
-                <h2 className="text-2xl font-bold" data-testid="text-section-title-new-feed">New in Feed</h2>
-                <span className="bg-primary text-primary-foreground px-2 py-1 rounded-full text-xs font-bold" data-testid="text-new-feed-count">
-                  {newShows?.length || 0}
+                <h2 className="text-2xl font-bold" data-testid="text-section-title-untriaged">Untriaged Episodes</h2>
+                <span className="bg-yellow-500 text-white px-2 py-1 rounded-full text-xs font-bold" data-testid="text-untriaged-count">
+                  {untriagedEpisodes?.length || 0}
                 </span>
               </div>
-              <p className="text-muted-foreground text-sm">New releases and announcements</p>
+              <p className="text-muted-foreground text-sm">Episodes that need your attention</p>
             </div>
             
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-              {newShowsLoading ? (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              {untriagedLoading ? (
                 Array.from({ length: 4 }).map((_, i) => (
                   <div key={i} className="bg-card rounded-lg p-4 animate-pulse">
                     <div className="flex space-x-3 mb-4">
-                      <div className="w-12 h-16 bg-muted rounded-md"></div>
+                      <div className="w-20 h-14 bg-muted rounded-md"></div>
                       <div className="flex-1 space-y-2">
                         <div className="h-4 bg-muted rounded"></div>
                         <div className="h-3 bg-muted rounded w-3/4"></div>
-                        <div className="h-5 bg-muted rounded w-1/2"></div>
+                        <div className="h-3 bg-muted rounded w-1/2"></div>
                       </div>
                     </div>
                     <div className="flex space-x-2">
-                      <div className="flex-1 h-8 bg-muted rounded"></div>
+                      <div className="h-8 bg-muted rounded w-20"></div>
                       <div className="flex-1 h-8 bg-muted rounded"></div>
                       <div className="flex-1 h-8 bg-muted rounded"></div>
                     </div>
                   </div>
                 ))
-              ) : newShows && newShows.length > 0 ? (
-                newShows.map((userShow) => (
-                  <ShowCard
-                    key={userShow.id}
-                    userShow={userShow}
-                    onStatusChange={handleStatusChange}
+              ) : untriagedEpisodes && untriagedEpisodes.length > 0 ? (
+                untriagedEpisodes.map((userEpisode) => (
+                  <EpisodeCard
+                    key={userEpisode.id}
+                    userEpisode={userEpisode}
+                    onStatusChange={handleEpisodeStatusChange}
                   />
                 ))
               ) : (
                 <div className="col-span-full text-center py-8">
-                  <Flame className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
-                  <h3 className="text-lg font-semibold text-muted-foreground mb-2">No new shows</h3>
-                  <p className="text-muted-foreground">Shows you add will appear here for triage</p>
+                  <AlertTriangle className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
+                  <h3 className="text-lg font-semibold text-muted-foreground mb-2">No untriaged episodes</h3>
+                  <p className="text-muted-foreground">New episodes will appear here for triage</p>
                 </div>
               )}
             </div>
           </section>
 
-          {/* Watch Next Section */}
+          {/* Next to Watch Section */}
           <section>
             <div className="flex items-center justify-between mb-6">
               <div className="flex items-center space-x-3">
-                <div className="w-6 h-6 bg-primary rounded-full flex items-center justify-center">
-                  <Flame className="w-4 h-4 text-primary-foreground" />
+                <div className="w-6 h-6 bg-green-500 rounded-full flex items-center justify-center">
+                  <PlayCircle className="w-4 h-4 text-white" />
                 </div>
-                <h2 className="text-2xl font-bold" data-testid="text-section-title-watch-next">Watch Next</h2>
-                <span className="bg-primary text-primary-foreground px-2 py-1 rounded-full text-xs font-bold" data-testid="text-watch-next-count">
-                  {watchingShows?.length || 0}
+                <h2 className="text-2xl font-bold" data-testid="text-section-title-next">Next to Watch</h2>
+                <span className="bg-green-500 text-white px-2 py-1 rounded-full text-xs font-bold" data-testid="text-next-count">
+                  {nextEpisodes?.length || 0}
                 </span>
               </div>
-              <p className="text-muted-foreground text-sm">Priority viewing queue</p>
+              <p className="text-muted-foreground text-sm">Your priority viewing queue</p>
             </div>
             
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {watchingShowsLoading ? (
+            <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
+              {nextLoading ? (
                 Array.from({ length: 3 }).map((_, i) => (
-                  <div key={i} className="bg-card rounded-lg p-4 animate-pulse">
+                  <div key={i} className="bg-card rounded-lg p-4 animate-pulse border-l-4 border-green-500">
                     <div className="flex space-x-3 mb-4">
-                      <div className="w-12 h-16 bg-muted rounded-md"></div>
+                      <div className="w-16 h-12 bg-muted rounded-md"></div>
                       <div className="flex-1 space-y-2">
                         <div className="h-4 bg-muted rounded"></div>
                         <div className="h-3 bg-muted rounded w-3/4"></div>
-                        <div className="h-5 bg-muted rounded w-1/2"></div>
+                        <div className="h-3 bg-muted rounded w-1/2"></div>
                       </div>
                     </div>
-                    <div className="flex space-x-2">
-                      <div className="flex-1 h-8 bg-muted rounded"></div>
-                      <div className="flex-1 h-8 bg-muted rounded"></div>
-                      <div className="flex-1 h-8 bg-muted rounded"></div>
+                    <div className="flex justify-between">
+                      <div className="h-6 bg-muted rounded w-16"></div>
+                      <div className="flex space-x-1">
+                        <div className="h-8 bg-muted rounded w-20"></div>
+                        <div className="h-8 bg-muted rounded w-16"></div>
+                      </div>
                     </div>
                   </div>
                 ))
-              ) : watchingShows && watchingShows.length > 0 ? (
-                // Sort by priority descending for watch next
-                watchingShows
-                  .sort((a, b) => (b.priority || 0) - (a.priority || 0))
-                  .map((userShow) => (
-                    <ShowCard
-                      key={userShow.id}
-                      userShow={userShow}
-                      onStatusChange={handleStatusChange}
-                      variant="priority"
-                    />
-                  ))
+              ) : nextEpisodes && nextEpisodes.length > 0 ? (
+                nextEpisodes.map((userEpisode) => (
+                  <EpisodeCard
+                    key={userEpisode.id}
+                    userEpisode={userEpisode}
+                    onStatusChange={handleEpisodeStatusChange}
+                    variant="priority"
+                  />
+                ))
               ) : (
                 <div className="col-span-full text-center py-8">
-                  <Star className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
-                  <h3 className="text-lg font-semibold text-muted-foreground mb-2">No shows in queue</h3>
-                  <p className="text-muted-foreground">Mark shows as "Watch Next" to build your priority queue</p>
+                  <PlayCircle className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
+                  <h3 className="text-lg font-semibold text-muted-foreground mb-2">No episodes queued</h3>
+                  <p className="text-muted-foreground">Mark episodes as "Next" to build your viewing queue</p>
                 </div>
               )}
             </div>
@@ -189,40 +235,96 @@ export default function Dashboard() {
           <section>
             <div className="flex items-center justify-between mb-6">
               <div className="flex items-center space-x-3">
-                <div className="w-6 h-6 bg-primary rounded-full flex items-center justify-center">
-                  <Clock className="w-4 h-4 text-primary-foreground" />
+                <div className="w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center">
+                  <Clock className="w-4 h-4 text-white" />
                 </div>
-                <h2 className="text-2xl font-bold" data-testid="text-section-title-watch-later">Watch Later</h2>
-                <span className="bg-primary text-primary-foreground px-2 py-1 rounded-full text-xs font-bold" data-testid="text-watch-later-count">
-                  {laterShows?.length || 0}
+                <h2 className="text-2xl font-bold" data-testid="text-section-title-later">Watch Later</h2>
+                <span className="bg-blue-500 text-white px-2 py-1 rounded-full text-xs font-bold" data-testid="text-later-count">
+                  {laterEpisodes?.length || 0}
                 </span>
               </div>
-              <p className="text-muted-foreground text-sm">Save for future viewing</p>
+              <p className="text-muted-foreground text-sm">Episodes saved for later</p>
             </div>
             
             <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-4">
-              {laterShowsLoading ? (
+              {laterLoading ? (
                 Array.from({ length: 8 }).map((_, i) => (
                   <div key={i} className="bg-card rounded-lg p-3 animate-pulse">
-                    <div className="w-full h-16 bg-muted rounded-md mb-2"></div>
-                    <div className="h-3 bg-muted rounded mb-1"></div>
-                    <div className="h-2 bg-muted rounded w-2/3"></div>
+                    <div className="flex space-x-2 mb-2">
+                      <div className="w-12 h-8 bg-muted rounded-md"></div>
+                      <div className="flex-1 space-y-1">
+                        <div className="h-3 bg-muted rounded"></div>
+                        <div className="h-2 bg-muted rounded w-2/3"></div>
+                      </div>
+                    </div>
+                    <div className="h-5 bg-muted rounded w-16"></div>
                   </div>
                 ))
-              ) : laterShows && laterShows.length > 0 ? (
-                laterShows.map((userShow) => (
-                  <ShowCard
-                    key={userShow.id}
-                    userShow={userShow}
-                    onStatusChange={handleStatusChange}
+              ) : laterEpisodes && laterEpisodes.length > 0 ? (
+                laterEpisodes.map((userEpisode) => (
+                  <EpisodeCard
+                    key={userEpisode.id}
+                    userEpisode={userEpisode}
+                    onStatusChange={handleEpisodeStatusChange}
                     variant="compact"
                   />
                 ))
               ) : (
                 <div className="col-span-full text-center py-8">
                   <Clock className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
-                  <h3 className="text-lg font-semibold text-muted-foreground mb-2">No shows saved for later</h3>
-                  <p className="text-muted-foreground">Shows you mark as "Later" will appear here</p>
+                  <h3 className="text-lg font-semibold text-muted-foreground mb-2">No episodes for later</h3>
+                  <p className="text-muted-foreground">Episodes you mark as "Later" will appear here</p>
+                </div>
+              )}
+            </div>
+          </section>
+
+          {/* Recently Watched Section */}
+          <section>
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center space-x-3">
+                <div className="w-6 h-6 bg-purple-500 rounded-full flex items-center justify-center">
+                  <Eye className="w-4 h-4 text-white" />
+                </div>
+                <h2 className="text-2xl font-bold" data-testid="text-section-title-watched">Recently Watched</h2>
+                <span className="bg-purple-500 text-white px-2 py-1 rounded-full text-xs font-bold" data-testid="text-watched-count">
+                  {watchedEpisodes?.length || 0}
+                </span>
+              </div>
+              <p className="text-muted-foreground text-sm">Your viewing history</p>
+            </div>
+            
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-4">
+              {watchedLoading ? (
+                Array.from({ length: 8 }).map((_, i) => (
+                  <div key={i} className="bg-card rounded-lg p-3 animate-pulse">
+                    <div className="flex space-x-2 mb-2">
+                      <div className="w-12 h-8 bg-muted rounded-md"></div>
+                      <div className="flex-1 space-y-1">
+                        <div className="h-3 bg-muted rounded"></div>
+                        <div className="h-2 bg-muted rounded w-2/3"></div>
+                      </div>
+                    </div>
+                    <div className="h-5 bg-muted rounded w-16"></div>
+                  </div>
+                ))
+              ) : watchedEpisodes && watchedEpisodes.length > 0 ? (
+                watchedEpisodes
+                  .sort((a, b) => new Date(b.watchedAt || 0).getTime() - new Date(a.watchedAt || 0).getTime())
+                  .slice(0, 16)
+                  .map((userEpisode) => (
+                    <EpisodeCard
+                      key={userEpisode.id}
+                      userEpisode={userEpisode}
+                      onStatusChange={handleEpisodeStatusChange}
+                      variant="compact"
+                    />
+                  ))
+              ) : (
+                <div className="col-span-full text-center py-8">
+                  <Eye className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
+                  <h3 className="text-lg font-semibold text-muted-foreground mb-2">No watched episodes</h3>
+                  <p className="text-muted-foreground">Episodes you mark as "Watched" will appear here</p>
                 </div>
               )}
             </div>

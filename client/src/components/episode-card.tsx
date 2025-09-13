@@ -1,0 +1,206 @@
+import { UserEpisode, Episode, Show } from "@shared/schema";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Calendar, Clock, Eye, ArrowRight, MoreHorizontal } from "lucide-react";
+import { cn } from "@/lib/utils";
+
+interface EpisodeCardProps {
+  userEpisode: UserEpisode & { episode: Episode & { show: Show } };
+  onStatusChange: (episodeId: number, status: string) => void;
+  variant?: "default" | "compact" | "priority";
+}
+
+export default function EpisodeCard({ userEpisode, onStatusChange, variant = "default" }: EpisodeCardProps) {
+  const { episode } = userEpisode;
+  const { show } = episode;
+
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case "untriaged":
+        return <Badge className="bg-yellow-500/20 text-yellow-400 border border-yellow-500/30">UNTRIAGED</Badge>;
+      case "next":
+        return <Badge className="bg-green-500/20 text-green-400 border border-green-500/30">NEXT</Badge>;
+      case "later":
+        return <Badge className="bg-blue-500/20 text-blue-400 border border-blue-500/30">LATER</Badge>;
+      case "watched":
+        return <Badge className="bg-purple-500/20 text-purple-400 border border-purple-500/30">WATCHED</Badge>;
+      default:
+        return <Badge className="bg-gray-500/20 text-gray-400 border border-gray-500/30">{status}</Badge>;
+    }
+  };
+
+  const formatAirdate = (airdate: string | null) => {
+    if (!airdate) return "Unknown";
+    return new Date(airdate).toLocaleDateString();
+  };
+
+  const getEpisodeTitle = () => {
+    if (episode.name) {
+      return episode.name;
+    }
+    return `Season ${episode.season}, Episode ${episode.number}`;
+  };
+
+  if (variant === "compact") {
+    return (
+      <div className="episode-card bg-card hover:bg-card/80 rounded-lg p-3 transition-all duration-200 cursor-pointer" data-testid={`card-episode-${episode.id}`}>
+        <div className="flex space-x-2 mb-2">
+          <img 
+            src={episode.image?.medium || show.image?.medium || "/placeholder-show.jpg"}
+            alt={`${show.name} poster`}
+            className="w-12 h-8 object-cover rounded-md flex-shrink-0"
+            onError={(e) => {
+              const target = e.target as HTMLImageElement;
+              target.src = "https://via.placeholder.com/80x60/374151/9ca3af?text=" + encodeURIComponent(show.name);
+            }}
+          />
+          <div className="flex-1 min-w-0">
+            <h4 className="font-medium text-xs truncate text-foreground" data-testid={`text-episode-title-${episode.id}`}>
+              {getEpisodeTitle()}
+            </h4>
+            <p className="text-xs text-muted-foreground truncate" data-testid={`text-episode-show-${episode.id}`}>
+              {show.name}
+            </p>
+          </div>
+        </div>
+        {getStatusBadge(userEpisode.status)}
+      </div>
+    );
+  }
+
+  if (variant === "priority") {
+    return (
+      <div 
+        className="episode-card bg-card hover:bg-card/80 rounded-lg p-4 transition-all duration-200 cursor-pointer border-l-4 border-green-500"
+        data-testid={`card-episode-${episode.id}`}
+      >
+        <div className="flex space-x-3 mb-4">
+          <img 
+            src={episode.image?.medium || show.image?.medium || "/placeholder-show.jpg"}
+            alt={`${show.name} poster`}
+            className="w-16 h-12 object-cover rounded-md flex-shrink-0"
+            onError={(e) => {
+              const target = e.target as HTMLImageElement;
+              target.src = "https://via.placeholder.com/100x75/374151/9ca3af?text=" + encodeURIComponent(show.name);
+            }}
+          />
+          <div className="flex-1 min-w-0">
+            <h3 className="font-semibold text-sm truncate text-foreground mb-1" data-testid={`text-episode-title-${episode.id}`}>
+              {getEpisodeTitle()}
+            </h3>
+            <p className="text-sm text-muted-foreground truncate mb-1" data-testid={`text-episode-show-${episode.id}`}>
+              {show.name}
+            </p>
+            <div className="flex items-center space-x-3 text-xs text-muted-foreground">
+              <span className="flex items-center space-x-1">
+                <Calendar className="w-3 h-3" />
+                <span>{formatAirdate(episode.airdate)}</span>
+              </span>
+              {episode.runtime && (
+                <span className="flex items-center space-x-1">
+                  <Clock className="w-3 h-3" />
+                  <span>{episode.runtime}m</span>
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+        
+        <div className="flex items-center justify-between">
+          {getStatusBadge(userEpisode.status)}
+          <div className="flex space-x-1">
+            <Button 
+              size="sm" 
+              onClick={() => onStatusChange(episode.id, "watched")}
+              data-testid={`button-watched-${episode.id}`}
+            >
+              <Eye className="w-3 h-3 mr-1" />
+              Watched
+            </Button>
+            <Button 
+              size="sm" 
+              variant="outline"
+              onClick={() => onStatusChange(episode.id, "later")}
+              data-testid={`button-later-${episode.id}`}
+            >
+              Later
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Default variant
+  return (
+    <div className="episode-card bg-card hover:bg-card/80 rounded-lg p-4 transition-all duration-200" data-testid={`card-episode-${episode.id}`}>
+      <div className="flex space-x-3 mb-4">
+        <img 
+          src={episode.image?.medium || show.image?.medium || "/placeholder-show.jpg"}
+          alt={`${show.name} poster`}
+          className="w-20 h-14 object-cover rounded-md flex-shrink-0"
+          onError={(e) => {
+            const target = e.target as HTMLImageElement;
+            target.src = "https://via.placeholder.com/120x90/374151/9ca3af?text=" + encodeURIComponent(show.name);
+          }}
+        />
+        <div className="flex-1 min-w-0">
+          <h3 className="font-semibold text-lg truncate text-foreground mb-1" data-testid={`text-episode-title-${episode.id}`}>
+            {getEpisodeTitle()}
+          </h3>
+          <p className="text-sm text-muted-foreground truncate mb-2" data-testid={`text-episode-show-${episode.id}`}>
+            {show.name}
+          </p>
+          <div className="flex items-center space-x-4 text-sm text-muted-foreground mb-3">
+            <span className="flex items-center space-x-1">
+              <Calendar className="w-4 h-4" />
+              <span>{formatAirdate(episode.airdate)}</span>
+            </span>
+            {episode.runtime && (
+              <span className="flex items-center space-x-1">
+                <Clock className="w-4 h-4" />
+                <span>{episode.runtime} min</span>
+              </span>
+            )}
+          </div>
+          {episode.summary && (
+            <p className="text-sm text-muted-foreground line-clamp-2 mb-3" data-testid={`text-episode-summary-${episode.id}`}>
+              {episode.summary.replace(/<[^>]*>/g, '')}
+            </p>
+          )}
+        </div>
+      </div>
+      
+      <div className="flex items-center justify-between">
+        {getStatusBadge(userEpisode.status)}
+        <div className="flex space-x-2">
+          <Button 
+            size="sm" 
+            onClick={() => onStatusChange(episode.id, "next")}
+            data-testid={`button-next-${episode.id}`}
+          >
+            <ArrowRight className="w-4 h-4 mr-1" />
+            Watch Next
+          </Button>
+          <Button 
+            size="sm" 
+            variant="outline"
+            onClick={() => onStatusChange(episode.id, "later")}
+            data-testid={`button-later-${episode.id}`}
+          >
+            Later
+          </Button>
+          <Button 
+            size="sm" 
+            variant="outline"
+            onClick={() => onStatusChange(episode.id, "watched")}
+            data-testid={`button-watched-${episode.id}`}
+          >
+            <Eye className="w-4 h-4 mr-1" />
+            Watched
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
