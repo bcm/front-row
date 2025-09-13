@@ -14,6 +14,7 @@ export interface IStorage {
   createShow(show: InsertShow): Promise<Show>;
   updateShow(id: number, show: Partial<InsertShow>): Promise<Show | undefined>;
   searchShows(query: string): Promise<Show[]>;
+  searchUserShows(userId: string, query: string): Promise<Show[]>;
   
   // User show methods
   getUserShows(userId: string, status?: string): Promise<(UserShow & { show: Show })[]>;
@@ -26,6 +27,7 @@ export interface IStorage {
   getEpisodes(showId: number): Promise<Episode[]>;
   createEpisode(episode: InsertEpisode): Promise<Episode>;
   getLatestEpisodes(showIds: number[]): Promise<Episode[]>;
+  searchUserEpisodes(userId: string, query: string): Promise<(Episode & { show: Show })[]>;
   
   // User episode methods
   getUserEpisodes(userId: string, status?: string): Promise<(UserEpisode & { episode: Episode & { show: Show } })[]>;
@@ -103,6 +105,36 @@ export class DatabaseStorage implements IStorage {
       .select()
       .from(shows)
       .where(ilike(shows.name, `%${query}%`));
+  }
+
+  async searchUserShows(userId: string, query: string): Promise<Show[]> {
+    const results = await db
+      .select({
+        id: shows.id,
+        name: shows.name,
+        summary: shows.summary,
+        image: shows.image,
+        network: shows.network,
+        genres: shows.genres,
+        status: shows.status,
+        premiered: shows.premiered,
+        rating: shows.rating,
+        runtime: shows.runtime,
+        officialSite: shows.officialSite,
+        language: shows.language,
+        type: shows.type,
+        updated: shows.updated,
+        createdAt: shows.createdAt
+      })
+      .from(userShows)
+      .innerJoin(shows, eq(userShows.showId, shows.id))
+      .where(and(
+        eq(userShows.userId, userId),
+        ilike(shows.name, `%${query}%`)
+      ))
+      .limit(20);
+
+    return results;
   }
 
   // User show methods
@@ -221,6 +253,44 @@ export class DatabaseStorage implements IStorage {
     }
     
     return Array.from(latestByShow.values());
+  }
+
+  async searchUserEpisodes(userId: string, query: string): Promise<(Episode & { show: Show })[]> {
+    const results = await db
+      .select({
+        id: episodes.id,
+        showId: episodes.showId,
+        name: episodes.name,
+        season: episodes.season,
+        number: episodes.number,
+        airdate: episodes.airdate,
+        runtime: episodes.runtime,
+        summary: episodes.summary,
+        image: episodes.image,
+        show: shows
+      })
+      .from(userEpisodes)
+      .innerJoin(episodes, eq(userEpisodes.episodeId, episodes.id))
+      .innerJoin(shows, eq(episodes.showId, shows.id))
+      .where(and(
+        eq(userEpisodes.userId, userId),
+        ilike(episodes.name, `%${query}%`)
+      ))
+      .orderBy(asc(episodes.airdate))
+      .limit(20);
+
+    return results.map(row => ({
+      id: row.id,
+      showId: row.showId,
+      name: row.name,
+      season: row.season,
+      number: row.number,
+      airdate: row.airdate,
+      runtime: row.runtime,
+      summary: row.summary,
+      image: row.image,
+      show: row.show
+    }));
   }
 
   // User episode methods

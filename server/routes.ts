@@ -62,6 +62,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Library search routes
+  app.get("/api/search", async (req, res) => {
+    try {
+      const { q } = req.query;
+      if (!q) {
+        return res.status(400).json({ error: "Query parameter 'q' is required" });
+      }
+
+      const query = q as string;
+      const userId = "demo-user"; // Mock user ID
+      
+      // Search both shows and episodes in user's library in parallel
+      const [shows, episodes] = await Promise.all([
+        storage.searchUserShows(userId, query),
+        storage.searchUserEpisodes(userId, query)
+      ]);
+
+      // Combine results with type indicators
+      const results = [
+        ...shows.map(show => ({ resultType: 'show', ...show })),
+        ...episodes.map(episode => ({ resultType: 'episode', ...episode }))
+      ];
+
+      res.json(results);
+    } catch (error) {
+      console.error("Error searching library:", error);
+      res.status(500).json({ error: "Failed to search library" });
+    }
+  });
+
   // TVMaze User API routes
   app.get("/api/tvmaze/followed-shows", async (req, res) => {
     try {
