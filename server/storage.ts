@@ -216,17 +216,14 @@ export class DatabaseStorage implements IStorage {
   }
 
   // User show methods
-  async getUserShows(userId: string, status?: string): Promise<(UserShow & { show: Show })[]> {
-    const whereClause = status 
-      ? and(eq(userShows.userId, userId), eq(userShows.status, status))
-      : eq(userShows.userId, userId);
+  async getUserShows(userId: string): Promise<(UserShow & { show: Show })[]> {
+    const whereClause = eq(userShows.userId, userId);
 
     const results = await db
       .select({
         id: userShows.id,
         userId: userShows.userId,
         showId: userShows.showId,
-        status: userShows.status,
         addedAt: userShows.addedAt,
         show: shows
       })
@@ -239,7 +236,6 @@ export class DatabaseStorage implements IStorage {
       id: row.id,
       userId: row.userId,
       showId: row.showId,
-      status: row.status,
       addedAt: row.addedAt,
       show: row.show
     }));
