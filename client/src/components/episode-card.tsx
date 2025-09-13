@@ -20,6 +20,11 @@ export default function EpisodeCard({ userEpisode, onStatusChange, variant = "de
       return null;
     }
     
+    // Don't show "later" badge for compact variant
+    if (variant === "compact" && status === "later") {
+      return null;
+    }
+    
     switch (status) {
       case "untriaged":
         return null; // Don't show badge for untriaged episodes

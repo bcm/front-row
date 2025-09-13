@@ -378,31 +378,65 @@ export default function Dashboard() {
               <p className="text-muted-foreground text-sm">Episodes saved for later</p>
             </div>
             
-            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-4">
+            <div className="space-y-6">
               {laterLoading ? (
-                Array.from({ length: 8 }).map((_, i) => (
-                  <div key={i} className="bg-card rounded-lg p-3 animate-pulse">
-                    <div className="flex space-x-2 mb-2">
-                      <div className="w-12 h-8 bg-muted rounded-md"></div>
-                      <div className="flex-1 space-y-1">
-                        <div className="h-3 bg-muted rounded"></div>
-                        <div className="h-2 bg-muted rounded w-2/3"></div>
+                <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-4">
+                  {Array.from({ length: 8 }).map((_, i) => (
+                    <div key={i} className="bg-card rounded-lg p-3 animate-pulse">
+                      <div className="flex space-x-2 mb-2">
+                        <div className="w-12 h-8 bg-muted rounded-md"></div>
+                        <div className="flex-1 space-y-1">
+                          <div className="h-3 bg-muted rounded"></div>
+                          <div className="h-2 bg-muted rounded w-2/3"></div>
+                        </div>
                       </div>
+                      <div className="h-5 bg-muted rounded w-16"></div>
                     </div>
-                    <div className="h-5 bg-muted rounded w-16"></div>
+                  ))}
+                </div>
+              ) : laterEpisodes && laterEpisodes.length > 0 ? (
+                Object.entries(
+                  laterEpisodes.reduce((acc, userEpisode) => {
+                    const showName = userEpisode.episode.show.name;
+                    if (!acc[showName]) {
+                      acc[showName] = [];
+                    }
+                    acc[showName].push(userEpisode);
+                    return acc;
+                  }, {} as Record<string, typeof laterEpisodes>)
+                )
+                .sort(([a], [b]) => a.localeCompare(b))
+                .map(([showName, showEpisodes]) => (
+                  <div key={showName} className="space-y-3">
+                    <h3 className="text-lg font-semibold text-foreground border-b border-border pb-2">
+                      {showName}
+                    </h3>
+                    <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-4">
+                      {showEpisodes
+                        .sort((a, b) => {
+                          // Sort by season number
+                          const seasonA = a.episode.season || 0;
+                          const seasonB = b.episode.season || 0;
+                          if (seasonA !== seasonB) return seasonA - seasonB;
+                          
+                          // Then sort by episode number
+                          const episodeA = a.episode.number || 0;
+                          const episodeB = b.episode.number || 0;
+                          return episodeA - episodeB;
+                        })
+                        .map((userEpisode) => (
+                          <EpisodeCard
+                            key={userEpisode.id}
+                            userEpisode={userEpisode}
+                            onStatusChange={handleEpisodeStatusChange}
+                            variant="compact"
+                          />
+                        ))}
+                    </div>
                   </div>
                 ))
-              ) : laterEpisodes && laterEpisodes.length > 0 ? (
-                laterEpisodes.map((userEpisode) => (
-                  <EpisodeCard
-                    key={userEpisode.id}
-                    userEpisode={userEpisode}
-                    onStatusChange={handleEpisodeStatusChange}
-                    variant="compact"
-                  />
-                ))
               ) : (
-                <div className="col-span-full text-center py-8">
+                <div className="text-center py-8">
                   <Clock className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
                   <h3 className="text-lg font-semibold text-muted-foreground mb-2">No episodes for later</h3>
                   <p className="text-muted-foreground">Episodes you mark as "Later" will appear here</p>
