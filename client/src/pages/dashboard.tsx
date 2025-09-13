@@ -229,7 +229,7 @@ export default function Dashboard() {
                 <AlertTriangle className="w-4 h-4 text-white" />
               </div>
               <h2 className="text-2xl font-bold" data-testid="text-section-title-new-feed">New in Feed</h2>
-              <p className="text-muted-foreground text-sm ml-4">Episodes that need your attention</p>
+              <p className="text-muted-foreground text-base ml-4">Episodes that need your attention</p>
             </div>
             
             <div className="space-y-4">
@@ -299,7 +299,7 @@ export default function Dashboard() {
                 <PlayCircle className="w-4 h-4 text-white" />
               </div>
               <h2 className="text-2xl font-bold" data-testid="text-section-title-next">Next to Watch</h2>
-              <p className="text-muted-foreground text-sm ml-4">Your priority viewing queue</p>
+              <p className="text-muted-foreground text-base ml-4">Your priority viewing queue</p>
             </div>
             
             <div className="space-y-6">
@@ -386,7 +386,7 @@ export default function Dashboard() {
                 <Clock className="w-4 h-4 text-white" />
               </div>
               <h2 className="text-2xl font-bold" data-testid="text-section-title-later">Watch Later</h2>
-              <p className="text-muted-foreground text-sm ml-4">Episodes saved for later</p>
+              <p className="text-muted-foreground text-base ml-4">Episodes saved for later</p>
             </div>
             
             <div className="space-y-6">
