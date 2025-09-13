@@ -82,6 +82,20 @@ export default function EpisodeCard({ userEpisode, onStatusChange, variant = "de
             )}
           </div>
         </div>
+        
+        <div className="flex items-center space-x-3 text-xs text-muted-foreground mb-2">
+          <span className="flex items-center space-x-1">
+            <Calendar className="w-3 h-3" />
+            <span>{formatAirdate(episode.airdate)}</span>
+          </span>
+          {episode.runtime && (
+            <span className="flex items-center space-x-1">
+              <Clock className="w-3 h-3" />
+              <span>{episode.runtime}m</span>
+            </span>
+          )}
+        </div>
+        
         {getStatusBadge(userEpisode.status) && getStatusBadge(userEpisode.status)}
       </div>
     );
@@ -93,7 +107,7 @@ export default function EpisodeCard({ userEpisode, onStatusChange, variant = "de
         className="episode-card bg-card hover:bg-card/80 rounded-lg p-4 transition-all duration-200 cursor-pointer border-l-4 border-green-500"
         data-testid={`card-episode-${episode.id}`}
       >
-        <div className="flex space-x-3 mb-4">
+        <div className="flex space-x-3 mb-3">
           <img 
             src={episode.image?.medium || show.image?.medium || "/placeholder-show.jpg"}
             alt={`${show.name} poster`}
@@ -115,24 +129,25 @@ export default function EpisodeCard({ userEpisode, onStatusChange, variant = "de
                 </span>
               )}
             </div>
-            <div className="flex items-center space-x-3 text-xs text-muted-foreground mb-2">
-              <span className="flex items-center space-x-1">
-                <Calendar className="w-3 h-3" />
-                <span>{formatAirdate(episode.airdate)}</span>
-              </span>
-              {episode.runtime && (
-                <span className="flex items-center space-x-1">
-                  <Clock className="w-3 h-3" />
-                  <span>{episode.runtime}m</span>
-                </span>
-              )}
-            </div>
             {episode.summary && (
               <p className="text-xs text-muted-foreground line-clamp-2" data-testid={`text-episode-summary-${episode.id}`}>
                 {episode.summary.replace(/<[^>]*>/g, '')}
               </p>
             )}
           </div>
+        </div>
+        
+        <div className="flex items-center space-x-3 text-xs text-muted-foreground mb-4">
+          <span className="flex items-center space-x-1">
+            <Calendar className="w-3 h-3" />
+            <span>{formatAirdate(episode.airdate)}</span>
+          </span>
+          {episode.runtime && (
+            <span className="flex items-center space-x-1">
+              <Clock className="w-3 h-3" />
+              <span>{episode.runtime}m</span>
+            </span>
+          )}
         </div>
         
         <div className="flex items-center justify-between">
@@ -163,7 +178,7 @@ export default function EpisodeCard({ userEpisode, onStatusChange, variant = "de
   // Default variant
   return (
     <div className="episode-card bg-card hover:bg-card/80 rounded-lg p-4 transition-all duration-200" data-testid={`card-episode-${episode.id}`}>
-      <div className="flex space-x-3 mb-4">
+      <div className="flex space-x-3 mb-3">
         <img 
           src={episode.image?.medium || show.image?.medium || "/placeholder-show.jpg"}
           alt={`${show.name} poster`}
@@ -185,24 +200,25 @@ export default function EpisodeCard({ userEpisode, onStatusChange, variant = "de
               </span>
             )}
           </div>
-          <div className="flex items-center space-x-4 text-sm text-muted-foreground mb-3">
-            <span className="flex items-center space-x-1">
-              <Calendar className="w-4 h-4" />
-              <span>{formatAirdate(episode.airdate)}</span>
-            </span>
-            {episode.runtime && (
-              <span className="flex items-center space-x-1">
-                <Clock className="w-4 h-4" />
-                <span>{episode.runtime} min</span>
-              </span>
-            )}
-          </div>
           {episode.summary && (
-            <p className="text-sm text-muted-foreground line-clamp-2 mb-3" data-testid={`text-episode-summary-${episode.id}`}>
+            <p className="text-sm text-muted-foreground line-clamp-2" data-testid={`text-episode-summary-${episode.id}`}>
               {episode.summary.replace(/<[^>]*>/g, '')}
             </p>
           )}
         </div>
+      </div>
+      
+      <div className="flex items-center space-x-4 text-sm text-muted-foreground mb-4">
+        <span className="flex items-center space-x-1">
+          <Calendar className="w-4 h-4" />
+          <span>{formatAirdate(episode.airdate)}</span>
+        </span>
+        {episode.runtime && (
+          <span className="flex items-center space-x-1">
+            <Clock className="w-4 h-4" />
+            <span>{episode.runtime} min</span>
+          </span>
+        )}
       </div>
       
       <div className="flex items-center justify-between">
