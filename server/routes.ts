@@ -677,6 +677,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Update user episode status
+  // Get individual episode with show and user data
+  app.get("/api/episodes/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const episodeId = parseInt(id);
+      const userId = "demo-user"; // Mock user ID
+      
+      const episodeData = await storage.getEpisodeWithShowAndUserData(userId, episodeId);
+      
+      if (!episodeData) {
+        return res.status(404).json({ error: "Episode not found" });
+      }
+
+      res.json(episodeData);
+    } catch (error) {
+      console.error("Error fetching episode:", error);
+      res.status(500).json({ error: "Failed to fetch episode" });
+    }
+  });
+
   app.patch("/api/user/episodes/:episodeId", async (req, res) => {
     try {
       const userId = "demo-user"; // Mock user ID

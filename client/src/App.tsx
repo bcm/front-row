@@ -8,6 +8,7 @@ import Library from "./pages/library";
 import Shared from "./pages/shared";
 import SettingsPage from "./pages/settings";
 import ShowDetail from "./pages/show-detail";
+import EpisodeDetail from "./pages/episode-detail";
 import NotFound from "./pages/not-found";
 
 function Router() {
@@ -19,6 +20,7 @@ function Router() {
       <Route path="/shared" component={Shared} />
       <Route path="/settings" component={SettingsPage} />
       <Route path="/show/:id" component={ShowDetail} />
+      <Route path="/episode/:id" component={EpisodeDetail} />
       <Route component={NotFound} />
     </Switch>
   );

@@ -26,6 +26,8 @@ export interface IStorage {
   
   // Episode methods
   getEpisodes(showId: number): Promise<Episode[]>;
+  getEpisode(episodeId: number): Promise<Episode | undefined>;
+  getEpisodeWithShowAndUserData(userId: string, episodeId: number): Promise<(Episode & { show: Show; userEpisode?: UserEpisode }) | undefined>;
   createEpisode(episode: InsertEpisode): Promise<Episode>;
   getLatestEpisodes(showIds: number[]): Promise<Episode[]>;
   searchUserEpisodes(userId: string, query: string): Promise<(Episode & { show: Show })[]>;
@@ -65,29 +67,37 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createShow(show: InsertShow): Promise<Show> {
+    const showData = {
+      ...show,
+      image: show.image as { medium?: string; original?: string } | null,
+      network: show.network as { name?: string; country?: { name?: string } } | null,
+      webChannel: show.webChannel as { name?: string; country?: { name?: string }; officialSite?: string } | null,
+      rating: show.rating as { average?: number } | null,
+      schedule: show.schedule as { time?: string; days?: string[] } | null
+    };
     const [newShow] = await db
       .insert(shows)
-      .values([show])
+      .values([showData])
       .onConflictDoUpdate({
         target: shows.id,
         set: {
-          name: show.name,
-          summary: show.summary,
-          image: show.image as any,
-          network: show.network as any,
-          webChannel: show.webChannel as any,
-          genres: show.genres,
-          status: show.status,
-          premiered: show.premiered,
-          ended: show.ended,
-          rating: show.rating as any,
-          runtime: show.runtime,
-          averageRuntime: show.averageRuntime,
-          schedule: show.schedule as any,
-          officialSite: show.officialSite,
-          language: show.language,
-          type: show.type,
-          updated: show.updated
+          name: showData.name,
+          summary: showData.summary,
+          image: showData.image,
+          network: showData.network,
+          webChannel: showData.webChannel,
+          genres: showData.genres,
+          status: showData.status,
+          premiered: showData.premiered,
+          ended: showData.ended,
+          rating: showData.rating,
+          runtime: showData.runtime,
+          averageRuntime: showData.averageRuntime,
+          schedule: showData.schedule,
+          officialSite: showData.officialSite,
+          language: showData.language,
+          type: showData.type,
+          updated: showData.updated
         }
       })
       .returning();
@@ -284,6 +294,53 @@ export class DatabaseStorage implements IStorage {
       .select()
       .from(episodes)
       .where(eq(episodes.showId, showId));
+  }
+
+  async getEpisode(episodeId: number): Promise<Episode | undefined> {
+    const [episode] = await db.select().from(episodes).where(eq(episodes.id, episodeId));
+    return episode || undefined;
+  }
+
+  async getEpisodeWithShowAndUserData(userId: string, episodeId: number): Promise<(Episode & { show: Show; userEpisode?: UserEpisode }) | undefined> {
+    const result = await db
+      .select({
+        id: episodes.id,
+        showId: episodes.showId,
+        name: episodes.name,
+        season: episodes.season,
+        number: episodes.number,
+        airdate: episodes.airdate,
+        runtime: episodes.runtime,
+        summary: episodes.summary,
+        image: episodes.image,
+        show: shows,
+        userEpisode: userEpisodes
+      })
+      .from(episodes)
+      .innerJoin(shows, eq(episodes.showId, shows.id))
+      .leftJoin(userEpisodes, and(
+        eq(userEpisodes.episodeId, episodes.id),
+        eq(userEpisodes.userId, userId)
+      ))
+      .where(eq(episodes.id, episodeId))
+      .limit(1);
+
+    if (result.length === 0) return undefined;
+
+    const row = result[0];
+    return {
+      id: row.id,
+      showId: row.showId,
+      name: row.name,
+      season: row.season,
+      number: row.number,
+      airdate: row.airdate,
+      runtime: row.runtime,
+      summary: row.summary,
+      image: row.image,
+      show: row.show,
+      userEpisode: row.userEpisode || undefined
+    };
   }
 
   async createEpisode(episode: InsertEpisode): Promise<Episode> {
