@@ -42,11 +42,11 @@ export default function FollowedShows() {
 
   // Sync individual show mutation
   const syncShowMutation = useMutation({
-    mutationFn: async (showId: number) => {
+    mutationFn: async ({ showId, showName }: { showId: number; showName: string }) => {
       setSyncingShowId(showId);
-      return apiRequest("POST", `/api/shows/${showId}/sync`, {});
+      return { response: await apiRequest("POST", `/api/shows/${showId}/sync`, {}), showName };
     },
-    onSuccess: (data: any, showId: number) => {
+    onSuccess: (data: any, { showId }: { showId: number; showName: string }) => {
       setSyncingShowId(null);
       // Invalidate and refetch show data and stats
       queryClient.invalidateQueries({ queryKey: ["/api/shows", showId] });
@@ -58,14 +58,14 @@ export default function FollowedShows() {
       
       toast({
         title: "Sync Complete",
-        description: data.message || `Show synced successfully. ${data.episodesImported || 0} episodes imported.`,
+        description: data.response.message || `"${data.showName}" synced successfully. ${data.response.episodesImported || 0} episodes imported.`,
       });
     },
-    onError: (error: any) => {
+    onError: (error: any, { showName }: { showId: number; showName: string }) => {
       setSyncingShowId(null);
       toast({
         title: "Sync Failed",
-        description: error.message || "Failed to sync show data from TVMaze",
+        description: error.message || `Failed to sync "${showName}" from TVMaze`,
         variant: "destructive",
       });
     },
@@ -300,7 +300,7 @@ export default function FollowedShows() {
                             onClick={(e) => {
                               e.preventDefault();
                               e.stopPropagation();
-                              syncShowMutation.mutate(libraryShow.showId);
+                              syncShowMutation.mutate({ showId: libraryShow.showId, showName: libraryShow.show.name });
                             }}
                             disabled={syncingShowId === libraryShow.showId}
                             className="h-6 w-6 p-0"
