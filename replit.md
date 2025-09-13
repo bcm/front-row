@@ -15,7 +15,8 @@ Preferred communication style: Simple, everyday language.
 - **UI Library**: shadcn/ui components built on Radix UI primitives
 - **Styling**: Tailwind CSS with custom design system variables
 - **State Management**: TanStack Query (React Query) for server state management
-- **Routing**: Wouter for lightweight client-side routing
+- **Routing**: Wouter for lightweight client-side routing with episode detail pages (`/episode/:id`)
+- **Navigation**: Episode names throughout the app link to dedicated episode detail pages
 - **Forms**: React Hook Form with Zod validation resolvers
 
 ### Backend Architecture
@@ -47,10 +48,20 @@ The application uses four main entities:
 ### Authentication & Authorization
 Currently implemented with basic session-based authentication structure, though authentication routes are not fully implemented in the current codebase.
 
+## Recent Changes
+
+### September 13, 2025
+- **Episode Detail Page**: Added comprehensive episode detail page (`/episode/:id`) with full episode information, show context, and status management
+- **Episode Linking**: All episode names throughout the application now link to their respective episode detail pages
+- **Scrobble API Integration**: Enhanced show sync process to automatically apply user's personal watch status from TVMaze scrobble API
+- **Status Management**: Complete episode status cycling functionality (UNWATCHED → NEXT → LATER → WATCHED → UNWATCHED) across all pages
+- **Navigation Enhancement**: Improved navigation flows between dashboard, show details, and episode details
+
 ## External Dependencies
 
 ### Third-Party APIs
 - **TVMaze API**: Primary data source for TV show information, search functionality, and episode data
+- **TVMaze Scrobble API**: User watch status consultation for automatic status synchronization during show imports
 
 ### Database
 - **Neon PostgreSQL**: Serverless PostgreSQL database for production
