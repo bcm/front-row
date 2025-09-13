@@ -227,12 +227,7 @@ export class DatabaseStorage implements IStorage {
         userId: userShows.userId,
         showId: userShows.showId,
         status: userShows.status,
-        priority: userShows.priority,
-        currentSeason: userShows.currentSeason,
-        currentEpisode: userShows.currentEpisode,
-        isShared: userShows.isShared,
         addedAt: userShows.addedAt,
-        watchedAt: userShows.watchedAt,
         show: shows
       })
       .from(userShows)
@@ -245,12 +240,7 @@ export class DatabaseStorage implements IStorage {
       userId: row.userId,
       showId: row.showId,
       status: row.status,
-      priority: row.priority,
-      currentSeason: row.currentSeason,
-      currentEpisode: row.currentEpisode,
-      isShared: row.isShared,
       addedAt: row.addedAt,
-      watchedAt: row.watchedAt,
       show: row.show
     }));
   }

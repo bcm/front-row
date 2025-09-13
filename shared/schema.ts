@@ -36,12 +36,7 @@ export const userShows = pgTable("user_shows", {
   userId: varchar("user_id").notNull(),
   showId: integer("show_id").notNull(),
   status: text("status").notNull(), // 'new', 'watching', 'later', 'archived'
-  priority: integer("priority").default(0),
-  currentSeason: integer("current_season"),
-  currentEpisode: integer("current_episode"),
-  isShared: boolean("is_shared").default(false),
   addedAt: timestamp("added_at").defaultNow(),
-  watchedAt: timestamp("watched_at"),
 });
 
 export const episodes = pgTable("episodes", {
@@ -80,7 +75,6 @@ export const insertShowSchema = createInsertSchema(shows).omit({
 export const insertUserShowSchema = createInsertSchema(userShows).omit({
   id: true,
   addedAt: true,
-  watchedAt: true,
 });
 
 export const insertEpisodeSchema = createInsertSchema(episodes);
