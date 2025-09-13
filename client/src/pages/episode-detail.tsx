@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
+import { Breadcrumb, BreadcrumbList, BreadcrumbItem, BreadcrumbLink, BreadcrumbPage, BreadcrumbSeparator } from "@/components/ui/breadcrumb";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Episode, Show, UserEpisode } from "@shared/schema";
@@ -267,14 +268,33 @@ export default function EpisodeDetail() {
     <div className="min-h-screen bg-background">
       <Header />
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Navigation */}
-        <div className="flex items-center space-x-4 mb-6">
-          <Link href={`/show/${show.id}`}>
-            <Button variant="outline" data-testid="button-back-show">
-              <ArrowLeft className="w-4 h-4 mr-2" />
-              Back to {show.name}
-            </Button>
-          </Link>
+        {/* Breadcrumb Navigation */}
+        <div className="mb-6">
+          <Breadcrumb>
+            <BreadcrumbList>
+              <BreadcrumbItem>
+                <BreadcrumbLink asChild>
+                  <Link href="/library" data-testid="breadcrumb-library">
+                    Library
+                  </Link>
+                </BreadcrumbLink>
+              </BreadcrumbItem>
+              <BreadcrumbSeparator />
+              <BreadcrumbItem>
+                <BreadcrumbLink asChild>
+                  <Link href={`/show/${show.id}`} data-testid="breadcrumb-show">
+                    {show.name}
+                  </Link>
+                </BreadcrumbLink>
+              </BreadcrumbItem>
+              <BreadcrumbSeparator />
+              <BreadcrumbItem>
+                <BreadcrumbPage data-testid="breadcrumb-episode">
+                  {getEpisodeTitle()}
+                </BreadcrumbPage>
+              </BreadcrumbItem>
+            </BreadcrumbList>
+          </Breadcrumb>
         </div>
 
         {/* Episode Hero Section */}

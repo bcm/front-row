@@ -5,6 +5,7 @@ import { Link } from "wouter";
 import Header from "@/components/header";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Breadcrumb, BreadcrumbList, BreadcrumbItem, BreadcrumbLink, BreadcrumbPage, BreadcrumbSeparator } from "@/components/ui/breadcrumb";
 import { TVMazeShow } from "@/lib/tvmaze";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -379,14 +380,25 @@ export default function ShowDetail() {
       <Header />
       
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Back Button and Actions */}
+        {/* Breadcrumb Navigation and Actions */}
         <div className="mb-6 flex items-center justify-between">
-          <Link href="/library">
-            <Button variant="outline" size="sm" data-testid="button-back-to-library">
-              <ArrowLeft className="w-4 h-4 mr-2" />
-              Back to Library
-            </Button>
-          </Link>
+          <Breadcrumb>
+            <BreadcrumbList>
+              <BreadcrumbItem>
+                <BreadcrumbLink asChild>
+                  <Link href="/library" data-testid="breadcrumb-library">
+                    Library
+                  </Link>
+                </BreadcrumbLink>
+              </BreadcrumbItem>
+              <BreadcrumbSeparator />
+              <BreadcrumbItem>
+                <BreadcrumbPage data-testid="breadcrumb-show">
+                  {show.name}
+                </BreadcrumbPage>
+              </BreadcrumbItem>
+            </BreadcrumbList>
+          </Breadcrumb>
           
           <Button 
             variant="outline" 
