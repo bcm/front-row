@@ -224,17 +224,12 @@ export default function Dashboard() {
 
           {/* New in Feed Section */}
           <section>
-            <div className="flex items-center justify-between mb-6">
-              <div className="flex items-center space-x-3">
-                <div className="w-6 h-6 bg-yellow-500 rounded-full flex items-center justify-center">
-                  <AlertTriangle className="w-4 h-4 text-white" />
-                </div>
-                <h2 className="text-2xl font-bold" data-testid="text-section-title-new-feed">New in Feed</h2>
-                <span className="bg-yellow-500 text-white px-2 py-1 rounded-full text-xs font-bold" data-testid="text-new-feed-count">
-                  {untriagedEpisodes?.length || 0}
-                </span>
-              </div>
-              <p className="text-muted-foreground text-sm">Episodes that need your attention</p>
+            <div className="flex items-center space-x-3 mb-6">
+              <h2 className="text-2xl font-bold" data-testid="text-section-title-new-feed">New in Feed</h2>
+              <span className="bg-yellow-500 text-white px-2 py-1 rounded-full text-xs font-bold" data-testid="text-new-feed-count">
+                {untriagedEpisodes?.length || 0}
+              </span>
+              <p className="text-muted-foreground text-sm ml-4">Episodes that need your attention</p>
             </div>
             
             <div className="space-y-4">
@@ -299,17 +294,12 @@ export default function Dashboard() {
 
           {/* Next to Watch Section */}
           <section>
-            <div className="flex items-center justify-between mb-6">
-              <div className="flex items-center space-x-3">
-                <div className="w-6 h-6 bg-green-500 rounded-full flex items-center justify-center">
-                  <PlayCircle className="w-4 h-4 text-white" />
-                </div>
-                <h2 className="text-2xl font-bold" data-testid="text-section-title-next">Next to Watch</h2>
-                <span className="bg-green-500 text-white px-2 py-1 rounded-full text-xs font-bold" data-testid="text-next-count">
-                  {nextEpisodes?.length || 0}
-                </span>
-              </div>
-              <p className="text-muted-foreground text-sm">Your priority viewing queue</p>
+            <div className="flex items-center space-x-3 mb-6">
+              <h2 className="text-2xl font-bold" data-testid="text-section-title-next">Next to Watch</h2>
+              <span className="bg-green-500 text-white px-2 py-1 rounded-full text-xs font-bold" data-testid="text-next-count">
+                {nextEpisodes?.length || 0}
+              </span>
+              <p className="text-muted-foreground text-sm ml-4">Your priority viewing queue</p>
             </div>
             
             <div className="space-y-6">
@@ -391,17 +381,12 @@ export default function Dashboard() {
 
           {/* Watch Later Section */}
           <section>
-            <div className="flex items-center justify-between mb-6">
-              <div className="flex items-center space-x-3">
-                <div className="w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center">
-                  <Clock className="w-4 h-4 text-white" />
-                </div>
-                <h2 className="text-2xl font-bold" data-testid="text-section-title-later">Watch Later</h2>
-                <span className="bg-blue-500 text-white px-2 py-1 rounded-full text-xs font-bold" data-testid="text-later-count">
-                  {laterEpisodes?.length || 0}
-                </span>
-              </div>
-              <p className="text-muted-foreground text-sm">Episodes saved for later</p>
+            <div className="flex items-center space-x-3 mb-6">
+              <h2 className="text-2xl font-bold" data-testid="text-section-title-later">Watch Later</h2>
+              <span className="bg-blue-500 text-white px-2 py-1 rounded-full text-xs font-bold" data-testid="text-later-count">
+                {laterEpisodes?.length || 0}
+              </span>
+              <p className="text-muted-foreground text-sm ml-4">Episodes saved for later</p>
             </div>
             
             <div className="space-y-6">
