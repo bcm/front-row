@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { BookOpen, Tv, Loader2, Download, PlayCircle } from "lucide-react";
+import { BookOpen, Tv, Loader2, Download, PlayCircle, RefreshCw } from "lucide-react";
 import { UserShow, Show } from "@shared/schema";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -35,6 +35,34 @@ export default function FollowedShows() {
         throw new Error("Failed to fetch library");
       }
       return response.json() as Promise<LibraryShow[]>;
+    },
+  });
+
+  // Sync individual show mutation
+  const syncShowMutation = useMutation({
+    mutationFn: async (showId: number) => {
+      return apiRequest("POST", `/api/shows/${showId}/sync`, {});
+    },
+    onSuccess: (data: any, showId: number) => {
+      // Invalidate and refetch show data and stats
+      queryClient.invalidateQueries({ queryKey: ["/api/shows", showId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/shows", showId, "stats"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/shows", showId, "episodes"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/shows", showId, "user-episodes"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/user/episodes"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/library"] });
+      
+      toast({
+        title: "Sync Complete",
+        description: data.message || `Show synced successfully. ${data.episodesImported || 0} episodes imported.`,
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Sync Failed",
+        description: error.message || "Failed to sync show data from TVMaze",
+        variant: "destructive",
+      });
     },
   });
 
@@ -251,12 +279,35 @@ export default function FollowedShows() {
                     <p className="text-xs text-muted-foreground mb-2" data-testid={`text-network-${libraryShow.showId}`}>
                       {libraryShow.show.webChannel?.name || libraryShow.show.network?.name || "Unknown Network"}
                     </p>
-                    <div className="flex items-center space-x-2">
-                      {libraryShow.status !== "later" && (
-                        <span className="bg-secondary text-secondary-foreground px-2 py-1 rounded text-xs" data-testid={`text-user-status-${libraryShow.showId}`}>
-                          {libraryShow.status}
-                        </span>
-                      )}
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-2">
+                        {libraryShow.status !== "later" && (
+                          <span className="bg-secondary text-secondary-foreground px-2 py-1 rounded text-xs" data-testid={`text-user-status-${libraryShow.showId}`}>
+                            {libraryShow.status}
+                          </span>
+                        )}
+                      </div>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              syncShowMutation.mutate(libraryShow.showId);
+                            }}
+                            disabled={syncShowMutation.isPending}
+                            className="h-6 w-6 p-0"
+                            data-testid={`button-sync-show-${libraryShow.showId}`}
+                          >
+                            <RefreshCw className={`w-3 h-3 ${syncShowMutation.isPending ? 'animate-spin' : ''}`} />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>Sync from TVMaze</p>
+                        </TooltipContent>
+                      </Tooltip>
                     </div>
                   </div>
                 </div>
