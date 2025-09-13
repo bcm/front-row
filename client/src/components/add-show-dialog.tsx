@@ -31,8 +31,6 @@ export default function AddShowDialog({ open, onOpenChange }: AddShowDialogProps
       return apiRequest("POST", "/api/user/shows", {
         showId,
         status: "new",
-        priority: 0,
-        isShared: false,
       });
     },
     onSuccess: () => {

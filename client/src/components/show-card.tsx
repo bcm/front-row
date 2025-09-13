@@ -13,17 +13,14 @@ interface ShowCardProps {
 export default function ShowCard({ userShow, onStatusChange, variant = "default" }: ShowCardProps) {
   const { show } = userShow;
 
-  const getStatusBadge = (status: string, isShared: boolean) => {
+  const getStatusBadge = (status: string) => {
     if (status === "new") {
       return <Badge className="bg-primary/20 text-primary border border-primary/30">NEW EPISODE</Badge>;
     }
     if (status === "watching") {
       return <Badge className="bg-green-500/20 text-green-400 border border-green-500/30">WATCHING</Badge>;
     }
-    if (isShared) {
-      return <Badge className="bg-blue-500/20 text-blue-400 border border-blue-500/30">SHARED</Badge>;
-    }
-    return <Badge className="bg-purple-500/20 text-purple-400 border border-purple-500/30">SOLO</Badge>;
+    return <Badge className="bg-purple-500/20 text-purple-400 border border-purple-500/30">LATER</Badge>;
   };
 
   const getNetworkInfo = () => {
@@ -63,10 +60,7 @@ export default function ShowCard({ userShow, onStatusChange, variant = "default"
   if (variant === "priority") {
     return (
       <div 
-        className={cn(
-          "show-card bg-card hover:bg-card/80 rounded-lg p-4 transition-all duration-200 cursor-pointer",
-          (userShow.priority ?? 0) > 0 && "border-l-4 border-green-500"
-        )}
+        className="show-card bg-card hover:bg-card/80 rounded-lg p-4 transition-all duration-200 cursor-pointer"
         data-testid={`card-show-${show.id}`}
       >
         <div className="flex space-x-3 mb-4">
@@ -88,51 +82,27 @@ export default function ShowCard({ userShow, onStatusChange, variant = "default"
             <p className="text-sm text-muted-foreground mb-2" data-testid={`text-show-meta-${show.id}`}>
               {getNetworkInfo()} • {show.runtime ? `${show.runtime}min` : "Runtime unknown"}
             </p>
-            {getStatusBadge(userShow.status, userShow.isShared || false)}
+            {getStatusBadge(userShow.status)}
           </div>
         </div>
         <div className="flex space-x-2">
-          {(userShow.priority ?? 0) > 0 ? (
-            <>
-              <Button 
-                size="sm" 
-                className="flex-1 bg-green-500 hover:bg-green-600 text-white text-xs font-semibold uppercase"
-                onClick={() => onStatusChange(show.id, "watching")}
-                data-testid={`button-watch-now-${show.id}`}
-              >
-                Watch Now
-              </Button>
-              <Button 
-                size="sm" 
-                variant="secondary" 
-                className="flex-1 text-xs font-semibold uppercase"
-                onClick={() => onStatusChange(show.id, "later")}
-                data-testid={`button-reschedule-${show.id}`}
-              >
-                Reschedule
-              </Button>
-            </>
-          ) : (
-            <>
-              <Button 
-                size="sm" 
-                className="flex-1 text-xs font-semibold uppercase"
-                onClick={() => onStatusChange(show.id, "watching")}
-                data-testid={`button-move-up-${show.id}`}
-              >
-                Move Up
-              </Button>
-              <Button 
-                size="sm" 
-                variant="secondary" 
-                className="flex-1 text-xs font-semibold uppercase"
-                onClick={() => onStatusChange(show.id, "later")}
-                data-testid={`button-later-${show.id}`}
-              >
-                Later
-              </Button>
-            </>
-          )}
+          <Button 
+            size="sm" 
+            className="flex-1 text-xs font-semibold uppercase"
+            onClick={() => onStatusChange(show.id, "watching")}
+            data-testid={`button-watch-${show.id}`}
+          >
+            Watch
+          </Button>
+          <Button 
+            size="sm" 
+            variant="secondary" 
+            className="flex-1 text-xs font-semibold uppercase"
+            onClick={() => onStatusChange(show.id, "later")}
+            data-testid={`button-later-${show.id}`}
+          >
+            Later
+          </Button>
         </div>
       </div>
     );
@@ -159,7 +129,7 @@ export default function ShowCard({ userShow, onStatusChange, variant = "default"
           <p className="text-sm text-muted-foreground mb-2" data-testid={`text-show-meta-${show.id}`}>
             {getNetworkInfo()} • {show.runtime ? `${show.runtime}min` : "Runtime unknown"}
           </p>
-          {getStatusBadge(userShow.status, userShow.isShared || false)}
+          {getStatusBadge(userShow.status)}
         </div>
       </div>
       <div className="flex space-x-2">

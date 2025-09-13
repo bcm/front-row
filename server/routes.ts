@@ -429,8 +429,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const userShowData = insertUserShowSchema.parse({
             userId,
             showId: show.id,
-            status: "later",
-            priority: 0
+            status: "later"
           });
 
           await storage.addUserShow(userShowData);
