@@ -333,24 +333,29 @@ export default function Dashboard() {
               ) : nextEpisodes && nextEpisodes.length > 0 ? (
                 Object.entries(
                   nextEpisodes.reduce((acc, userEpisode) => {
-                    const seasonKey = `${userEpisode.episode.show.name} Season ${userEpisode.episode.season || 0}`;
-                    if (!acc[seasonKey]) {
-                      acc[seasonKey] = [];
+                    const showName = userEpisode.episode.show.name;
+                    if (!acc[showName]) {
+                      acc[showName] = [];
                     }
-                    acc[seasonKey].push(userEpisode);
+                    acc[showName].push(userEpisode);
                     return acc;
                   }, {} as Record<string, typeof nextEpisodes>)
                 )
                 .sort(([a], [b]) => a.localeCompare(b))
-                .map(([seasonKey, seasonEpisodes]) => (
-                  <div key={seasonKey} className="space-y-3">
+                .map(([showName, showEpisodes]) => (
+                  <div key={showName} className="space-y-3">
                     <h3 className="text-lg font-semibold text-foreground border-b border-border pb-2">
-                      {seasonKey}
+                      {showName}
                     </h3>
                     <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
-                      {seasonEpisodes
+                      {showEpisodes
                         .sort((a, b) => {
-                          // Sort by episode number within the season
+                          // Sort by season number first
+                          const seasonA = a.episode.season || 0;
+                          const seasonB = b.episode.season || 0;
+                          if (seasonA !== seasonB) return seasonA - seasonB;
+                          
+                          // Then by episode number within the season
                           const episodeA = a.episode.number || 0;
                           const episodeB = b.episode.number || 0;
                           return episodeA - episodeB;
