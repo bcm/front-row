@@ -66,7 +66,7 @@ export default function EpisodeCard({ userEpisode, onStatusChange, variant = "de
   if (variant === "wide") {
     return (
       <div className="episode-card bg-card hover:bg-card/80 rounded-lg p-4 transition-all duration-200" data-testid={`card-episode-${episode.id}`}>
-        <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+        <div className="flex flex-col sm:flex-row sm:items-start gap-4">
           {/* Image */}
           <img 
             src={episode.image?.medium || show.image?.medium || "/placeholder-show.jpg"}
@@ -91,7 +91,7 @@ export default function EpisodeCard({ userEpisode, onStatusChange, variant = "de
           </div>
           
           {/* Airdate, Runtime and Actions */}
-          <div className="flex flex-col sm:flex-row sm:items-center gap-4 flex-shrink-0">
+          <div className="flex flex-col sm:flex-row sm:items-start gap-4 flex-shrink-0">
             <div className="space-y-1 text-sm text-muted-foreground">
               <div className="flex items-center space-x-1">
                 <Calendar className="w-4 h-4" />
