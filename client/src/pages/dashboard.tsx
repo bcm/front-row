@@ -307,54 +307,67 @@ export default function Dashboard() {
               <p className="text-muted-foreground text-sm">Your priority viewing queue</p>
             </div>
             
-            <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
+            <div className="space-y-6">
               {nextLoading ? (
-                Array.from({ length: 3 }).map((_, i) => (
-                  <div key={i} className="bg-card rounded-lg p-4 animate-pulse border-l-4 border-green-500">
-                    <div className="flex space-x-3 mb-4">
-                      <div className="w-16 h-12 bg-muted rounded-md"></div>
-                      <div className="flex-1 space-y-2">
-                        <div className="h-4 bg-muted rounded"></div>
-                        <div className="h-3 bg-muted rounded w-3/4"></div>
-                        <div className="h-3 bg-muted rounded w-1/2"></div>
+                <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
+                  {Array.from({ length: 3 }).map((_, i) => (
+                    <div key={i} className="bg-card rounded-lg p-4 animate-pulse border-l-4 border-green-500">
+                      <div className="flex space-x-3 mb-4">
+                        <div className="w-16 h-12 bg-muted rounded-md"></div>
+                        <div className="flex-1 space-y-2">
+                          <div className="h-4 bg-muted rounded"></div>
+                          <div className="h-3 bg-muted rounded w-3/4"></div>
+                          <div className="h-3 bg-muted rounded w-1/2"></div>
+                        </div>
+                      </div>
+                      <div className="flex justify-between">
+                        <div className="h-6 bg-muted rounded w-16"></div>
+                        <div className="flex space-x-1">
+                          <div className="h-8 bg-muted rounded w-20"></div>
+                          <div className="h-8 bg-muted rounded w-16"></div>
+                        </div>
                       </div>
                     </div>
-                    <div className="flex justify-between">
-                      <div className="h-6 bg-muted rounded w-16"></div>
-                      <div className="flex space-x-1">
-                        <div className="h-8 bg-muted rounded w-20"></div>
-                        <div className="h-8 bg-muted rounded w-16"></div>
-                      </div>
+                  ))}
+                </div>
+              ) : nextEpisodes && nextEpisodes.length > 0 ? (
+                Object.entries(
+                  nextEpisodes.reduce((acc, userEpisode) => {
+                    const seasonKey = `${userEpisode.episode.show.name} Season ${userEpisode.episode.season || 0}`;
+                    if (!acc[seasonKey]) {
+                      acc[seasonKey] = [];
+                    }
+                    acc[seasonKey].push(userEpisode);
+                    return acc;
+                  }, {} as Record<string, typeof nextEpisodes>)
+                )
+                .sort(([a], [b]) => a.localeCompare(b))
+                .map(([seasonKey, seasonEpisodes]) => (
+                  <div key={seasonKey} className="space-y-3">
+                    <h3 className="text-lg font-semibold text-foreground border-b border-border pb-2">
+                      {seasonKey}
+                    </h3>
+                    <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
+                      {seasonEpisodes
+                        .sort((a, b) => {
+                          // Sort by episode number within the season
+                          const episodeA = a.episode.number || 0;
+                          const episodeB = b.episode.number || 0;
+                          return episodeA - episodeB;
+                        })
+                        .map((userEpisode) => (
+                          <EpisodeCard
+                            key={userEpisode.id}
+                            userEpisode={userEpisode}
+                            onStatusChange={handleEpisodeStatusChange}
+                            variant="priority"
+                          />
+                        ))}
                     </div>
                   </div>
                 ))
-              ) : nextEpisodes && nextEpisodes.length > 0 ? (
-                nextEpisodes
-                  .sort((a, b) => {
-                    // First sort by show name alphabetically
-                    const showComparison = a.episode.show.name.localeCompare(b.episode.show.name);
-                    if (showComparison !== 0) return showComparison;
-                    
-                    // Then sort by season number
-                    const seasonA = a.episode.season || 0;
-                    const seasonB = b.episode.season || 0;
-                    if (seasonA !== seasonB) return seasonA - seasonB;
-                    
-                    // Finally sort by episode number
-                    const episodeA = a.episode.number || 0;
-                    const episodeB = b.episode.number || 0;
-                    return episodeA - episodeB;
-                  })
-                  .map((userEpisode) => (
-                    <EpisodeCard
-                      key={userEpisode.id}
-                      userEpisode={userEpisode}
-                      onStatusChange={handleEpisodeStatusChange}
-                      variant="priority"
-                    />
-                  ))
               ) : (
-                <div className="col-span-full text-center py-8">
+                <div className="text-center py-8">
                   <PlayCircle className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
                   <h3 className="text-lg font-semibold text-muted-foreground mb-2">No episodes queued</h3>
                   <p className="text-muted-foreground">Mark episodes as "Next" to build your viewing queue</p>

@@ -147,21 +147,19 @@ export default function EpisodeCard({ userEpisode, onStatusChange, variant = "de
           </div>
         </div>
         
-        <div className="space-y-1 text-xs text-muted-foreground mb-1">
-          <div className="flex items-center space-x-1">
-            <Calendar className="w-3 h-3" />
-            <span>{formatAirdate(episode.airdate)}</span>
-          </div>
-          {episode.runtime && (
-            <div className="flex items-center space-x-1">
-              <Clock className="w-3 h-3" />
-              <span>{episode.runtime}m</span>
-            </div>
-          )}
-        </div>
-        
         <div className="flex items-center justify-between">
-          {getStatusBadge(userEpisode.status, variant) && getStatusBadge(userEpisode.status, variant)}
+          <div className="space-y-1 text-xs text-muted-foreground">
+            <div className="flex items-center space-x-1">
+              <Calendar className="w-3 h-3" />
+              <span>{formatAirdate(episode.airdate)}</span>
+            </div>
+            {episode.runtime && (
+              <div className="flex items-center space-x-1">
+                <Clock className="w-3 h-3" />
+                <span>{episode.runtime}m</span>
+              </div>
+            )}
+          </div>
           <div className="flex space-x-1">
             <Button 
               size="sm" 
