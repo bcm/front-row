@@ -294,9 +294,17 @@ export default function ShowDetail() {
           <div className="flex-1 space-y-6">
             {/* Title and Status */}
             <div className="space-y-2">
-              <h1 className="text-4xl font-bold text-foreground" data-testid={`text-show-title-${show.id}`}>
-                {show.name}
-              </h1>
+              <div className="flex items-center justify-between">
+                <h1 className="text-4xl font-bold text-foreground flex-1 min-w-0 mr-4" data-testid={`text-show-title-${show.id}`}>
+                  {show.name}
+                </h1>
+                {show.rating?.average && (
+                  <div className="flex items-center space-x-1 flex-shrink-0" data-testid={`text-show-rating-${show.id}`}>
+                    <Star className="w-5 h-5 text-yellow-500" />
+                    <span className="text-foreground font-medium">{formatRating(show.rating)}</span>
+                  </div>
+                )}
+              </div>
               {show.status && (
                 <Badge className={getStatusColor(show.status)} data-testid={`badge-show-status-${show.id}`}>
                   {show.status}
@@ -306,13 +314,6 @@ export default function ShowDetail() {
 
             {/* Meta Information */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {show.rating?.average && (
-                <div className="flex items-center space-x-2" data-testid={`text-show-rating-${show.id}`}>
-                  <Star className="w-5 h-5 text-yellow-500" />
-                  <span className="text-foreground font-medium">{formatRating(show.rating)}</span>
-                </div>
-              )}
-
               {show.premiered && (
                 <div className="flex items-center space-x-2" data-testid={`text-show-premiered-${show.id}`}>
                   <Calendar className="w-5 h-5 text-muted-foreground" />

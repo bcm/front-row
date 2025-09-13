@@ -223,9 +223,16 @@ export default function FollowedShows() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <Link href={`/show/${libraryShow.showId}`}>
-                      <h3 className="font-semibold text-sm mb-1 truncate hover:text-primary transition-colors cursor-pointer" data-testid={`text-title-${libraryShow.showId}`}>
-                        {libraryShow.show.name}
-                      </h3>
+                      <div className="flex items-center justify-between mb-1">
+                        <h3 className="font-semibold text-sm truncate hover:text-primary transition-colors cursor-pointer flex-1 min-w-0 mr-2" data-testid={`text-title-${libraryShow.showId}`}>
+                          {libraryShow.show.name}
+                        </h3>
+                        {libraryShow.show.rating?.average && (
+                          <span className="text-xs text-muted-foreground flex-shrink-0" data-testid={`text-rating-${libraryShow.showId}`}>
+                            ⭐ {libraryShow.show.rating.average}
+                          </span>
+                        )}
+                      </div>
                     </Link>
                     <p className="text-xs text-muted-foreground mb-2" data-testid={`text-network-${libraryShow.showId}`}>
                       {libraryShow.show.webChannel?.name || libraryShow.show.network?.name || "Unknown Network"}
@@ -239,11 +246,6 @@ export default function FollowedShows() {
                       {libraryShow.show.status && (
                         <span className="bg-accent text-accent-foreground px-2 py-1 rounded text-xs" data-testid={`text-show-status-${libraryShow.showId}`}>
                           {libraryShow.show.status}
-                        </span>
-                      )}
-                      {libraryShow.show.rating?.average && (
-                        <span className="text-xs text-muted-foreground" data-testid={`text-rating-${libraryShow.showId}`}>
-                          ⭐ {libraryShow.show.rating.average}
                         </span>
                       )}
                     </div>
