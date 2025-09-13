@@ -1,5 +1,5 @@
-import { type User, type InsertUser, type Show, type InsertShow, type UserShow, type InsertUserShow, type Episode, type InsertEpisode } from "@shared/schema";
-import { users, shows, userShows, episodes } from "@shared/schema";
+import { type User, type InsertUser, type Show, type InsertShow, type UserShow, type InsertUserShow, type Episode, type InsertEpisode, type UserEpisode, type InsertUserEpisode } from "@shared/schema";
+import { users, shows, userShows, episodes, userEpisodes } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, ilike, inArray, desc, asc } from "drizzle-orm";
 import { randomUUID } from "crypto";
@@ -27,6 +27,12 @@ export interface IStorage {
   getEpisodes(showId: number): Promise<Episode[]>;
   createEpisode(episode: InsertEpisode): Promise<Episode>;
   getLatestEpisodes(showIds: number[]): Promise<Episode[]>;
+  
+  // User episode methods
+  getUserEpisodes(userId: string, status?: string): Promise<(UserEpisode & { episode: Episode & { show: Show } })[]>;
+  addUserEpisode(userEpisode: InsertUserEpisode): Promise<UserEpisode>;
+  updateUserEpisode(userId: string, episodeId: number, updates: Partial<UserEpisode>): Promise<UserEpisode | undefined>;
+  getUserEpisode(userId: string, episodeId: number): Promise<UserEpisode | undefined>;
 }
 
 export class MemStorage implements IStorage {
@@ -229,6 +235,23 @@ export class MemStorage implements IStorage {
     
     return Array.from(latestByShow.values());
   }
+
+  // User episode methods (stub implementations - not used in production)
+  async getUserEpisodes(userId: string, status?: string): Promise<(UserEpisode & { episode: Episode & { show: Show } })[]> {
+    return []; // Stub implementation
+  }
+
+  async getUserEpisode(userId: string, episodeId: number): Promise<UserEpisode | undefined> {
+    return undefined; // Stub implementation
+  }
+
+  async addUserEpisode(userEpisode: InsertUserEpisode): Promise<UserEpisode> {
+    throw new Error("MemStorage user episode methods not implemented");
+  }
+
+  async updateUserEpisode(userId: string, episodeId: number, updates: Partial<UserEpisode>): Promise<UserEpisode | undefined> {
+    throw new Error("MemStorage user episode methods not implemented");
+  }
 }
 
 export class DatabaseStorage implements IStorage {
@@ -417,6 +440,70 @@ export class DatabaseStorage implements IStorage {
     }
     
     return Array.from(latestByShow.values());
+  }
+
+  // User episode methods
+  async getUserEpisodes(userId: string, status?: string): Promise<(UserEpisode & { episode: Episode & { show: Show } })[]> {
+    const whereClause = status 
+      ? and(eq(userEpisodes.userId, userId), eq(userEpisodes.status, status))
+      : eq(userEpisodes.userId, userId);
+
+    const results = await db
+      .select({
+        id: userEpisodes.id,
+        userId: userEpisodes.userId,
+        episodeId: userEpisodes.episodeId,
+        status: userEpisodes.status,
+        watchedAt: userEpisodes.watchedAt,
+        triagedAt: userEpisodes.triagedAt,
+        addedAt: userEpisodes.addedAt,
+        episode: episodes,
+        show: shows
+      })
+      .from(userEpisodes)
+      .innerJoin(episodes, eq(userEpisodes.episodeId, episodes.id))
+      .innerJoin(shows, eq(episodes.showId, shows.id))
+      .where(whereClause)
+      .orderBy(desc(episodes.airdate));
+
+    return results.map(row => ({
+      id: row.id,
+      userId: row.userId,
+      episodeId: row.episodeId,
+      status: row.status,
+      watchedAt: row.watchedAt,
+      triagedAt: row.triagedAt,
+      addedAt: row.addedAt,
+      episode: {
+        ...row.episode,
+        show: row.show
+      }
+    }));
+  }
+
+  async getUserEpisode(userId: string, episodeId: number): Promise<UserEpisode | undefined> {
+    const [userEpisode] = await db
+      .select()
+      .from(userEpisodes)
+      .where(and(eq(userEpisodes.userId, userId), eq(userEpisodes.episodeId, episodeId)));
+    return userEpisode || undefined;
+  }
+
+  async addUserEpisode(userEpisode: InsertUserEpisode): Promise<UserEpisode> {
+    const [newUserEpisode] = await db
+      .insert(userEpisodes)
+      .values([userEpisode])
+      .returning();
+    return newUserEpisode;
+  }
+
+  async updateUserEpisode(userId: string, episodeId: number, updates: Partial<UserEpisode>): Promise<UserEpisode | undefined> {
+    const [updatedUserEpisode] = await db
+      .update(userEpisodes)
+      .set(updates)
+      .where(and(eq(userEpisodes.userId, userId), eq(userEpisodes.episodeId, episodeId)))
+      .returning();
+    return updatedUserEpisode || undefined;
   }
 }
 

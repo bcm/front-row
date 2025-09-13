@@ -52,6 +52,16 @@ export const episodes = pgTable("episodes", {
   image: jsonb("image").$type<{ medium?: string; original?: string }>(),
 });
 
+export const userEpisodes = pgTable("user_episodes", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull(),
+  episodeId: integer("episode_id").notNull(),
+  status: text("status").notNull(), // 'untriaged', 'later', 'next', 'watched', 'skipped'
+  watchedAt: timestamp("watched_at"),
+  triagedAt: timestamp("triaged_at"),
+  addedAt: timestamp("added_at").defaultNow(),
+});
+
 export const insertUserSchema = createInsertSchema(users).pick({
   username: true,
   password: true,
@@ -69,6 +79,13 @@ export const insertUserShowSchema = createInsertSchema(userShows).omit({
 
 export const insertEpisodeSchema = createInsertSchema(episodes);
 
+export const insertUserEpisodeSchema = createInsertSchema(userEpisodes).omit({
+  id: true,
+  addedAt: true,
+  watchedAt: true,
+  triagedAt: true,
+});
+
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
 export type Show = typeof shows.$inferSelect;
@@ -77,3 +94,5 @@ export type UserShow = typeof userShows.$inferSelect;
 export type InsertUserShow = z.infer<typeof insertUserShowSchema>;
 export type Episode = typeof episodes.$inferSelect;
 export type InsertEpisode = z.infer<typeof insertEpisodeSchema>;
+export type UserEpisode = typeof userEpisodes.$inferSelect;
+export type InsertUserEpisode = z.infer<typeof insertUserEpisodeSchema>;
