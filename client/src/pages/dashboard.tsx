@@ -8,6 +8,7 @@ import FloatingAddButton from "@/components/floating-add-button";
 import AddShowDialog from "@/components/add-show-dialog";
 import { AlertTriangle, PlayCircle, Clock, Eye } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { Link } from "wouter";
 
 export default function Dashboard() {
   const [showAddDialog, setShowAddDialog] = useState(false);
@@ -269,9 +270,11 @@ export default function Dashboard() {
                 .sort(([a], [b]) => a.localeCompare(b))
                 .map(([showName, showEpisodes]) => (
                   <div key={showName} className="space-y-3">
-                    <h3 className="text-lg font-semibold text-foreground border-b border-border pb-2">
-                      {showName}
-                    </h3>
+                    <Link href={`/show/${showEpisodes[0].episode.show.id}`}>
+                      <h3 className="text-lg font-semibold text-foreground border-b border-border pb-2 hover:text-primary transition-colors cursor-pointer">
+                        {showName}
+                      </h3>
+                    </Link>
                     <div className="space-y-4">
                       {showEpisodes
                         .sort((a, b) => {
@@ -356,9 +359,11 @@ export default function Dashboard() {
                 .sort(([a], [b]) => a.localeCompare(b))
                 .map(([showName, showEpisodes]) => (
                   <div key={showName} className="space-y-3">
-                    <h3 className="text-lg font-semibold text-foreground border-b border-border pb-2">
-                      {showName}
-                    </h3>
+                    <Link href={`/show/${showEpisodes[0].episode.show.id}`}>
+                      <h3 className="text-lg font-semibold text-foreground border-b border-border pb-2 hover:text-primary transition-colors cursor-pointer">
+                        {showName}
+                      </h3>
+                    </Link>
                     <div className="space-y-4">
                       {showEpisodes
                         .sort((a, b) => {
