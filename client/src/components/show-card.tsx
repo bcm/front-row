@@ -2,6 +2,7 @@ import { UserShow, Show } from "@shared/schema";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import { Link } from "wouter";
 
 interface ShowCardProps {
   userShow: UserShow & { show: Show };
@@ -44,9 +45,11 @@ export default function ShowCard({ userShow, onStatusChange, variant = "default"
             target.src = "https://via.placeholder.com/120x180/374151/9ca3af?text=" + encodeURIComponent(show.name);
           }}
         />
-        <h3 className="font-medium text-sm truncate text-foreground" data-testid={`text-show-title-${show.id}`}>
-          {show.name}
-        </h3>
+        <Link href={`/show/${show.id}`}>
+          <h3 className="font-medium text-sm truncate text-foreground hover:text-primary transition-colors" data-testid={`text-show-title-${show.id}`}>
+            {show.name}
+          </h3>
+        </Link>
         <p className="text-xs text-muted-foreground" data-testid={`text-show-network-${show.id}`}>
           {getNetworkInfo()}
         </p>
@@ -74,9 +77,11 @@ export default function ShowCard({ userShow, onStatusChange, variant = "default"
             }}
           />
           <div className="flex-1 min-w-0">
-            <h3 className="font-semibold text-foreground truncate" data-testid={`text-show-title-${show.id}`}>
-              {show.name}
-            </h3>
+            <Link href={`/show/${show.id}`}>
+              <h3 className="font-semibold text-foreground truncate hover:text-primary transition-colors" data-testid={`text-show-title-${show.id}`}>
+                {show.name}
+              </h3>
+            </Link>
             <p className="text-sm text-muted-foreground mb-2" data-testid={`text-show-meta-${show.id}`}>
               {getNetworkInfo()} • {show.runtime ? `${show.runtime}min` : "Runtime unknown"}
             </p>
@@ -143,9 +148,11 @@ export default function ShowCard({ userShow, onStatusChange, variant = "default"
           }}
         />
         <div className="flex-1 min-w-0">
-          <h3 className="font-semibold text-foreground truncate" data-testid={`text-show-title-${show.id}`}>
-            {show.name}
-          </h3>
+          <Link href={`/show/${show.id}`}>
+            <h3 className="font-semibold text-foreground truncate hover:text-primary transition-colors" data-testid={`text-show-title-${show.id}`}>
+              {show.name}
+            </h3>
+          </Link>
           <p className="text-sm text-muted-foreground mb-2" data-testid={`text-show-meta-${show.id}`}>
             {getNetworkInfo()} • {show.runtime ? `${show.runtime}min` : "Runtime unknown"}
           </p>

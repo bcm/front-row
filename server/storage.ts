@@ -121,9 +121,9 @@ export class DatabaseStorage implements IStorage {
         image: tvmazeShow.image as { medium?: string; original?: string } | null,
         network: tvmazeShow.network as { name?: string; country?: { name?: string } } | null,
         webChannel: tvmazeShow.webChannel ? {
-          name: tvmazeShow.webChannel.name,
-          country: tvmazeShow.webChannel.country,
-          officialSite: tvmazeShow.webChannel.officialSite
+          name: tvmazeShow.webChannel.name as string | undefined,
+          country: tvmazeShow.webChannel.country as { name?: string } | undefined,
+          officialSite: tvmazeShow.webChannel.officialSite as string | undefined
         } : null,
         genres: tvmazeShow.genres || [],
         status: tvmazeShow.status,

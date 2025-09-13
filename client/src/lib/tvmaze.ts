@@ -6,7 +6,9 @@ export interface TVMazeShow {
   genres?: string[];
   status?: string;
   runtime?: number;
+  averageRuntime?: number;
   premiered?: string;
+  ended?: string;
   officialSite?: string;
   rating?: {
     average?: number;
@@ -19,6 +21,20 @@ export interface TVMazeShow {
       code?: string;
       timezone?: string;
     };
+  };
+  webChannel?: {
+    id?: number;
+    name?: string;
+    country?: {
+      name?: string;
+      code?: string;
+      timezone?: string;
+    };
+    officialSite?: string;
+  };
+  schedule?: {
+    time?: string;
+    days?: string[];
   };
   image?: {
     medium?: string;

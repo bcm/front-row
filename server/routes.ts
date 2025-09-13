@@ -113,7 +113,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const episodes = await response.json();
       const totalEpisodes = episodes.length;
-      const seasons = [...new Set(episodes.map((ep: any) => ep.season))].filter(Boolean).length;
+      const seasons = Array.from(new Set(episodes.map((ep: any) => ep.season))).filter(Boolean).length;
       
       res.json({
         totalEpisodes,
