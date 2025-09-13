@@ -228,7 +228,7 @@ export default function FollowedShows() {
                       </h3>
                     </Link>
                     <p className="text-xs text-muted-foreground mb-2" data-testid={`text-network-${libraryShow.showId}`}>
-                      {libraryShow.show.network?.name || "Unknown Network"}
+                      {libraryShow.show.webChannel?.name || libraryShow.show.network?.name || "Unknown Network"}
                     </p>
                     <div className="flex items-center space-x-2">
                       <span className="bg-secondary text-secondary-foreground px-2 py-1 rounded text-xs" data-testid={`text-user-status-${libraryShow.showId}`}>

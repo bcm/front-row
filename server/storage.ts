@@ -65,24 +65,29 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createShow(show: InsertShow): Promise<Show> {
-    const showData = {
-      ...show,
-      image: show.image as { medium?: string; original?: string } | null,
-      network: show.network as { name?: string; country?: { name?: string } } | null,
-      rating: show.rating as { average?: number } | null
-    };
     const [newShow] = await db
       .insert(shows)
-      .values([showData])
+      .values([show])
       .onConflictDoUpdate({
         target: shows.id,
         set: {
-          ...showData,
-          image: showData.image as any,
-          network: showData.network as any,
-          webChannel: showData.webChannel as any,
-          rating: showData.rating as any,
-          schedule: showData.schedule as any
+          name: show.name,
+          summary: show.summary,
+          image: show.image as any,
+          network: show.network as any,
+          webChannel: show.webChannel as any,
+          genres: show.genres,
+          status: show.status,
+          premiered: show.premiered,
+          ended: show.ended,
+          rating: show.rating as any,
+          runtime: show.runtime,
+          averageRuntime: show.averageRuntime,
+          schedule: show.schedule as any,
+          officialSite: show.officialSite,
+          language: show.language,
+          type: show.type,
+          updated: show.updated
         }
       })
       .returning();
