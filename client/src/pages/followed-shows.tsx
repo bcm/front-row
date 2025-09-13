@@ -5,6 +5,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Link } from "wouter";
 
 type LibraryShow = UserShow & { show: Show };
 
@@ -221,9 +222,11 @@ export default function FollowedShows() {
                     )}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <h3 className="font-semibold text-sm mb-1 truncate" data-testid={`text-title-${libraryShow.showId}`}>
-                      {libraryShow.show.name}
-                    </h3>
+                    <Link href={`/show/${libraryShow.showId}`}>
+                      <h3 className="font-semibold text-sm mb-1 truncate hover:text-primary transition-colors cursor-pointer" data-testid={`text-title-${libraryShow.showId}`}>
+                        {libraryShow.show.name}
+                      </h3>
+                    </Link>
                     <p className="text-xs text-muted-foreground mb-2" data-testid={`text-network-${libraryShow.showId}`}>
                       {libraryShow.show.network?.name || "Unknown Network"}
                     </p>
