@@ -8,6 +8,7 @@ import FloatingAddButton from "@/components/floating-add-button";
 import AddShowDialog from "@/components/add-show-dialog";
 import { Star, Flame, Clock, Settings, Users, BookOpen } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import FollowedShows from "./followed-shows";
 
 export default function Dashboard() {
   const [activeTab, setActiveTab] = useState("dashboard");
@@ -229,6 +230,9 @@ export default function Dashboard() {
             </section>
           </div>
         );
+
+      case "followed":
+        return <FollowedShows />;
 
       case "library":
         return (

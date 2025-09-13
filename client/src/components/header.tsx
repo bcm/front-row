@@ -21,6 +21,7 @@ export default function Header({ activeTab, onTabChange, onSearch }: HeaderProps
 
   const tabs = [
     { id: "dashboard", label: "Dashboard" },
+    { id: "followed", label: "Followed" },
     { id: "library", label: "Library" },
     { id: "shared", label: "Shared" },
     { id: "settings", label: "Settings" },
