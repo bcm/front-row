@@ -32,7 +32,7 @@ export default function EpisodeCard({ userEpisode, onStatusChange, variant = "de
 
   const formatAirdate = (airdate: string | null) => {
     if (!airdate) return "Unknown";
-    return new Date(airdate).toLocaleDateString();
+    return new Date(airdate).toLocaleDateString('en-US');
   };
 
   const getEpisodeTitle = () => {

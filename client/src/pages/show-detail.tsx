@@ -134,7 +134,10 @@ export default function ShowDetail() {
 
   const getReturnDate = () => {
     if (show.ended) {
-      return `Ended: ${show.ended}`;
+      // Parse and format the end date to US format if it's a valid date
+      const endDate = new Date(show.ended);
+      const formattedDate = isNaN(endDate.getTime()) ? show.ended : endDate.toLocaleDateString('en-US');
+      return `Ended: ${formattedDate}`;
     }
     if (show.status === 'Running') {
       return 'Currently airing';
@@ -205,7 +208,9 @@ export default function ShowDetail() {
               {show.premiered && (
                 <div className="flex items-center space-x-2" data-testid={`text-show-premiered-${show.id}`}>
                   <Calendar className="w-5 h-5 text-muted-foreground" />
-                  <span className="text-foreground">Premiered: {show.premiered}</span>
+                  <span className="text-foreground">
+                    Premiered: {new Date(show.premiered).toLocaleDateString('en-US')}
+                  </span>
                 </div>
               )}
 
