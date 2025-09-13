@@ -136,7 +136,24 @@ export default function ShowDetail() {
   });
 
   const handleEpisodeStatusToggle = (episodeId: number, currentStatus: string) => {
-    const newStatus = currentStatus === "watched" ? "untriaged" : "watched";
+    let newStatus: string;
+    
+    switch (currentStatus) {
+      case "watched":
+        newStatus = "untriaged";
+        break;
+      case "later":
+        newStatus = "next";
+        break;
+      case "next":
+        newStatus = "watched";
+        break;
+      case "untriaged":
+      default:
+        newStatus = "watched";
+        break;
+    }
+    
     updateEpisodeMutation.mutate({ episodeId, status: newStatus });
   };
 
@@ -307,9 +324,25 @@ export default function ShowDetail() {
       case "skipped":
         return <Badge className="bg-gray-500/20 text-gray-400 border border-gray-500/30 text-xs">SKIPPED</Badge>;
       case "next":
-        return <Badge className="bg-blue-500/20 text-blue-400 border border-blue-500/30 text-xs">NEXT</Badge>;
+        return (
+          <Badge 
+            className="bg-blue-500/20 text-blue-400 border border-blue-500/30 text-xs cursor-pointer hover:bg-green-500/20 hover:text-green-400 hover:border-green-500/30 transition-colors"
+            onClick={() => handleEpisodeStatusToggle(episodeId, status)}
+            data-testid={`badge-episode-status-${episodeId}`}
+          >
+            NEXT
+          </Badge>
+        );
       case "later":
-        return <Badge className="bg-yellow-500/20 text-yellow-400 border border-yellow-500/30 text-xs">LATER</Badge>;
+        return (
+          <Badge 
+            className="bg-yellow-500/20 text-yellow-400 border border-yellow-500/30 text-xs cursor-pointer hover:bg-blue-500/20 hover:text-blue-400 hover:border-blue-500/30 transition-colors"
+            onClick={() => handleEpisodeStatusToggle(episodeId, status)}
+            data-testid={`badge-episode-status-${episodeId}`}
+          >
+            LATER
+          </Badge>
+        );
       case "untriaged":
         return (
           <Badge 
