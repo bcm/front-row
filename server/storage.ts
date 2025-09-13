@@ -76,7 +76,14 @@ export class DatabaseStorage implements IStorage {
       .values([showData])
       .onConflictDoUpdate({
         target: shows.id,
-        set: showData
+        set: {
+          ...showData,
+          image: showData.image as any,
+          network: showData.network as any,
+          webChannel: showData.webChannel as any,
+          rating: showData.rating as any,
+          schedule: showData.schedule as any
+        }
       })
       .returning();
     return newShow;

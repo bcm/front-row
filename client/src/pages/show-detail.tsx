@@ -99,13 +99,37 @@ export default function ShowDetail() {
     return 'Unknown Network';
   };
 
-  const getScheduleInfo = () => {
-    if (!show.schedule || !show.schedule.days || show.schedule.days.length === 0) {
+  const getScheduleAndRuntime = () => {
+    const hasSchedule = show.schedule && show.schedule.days && show.schedule.days.length > 0;
+    const hasRuntime = show.averageRuntime || show.runtime;
+    
+    if (!hasSchedule && !hasRuntime) {
       return 'Schedule not available';
     }
-    const days = show.schedule.days.join(', ');
-    const time = show.schedule.time || 'Time not specified';
-    return `${days} at ${time}`;
+    
+    let result = '';
+    
+    if (hasSchedule) {
+      const days = show.schedule.days.join(', ');
+      const time = show.schedule.time;
+      
+      if (time) {
+        result = `${days} at ${time}`;
+      } else {
+        result = days;
+      }
+    }
+    
+    if (hasRuntime) {
+      const runtime = show.averageRuntime || show.runtime;
+      if (result) {
+        result += ` (~${runtime} min)`;
+      } else {
+        result = `~${runtime} min`;
+      }
+    }
+    
+    return result || 'Schedule not available';
   };
 
   const getReturnDate = () => {
@@ -190,15 +214,6 @@ export default function ShowDetail() {
                 <span className="text-foreground">{getReturnDate()}</span>
               </div>
 
-              {(show.runtime || show.averageRuntime) && (
-                <div className="flex items-center space-x-2" data-testid={`text-show-runtime-${show.id}`}>
-                  <Clock className="w-5 h-5 text-muted-foreground" />
-                  <span className="text-foreground">
-                    {show.averageRuntime ? `${show.averageRuntime} min avg` : `${show.runtime} min`}
-                  </span>
-                </div>
-              )}
-
               <div className="flex items-center space-x-2" data-testid={`text-show-network-${show.id}`}>
                 {show.webChannel ? (
                   <Monitor className="w-5 h-5 text-muted-foreground" />
@@ -210,7 +225,7 @@ export default function ShowDetail() {
 
               <div className="flex items-center space-x-2" data-testid={`text-show-schedule-${show.id}`}>
                 <Clock className="w-5 h-5 text-muted-foreground" />
-                <span className="text-foreground">{getScheduleInfo()}</span>
+                <span className="text-foreground">{getScheduleAndRuntime()}</span>
               </div>
 
               {show.type && (
