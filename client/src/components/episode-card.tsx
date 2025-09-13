@@ -14,7 +14,12 @@ export default function EpisodeCard({ userEpisode, onStatusChange, variant = "de
   const { episode } = userEpisode;
   const { show } = episode;
 
-  const getStatusBadge = (status: string) => {
+  const getStatusBadge = (status: string, variant?: string) => {
+    // Don't show "next" badge for priority variant
+    if (variant === "priority" && status === "next") {
+      return null;
+    }
+    
     switch (status) {
       case "untriaged":
         return null; // Don't show badge for untriaged episodes
@@ -96,7 +101,7 @@ export default function EpisodeCard({ userEpisode, onStatusChange, variant = "de
           )}
         </div>
         
-        {getStatusBadge(userEpisode.status) && getStatusBadge(userEpisode.status)}
+        {getStatusBadge(userEpisode.status, variant) && getStatusBadge(userEpisode.status, variant)}
       </div>
     );
   }
@@ -137,7 +142,7 @@ export default function EpisodeCard({ userEpisode, onStatusChange, variant = "de
           </div>
         </div>
         
-        <div className="space-y-1 text-xs text-muted-foreground mb-2">
+        <div className="space-y-1 text-xs text-muted-foreground mb-1">
           <div className="flex items-center space-x-1">
             <Calendar className="w-3 h-3" />
             <span>{formatAirdate(episode.airdate)}</span>
@@ -151,7 +156,7 @@ export default function EpisodeCard({ userEpisode, onStatusChange, variant = "de
         </div>
         
         <div className="flex items-center justify-between">
-          {getStatusBadge(userEpisode.status) && getStatusBadge(userEpisode.status)}
+          {getStatusBadge(userEpisode.status, variant) && getStatusBadge(userEpisode.status, variant)}
           <div className="flex space-x-1">
             <Button 
               size="sm" 
@@ -222,7 +227,7 @@ export default function EpisodeCard({ userEpisode, onStatusChange, variant = "de
       </div>
       
       <div className="flex items-center justify-between">
-        <div>{getStatusBadge(userEpisode.status)}</div>
+        <div>{getStatusBadge(userEpisode.status, variant)}</div>
         <div className="flex space-x-2">
           <Button 
             size="sm" 

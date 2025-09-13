@@ -329,14 +329,30 @@ export default function Dashboard() {
                   </div>
                 ))
               ) : nextEpisodes && nextEpisodes.length > 0 ? (
-                nextEpisodes.map((userEpisode) => (
-                  <EpisodeCard
-                    key={userEpisode.id}
-                    userEpisode={userEpisode}
-                    onStatusChange={handleEpisodeStatusChange}
-                    variant="priority"
-                  />
-                ))
+                nextEpisodes
+                  .sort((a, b) => {
+                    // First sort by show name alphabetically
+                    const showComparison = a.episode.show.name.localeCompare(b.episode.show.name);
+                    if (showComparison !== 0) return showComparison;
+                    
+                    // Then sort by season number
+                    const seasonA = a.episode.season || 0;
+                    const seasonB = b.episode.season || 0;
+                    if (seasonA !== seasonB) return seasonA - seasonB;
+                    
+                    // Finally sort by episode number
+                    const episodeA = a.episode.number || 0;
+                    const episodeB = b.episode.number || 0;
+                    return episodeA - episodeB;
+                  })
+                  .map((userEpisode) => (
+                    <EpisodeCard
+                      key={userEpisode.id}
+                      userEpisode={userEpisode}
+                      onStatusChange={handleEpisodeStatusChange}
+                      variant="priority"
+                    />
+                  ))
               ) : (
                 <div className="col-span-full text-center py-8">
                   <PlayCircle className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
