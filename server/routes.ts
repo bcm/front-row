@@ -62,6 +62,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // TVMaze User API routes
+  app.get("/api/tvmaze/followed-shows", async (req, res) => {
+    try {
+      const apiKey = process.env.TVMAZE_API_KEY;
+      const username = process.env.TVMAZE_USERNAME;
+      
+      if (!apiKey || !username) {
+        return res.status(500).json({ error: "TVMaze API credentials not configured" });
+      }
+
+      // Create Basic Auth header
+      const credentials = Buffer.from(`${username}:${apiKey}`).toString('base64');
+      
+      const response = await fetch(`https://api.tvmaze.com/user/follows/shows?embed=show`, {
+        headers: {
+          'Authorization': `Basic ${credentials}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (!response.ok) {
+        if (response.status === 401) {
+          return res.status(401).json({ error: "Invalid TVMaze API credentials" });
+        }
+        throw new Error(`TVMaze User API error: ${response.status}`);
+      }
+
+      const followedShows = await response.json();
+      res.json(followedShows);
+    } catch (error) {
+      console.error("Error fetching followed shows:", error);
+      res.status(500).json({ error: "Failed to fetch followed shows" });
+    }
+  });
+
   // User show management routes
   app.get("/api/user/shows", async (req, res) => {
     try {
