@@ -1,9 +1,10 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { BookOpen, Tv, Loader2, Download } from "lucide-react";
+import { BookOpen, Tv, Loader2, Download, PlayCircle } from "lucide-react";
 import { UserShow, Show } from "@shared/schema";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 type LibraryShow = UserShow & { show: Show };
 
@@ -42,6 +43,69 @@ export default function FollowedShows() {
     },
   });
 
+  // Episode import mutation
+  const importEpisodesMutation = useMutation({
+    mutationFn: async () => {
+      return apiRequest("POST", "/api/episodes/import", {});
+    },
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/user/episodes"] });
+      toast({
+        title: "Episodes imported",
+        description: `Successfully imported ${data.imported} episodes (${data.skipped} skipped)`,
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Import failed",
+        description: error.message || "Failed to import episodes",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Sync scrobbles mutation
+  const syncScrobblesMutation = useMutation({
+    mutationFn: async () => {
+      return apiRequest("POST", "/api/episodes/sync-scrobbles", {});
+    },
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/user/episodes"] });
+      toast({
+        title: "Scrobble sync completed",
+        description: `${data.updated} episodes updated from TVMaze scrobbles`,
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Sync failed",
+        description: error.message || "Failed to sync TVMaze scrobbles",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleImportEpisodes = () => {
+    importEpisodesMutation.mutate();
+  };
+
+  const handleSyncScrobbles = () => {
+    syncScrobblesMutation.mutate();
+  };
+
+  const ButtonWithTooltip = ({ children, tooltip, ...props }: { children: React.ReactNode; tooltip: string; [key: string]: any }) => (
+    <Tooltip delayDuration={0}>
+      <TooltipTrigger asChild>
+        <Button {...props}>
+          {children}
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent className="hidden lg:block">
+        <p>{tooltip}</p>
+      </TooltipContent>
+    </Tooltip>
+  );
+
   return (
     <div className="space-y-8">
       {/* Header Section */}
@@ -60,20 +124,44 @@ export default function FollowedShows() {
           </div>
           <div className="flex items-center space-x-4">
             <p className="text-muted-foreground text-sm">Your complete TV show collection</p>
-            <Button 
-              onClick={() => importMutation.mutate()}
-              disabled={importMutation.isPending}
-              size="sm"
-              variant="outline"
-              data-testid="button-import-shows"
-            >
-              {importMutation.isPending ? (
-                <Loader2 className="w-4 h-4 animate-spin mr-2" />
-              ) : (
-                <Download className="w-4 h-4 mr-2" />
-              )}
-              Import from TVMaze
-            </Button>
+            <div className="flex space-x-2">
+              <ButtonWithTooltip 
+                onClick={() => importMutation.mutate()}
+                disabled={importMutation.isPending}
+                size="sm"
+                variant="outline"
+                data-testid="button-import-shows"
+                tooltip="Import from TVMaze"
+              >
+                {importMutation.isPending ? (
+                  <Loader2 className="w-4 h-4 lg:mr-0 mr-2 animate-spin" />
+                ) : (
+                  <Download className="w-4 h-4 lg:mr-0 mr-2" />
+                )}
+                <span className="lg:hidden">Import from TVMaze</span>
+              </ButtonWithTooltip>
+              <ButtonWithTooltip 
+                onClick={handleImportEpisodes}
+                disabled={importEpisodesMutation.isPending}
+                size="sm"
+                data-testid="button-import-episodes"
+                tooltip="Import Episodes"
+              >
+                <Download className="w-4 h-4 lg:mr-0 mr-2" />
+                <span className="lg:hidden">{importEpisodesMutation.isPending ? "Importing..." : "Import Episodes"}</span>
+              </ButtonWithTooltip>
+              <ButtonWithTooltip 
+                onClick={handleSyncScrobbles}
+                disabled={syncScrobblesMutation.isPending}
+                size="sm"
+                variant="outline"
+                data-testid="button-sync-scrobbles"
+                tooltip="Sync Watched"
+              >
+                <PlayCircle className="w-4 h-4 lg:mr-0 mr-2" />
+                <span className="lg:hidden">{syncScrobblesMutation.isPending ? "Syncing..." : "Sync Watched"}</span>
+              </ButtonWithTooltip>
+            </div>
           </div>
         </div>
 

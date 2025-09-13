@@ -6,8 +6,7 @@ import Header from "@/components/header";
 import EpisodeCard from "@/components/episode-card";
 import FloatingAddButton from "@/components/floating-add-button";
 import AddShowDialog from "@/components/add-show-dialog";
-import { Button } from "@/components/ui/button";
-import { AlertTriangle, PlayCircle, Clock, Eye, Download } from "lucide-react";
+import { AlertTriangle, PlayCircle, Clock, Eye } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 export default function Dashboard() {
@@ -52,26 +51,6 @@ export default function Dashboard() {
     },
   });
 
-  // Episode import mutation
-  const importEpisodesMutation = useMutation({
-    mutationFn: async () => {
-      return apiRequest("POST", "/api/episodes/import", {});
-    },
-    onSuccess: (data: any) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/user/episodes"] });
-      toast({
-        title: "Episodes imported",
-        description: `Successfully imported ${data.imported} episodes (${data.skipped} skipped)`,
-      });
-    },
-    onError: (error: any) => {
-      toast({
-        title: "Import failed",
-        description: error.message || "Failed to import episodes",
-        variant: "destructive",
-      });
-    },
-  });
 
   // Episode update mutation with optimistic updates
   const updateEpisodeMutation = useMutation({
@@ -162,34 +141,6 @@ export default function Dashboard() {
     updateEpisodeMutation.mutate({ episodeId, status });
   };
 
-  const handleImportEpisodes = () => {
-    importEpisodesMutation.mutate();
-  };
-
-  // Sync scrobbles mutation
-  const syncScrobblesMutation = useMutation({
-    mutationFn: async () => {
-      return apiRequest("POST", "/api/episodes/sync-scrobbles", {});
-    },
-    onSuccess: (data: any) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/user/episodes"] });
-      toast({
-        title: "Scrobble sync completed",
-        description: `${data.updated} episodes updated from TVMaze scrobbles`,
-      });
-    },
-    onError: (error: any) => {
-      toast({
-        title: "Sync failed",
-        description: error.message || "Failed to sync TVMaze scrobbles",
-        variant: "destructive",
-      });
-    },
-  });
-
-  const handleSyncScrobbles = () => {
-    syncScrobblesMutation.mutate();
-  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -197,30 +148,6 @@ export default function Dashboard() {
       
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="space-y-8">
-          {/* Import Episodes Button */}
-          <div className="flex justify-between items-center">
-            <div>
-            </div>
-            <div className="flex space-x-2">
-              <Button 
-                onClick={handleImportEpisodes}
-                disabled={importEpisodesMutation.isPending}
-                data-testid="button-import-episodes"
-              >
-                <Download className="w-4 h-4 mr-2" />
-                {importEpisodesMutation.isPending ? "Importing..." : "Import Episodes"}
-              </Button>
-              <Button 
-                onClick={handleSyncScrobbles}
-                disabled={syncScrobblesMutation.isPending}
-                variant="outline"
-                data-testid="button-sync-scrobbles"
-              >
-                <PlayCircle className="w-4 h-4 mr-2" />
-                {syncScrobblesMutation.isPending ? "Syncing..." : "Sync Watched"}
-              </Button>
-            </div>
-          </div>
 
           {/* New in Feed Section */}
           <section>
