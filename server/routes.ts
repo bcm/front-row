@@ -468,11 +468,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // User show management routes
   app.get("/api/user/shows", async (req, res) => {
     try {
-      const { status } = req.query;
       // For demo purposes, using a mock user ID
       const userId = "demo-user";
       
-      const shows = await storage.getUserShows(userId, status as string);
+      const shows = await storage.getUserShows(userId);
       res.json(shows);
     } catch (error) {
       console.error("Error fetching user shows:", error);
