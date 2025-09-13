@@ -405,6 +405,37 @@ export class DatabaseStorage implements IStorage {
     }));
   }
 
+  async getUserEpisodesForShow(userId: string, showId: number): Promise<(UserEpisode & { episode: Episode })[]> {
+    const results = await db
+      .select({
+        id: userEpisodes.id,
+        userId: userEpisodes.userId,
+        episodeId: userEpisodes.episodeId,
+        status: userEpisodes.status,
+        watchedAt: userEpisodes.watchedAt,
+        triagedAt: userEpisodes.triagedAt,
+        addedAt: userEpisodes.addedAt,
+        episode: episodes
+      })
+      .from(userEpisodes)
+      .innerJoin(episodes, eq(userEpisodes.episodeId, episodes.id))
+      .where(and(
+        eq(userEpisodes.userId, userId),
+        eq(episodes.showId, showId)
+      ));
+
+    return results.map(row => ({
+      id: row.id,
+      userId: row.userId,
+      episodeId: row.episodeId,
+      status: row.status,
+      watchedAt: row.watchedAt,
+      triagedAt: row.triagedAt,
+      addedAt: row.addedAt,
+      episode: row.episode
+    }));
+  }
+
   async getUserEpisode(userId: string, episodeId: number): Promise<UserEpisode | undefined> {
     const [userEpisode] = await db
       .select()

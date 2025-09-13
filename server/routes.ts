@@ -153,6 +153,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get user episode statuses for a specific show
+  app.get("/api/shows/:id/user-episodes", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const showId = parseInt(id);
+      const userId = "demo-user"; // Mock user ID
+      
+      const userEpisodes = await storage.getUserEpisodesForShow(userId, showId);
+      
+      // Convert to a map for easy lookup by episode ID
+      const episodeStatusMap = userEpisodes.reduce((acc, userEpisode) => {
+        acc[userEpisode.episodeId] = {
+          status: userEpisode.status,
+          watchedAt: userEpisode.watchedAt,
+          triagedAt: userEpisode.triagedAt,
+          addedAt: userEpisode.addedAt
+        };
+        return acc;
+      }, {} as Record<number, any>);
+      
+      res.json(episodeStatusMap);
+    } catch (error) {
+      console.error("Error fetching user episodes for show:", error);
+      res.status(500).json({ error: "Failed to fetch user episodes for show" });
+    }
+  });
+
   // Get episode count and stats for a show
   app.get("/api/shows/:id/stats", async (req, res) => {
     try {

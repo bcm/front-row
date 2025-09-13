@@ -49,6 +49,18 @@ export default function ShowDetail() {
     enabled: !!id,
   });
 
+  const { data: userEpisodeStatuses } = useQuery({
+    queryKey: ['/api/shows', id, 'user-episodes'],
+    queryFn: async () => {
+      const response = await fetch(`/api/shows/${id}/user-episodes`);
+      if (!response.ok) {
+        throw new Error('Failed to fetch user episodes');
+      }
+      return response.json();
+    },
+    enabled: !!id,
+  });
+
   const syncMutation = useMutation({
     mutationFn: async () => {
       return apiRequest("POST", `/api/shows/${id}/sync`, {});
@@ -58,6 +70,7 @@ export default function ShowDetail() {
       queryClient.invalidateQueries({ queryKey: ['/api/shows', id] });
       queryClient.invalidateQueries({ queryKey: ['/api/shows', id, 'stats'] });
       queryClient.invalidateQueries({ queryKey: ['/api/shows', id, 'episodes'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/shows', id, 'user-episodes'] });
       queryClient.invalidateQueries({ queryKey: ['/api/user/episodes'] });
       
       toast({
@@ -210,6 +223,29 @@ export default function ShowDetail() {
     });
 
     return grouped;
+  };
+
+  const getEpisodeStatusBadge = (episodeId: number) => {
+    if (!userEpisodeStatuses || !userEpisodeStatuses[episodeId]) {
+      return null; // No status available
+    }
+
+    const status = userEpisodeStatuses[episodeId].status;
+    
+    switch (status) {
+      case "watched":
+        return <Badge className="bg-green-500/20 text-green-400 border border-green-500/30 text-xs">WATCHED</Badge>;
+      case "skipped":
+        return <Badge className="bg-gray-500/20 text-gray-400 border border-gray-500/30 text-xs">SKIPPED</Badge>;
+      case "next":
+        return <Badge className="bg-blue-500/20 text-blue-400 border border-blue-500/30 text-xs">NEXT</Badge>;
+      case "later":
+        return <Badge className="bg-yellow-500/20 text-yellow-400 border border-yellow-500/30 text-xs">LATER</Badge>;
+      case "untriaged":
+        return <Badge className="bg-orange-500/20 text-orange-400 border border-orange-500/30 text-xs">NEW</Badge>;
+      default:
+        return null;
+    }
   };
 
   return (
@@ -432,7 +468,8 @@ export default function ShowDetail() {
                                         </p>
                                       )}
                                     </div>
-                                    <div className="flex flex-col items-end text-sm text-muted-foreground ml-4 flex-shrink-0">
+                                    <div className="flex flex-col items-end text-sm text-muted-foreground ml-4 flex-shrink-0 space-y-1">
+                                      {getEpisodeStatusBadge(episode.id)}
                                       {episode.airdate && (
                                         <span>{new Date(episode.airdate).toLocaleDateString('en-US')}</span>
                                       )}
