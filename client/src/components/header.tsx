@@ -133,11 +133,19 @@ export default function Header({ onSearch }: HeaderProps) {
                           data-testid={`search-result-${result.resultType}-${index}`}
                           className="w-full px-4 py-3 text-left hover:bg-muted flex items-center space-x-3"
                         >
-                          <div className="w-8 h-8 bg-muted rounded flex items-center justify-center">
-                            {result.resultType === 'show' ? (
-                              <Tv className="w-4 h-4 text-muted-foreground" />
+                          <div className="w-8 h-8 bg-muted rounded overflow-hidden flex items-center justify-center">
+                            {result.image?.medium ? (
+                              <img 
+                                src={result.image.medium} 
+                                alt={result.name}
+                                className="w-full h-full object-cover"
+                              />
                             ) : (
-                              <Film className="w-4 h-4 text-muted-foreground" />
+                              result.resultType === 'show' ? (
+                                <Tv className="w-4 h-4 text-muted-foreground" />
+                              ) : (
+                                <Film className="w-4 h-4 text-muted-foreground" />
+                              )
                             )}
                           </div>
                           <div className="flex-1 min-w-0">
@@ -213,11 +221,19 @@ export default function Header({ onSearch }: HeaderProps) {
                         data-testid={`search-result-mobile-${result.resultType}-${index}`}
                         className="w-full px-4 py-3 text-left hover:bg-muted flex items-center space-x-3"
                       >
-                        <div className="w-8 h-8 bg-muted rounded flex items-center justify-center">
-                          {result.resultType === 'show' ? (
-                            <Tv className="w-4 h-4 text-muted-foreground" />
+                        <div className="w-8 h-8 bg-muted rounded overflow-hidden flex items-center justify-center">
+                          {result.image?.medium ? (
+                            <img 
+                              src={result.image.medium} 
+                              alt={result.name}
+                              className="w-full h-full object-cover"
+                            />
                           ) : (
-                            <Film className="w-4 h-4 text-muted-foreground" />
+                            result.resultType === 'show' ? (
+                              <Tv className="w-4 h-4 text-muted-foreground" />
+                            ) : (
+                              <Film className="w-4 h-4 text-muted-foreground" />
+                            )
                           )}
                         </div>
                         <div className="flex-1 min-w-0">
