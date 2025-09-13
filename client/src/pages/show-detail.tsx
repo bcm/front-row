@@ -136,21 +136,24 @@ export default function ShowDetail() {
   });
 
   const handleEpisodeStatusToggle = (episodeId: number, currentStatus: string) => {
+    // Cycle through all possible statuses: untriaged → next → later → watched → untriaged
     let newStatus: string;
     
     switch (currentStatus) {
-      case "watched":
-        newStatus = "untriaged";
-        break;
-      case "later":
+      case "untriaged":
         newStatus = "next";
         break;
       case "next":
+        newStatus = "later";
+        break;
+      case "later":
         newStatus = "watched";
         break;
-      case "untriaged":
+      case "watched":
+        newStatus = "untriaged";
+        break;
       default:
-        newStatus = "watched";
+        newStatus = "next";
         break;
     }
     
@@ -299,7 +302,7 @@ export default function ShowDetail() {
     if (!userEpisodeStatuses || !userEpisodeStatuses[episodeId]) {
       return (
         <Badge 
-          className="bg-muted text-muted-foreground border border-muted-foreground/30 text-xs cursor-pointer hover:bg-green-500/20 hover:text-green-400 hover:border-green-500/30 transition-colors"
+          className="bg-muted text-muted-foreground border border-muted-foreground/30 text-xs cursor-pointer hover:bg-blue-500/20 hover:text-blue-400 hover:border-blue-500/30 transition-colors"
           onClick={() => handleEpisodeStatusToggle(episodeId, "untriaged")}
           data-testid={`badge-episode-status-${episodeId}`}
         >
@@ -326,7 +329,7 @@ export default function ShowDetail() {
       case "next":
         return (
           <Badge 
-            className="bg-blue-500/20 text-blue-400 border border-blue-500/30 text-xs cursor-pointer hover:bg-green-500/20 hover:text-green-400 hover:border-green-500/30 transition-colors"
+            className="bg-blue-500/20 text-blue-400 border border-blue-500/30 text-xs cursor-pointer hover:bg-yellow-500/20 hover:text-yellow-400 hover:border-yellow-500/30 transition-colors"
             onClick={() => handleEpisodeStatusToggle(episodeId, status)}
             data-testid={`badge-episode-status-${episodeId}`}
           >
@@ -336,7 +339,7 @@ export default function ShowDetail() {
       case "later":
         return (
           <Badge 
-            className="bg-yellow-500/20 text-yellow-400 border border-yellow-500/30 text-xs cursor-pointer hover:bg-blue-500/20 hover:text-blue-400 hover:border-blue-500/30 transition-colors"
+            className="bg-yellow-500/20 text-yellow-400 border border-yellow-500/30 text-xs cursor-pointer hover:bg-green-500/20 hover:text-green-400 hover:border-green-500/30 transition-colors"
             onClick={() => handleEpisodeStatusToggle(episodeId, status)}
             data-testid={`badge-episode-status-${episodeId}`}
           >
@@ -346,7 +349,7 @@ export default function ShowDetail() {
       case "untriaged":
         return (
           <Badge 
-            className="bg-orange-500/20 text-orange-400 border border-orange-500/30 text-xs cursor-pointer hover:bg-green-500/20 hover:text-green-400 hover:border-green-500/30 transition-colors"
+            className="bg-orange-500/20 text-orange-400 border border-orange-500/30 text-xs cursor-pointer hover:bg-blue-500/20 hover:text-blue-400 hover:border-blue-500/30 transition-colors"
             onClick={() => handleEpisodeStatusToggle(episodeId, status)}
             data-testid={`badge-episode-status-${episodeId}`}
           >
