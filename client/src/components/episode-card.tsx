@@ -1,6 +1,7 @@
 import { UserEpisode, Episode, Show } from "@shared/schema";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Calendar, Clock, Eye, ArrowRight, MoreHorizontal } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -49,6 +50,19 @@ export default function EpisodeCard({ userEpisode, onStatusChange, variant = "de
     return null;
   };
 
+  const ButtonWithTooltip = ({ children, tooltip, ...props }: { children: React.ReactNode; tooltip: string; [key: string]: any }) => (
+    <Tooltip delayDuration={0}>
+      <TooltipTrigger asChild>
+        <Button {...props}>
+          {children}
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent className="hidden lg:block">
+        <p>{tooltip}</p>
+      </TooltipContent>
+    </Tooltip>
+  );
+
   if (variant === "wide") {
     return (
       <div className="episode-card bg-card hover:bg-card/80 rounded-lg p-4 transition-all duration-200" data-testid={`card-episode-${episode.id}`}>
@@ -94,34 +108,38 @@ export default function EpisodeCard({ userEpisode, onStatusChange, variant = "de
             <div className="flex flex-wrap gap-2">
               {getStatusBadge(userEpisode.status, variant) && getStatusBadge(userEpisode.status, variant)}
               {userEpisode.status !== "next" && (
-                <Button 
+                <ButtonWithTooltip 
                   size="sm" 
                   onClick={() => onStatusChange(episode.id, "next")}
                   data-testid={`button-next-${episode.id}`}
+                  tooltip="Watch Next"
                 >
-                  <ArrowRight className="w-4 h-4 mr-1" />
-                  Watch Next
-                </Button>
+                  <ArrowRight className="w-4 h-4 lg:mr-0 mr-1" />
+                  <span className="lg:hidden">Watch Next</span>
+                </ButtonWithTooltip>
               )}
               {userEpisode.status !== "later" && (
-                <Button 
+                <ButtonWithTooltip 
                   size="sm" 
                   variant="outline"
                   onClick={() => onStatusChange(episode.id, "later")}
                   data-testid={`button-later-${episode.id}`}
+                  tooltip="Later"
                 >
-                  Later
-                </Button>
+                  <MoreHorizontal className="w-4 h-4 lg:mr-0 mr-1 lg:block hidden" />
+                  <span className="lg:hidden">Later</span>
+                </ButtonWithTooltip>
               )}
-              <Button 
+              <ButtonWithTooltip 
                 size="sm" 
                 variant="outline"
                 onClick={() => onStatusChange(episode.id, "watched")}
                 data-testid={`button-watched-${episode.id}`}
+                tooltip="Watched"
               >
-                <Eye className="w-4 h-4 mr-1" />
-                Watched
-              </Button>
+                <Eye className="w-4 h-4 lg:mr-0 mr-1" />
+                <span className="lg:hidden">Watched</span>
+              </ButtonWithTooltip>
             </div>
           </div>
         </div>
@@ -214,22 +232,25 @@ export default function EpisodeCard({ userEpisode, onStatusChange, variant = "de
             )}
           </div>
           <div className="flex space-x-1">
-            <Button 
+            <ButtonWithTooltip 
               size="sm" 
               onClick={() => onStatusChange(episode.id, "watched")}
               data-testid={`button-watched-${episode.id}`}
+              tooltip="Watched"
             >
-              <Eye className="w-3 h-3 mr-1" />
-              Watched
-            </Button>
-            <Button 
+              <Eye className="w-3 h-3 lg:mr-0 mr-1" />
+              <span className="lg:hidden">Watched</span>
+            </ButtonWithTooltip>
+            <ButtonWithTooltip 
               size="sm" 
               variant="outline"
               onClick={() => onStatusChange(episode.id, "later")}
               data-testid={`button-later-${episode.id}`}
+              tooltip="Later"
             >
-              Later
-            </Button>
+              <MoreHorizontal className="w-3 h-3 lg:mr-0 mr-1 lg:block hidden" />
+              <span className="lg:hidden">Later</span>
+            </ButtonWithTooltip>
           </div>
         </div>
       </div>
@@ -277,31 +298,35 @@ export default function EpisodeCard({ userEpisode, onStatusChange, variant = "de
       <div className="flex items-center justify-between">
         <div>{getStatusBadge(userEpisode.status, variant)}</div>
         <div className="flex space-x-2">
-          <Button 
+          <ButtonWithTooltip 
             size="sm" 
             onClick={() => onStatusChange(episode.id, "next")}
             data-testid={`button-next-${episode.id}`}
+            tooltip="Watch Next"
           >
-            <ArrowRight className="w-4 h-4 mr-1" />
-            Watch Next
-          </Button>
-          <Button 
+            <ArrowRight className="w-4 h-4 lg:mr-0 mr-1" />
+            <span className="lg:hidden">Watch Next</span>
+          </ButtonWithTooltip>
+          <ButtonWithTooltip 
             size="sm" 
             variant="outline"
             onClick={() => onStatusChange(episode.id, "later")}
             data-testid={`button-later-${episode.id}`}
+            tooltip="Later"
           >
-            Later
-          </Button>
-          <Button 
+            <MoreHorizontal className="w-4 h-4 lg:mr-0 mr-1 lg:block hidden" />
+            <span className="lg:hidden">Later</span>
+          </ButtonWithTooltip>
+          <ButtonWithTooltip 
             size="sm" 
             variant="outline"
             onClick={() => onStatusChange(episode.id, "watched")}
             data-testid={`button-watched-${episode.id}`}
+            tooltip="Watched"
           >
-            <Eye className="w-4 h-4 mr-1" />
-            Watched
-          </Button>
+            <Eye className="w-4 h-4 lg:mr-0 mr-1" />
+            <span className="lg:hidden">Watched</span>
+          </ButtonWithTooltip>
         </div>
       </div>
     </div>
