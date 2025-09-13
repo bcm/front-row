@@ -83,7 +83,7 @@ export default function EpisodeCard({ userEpisode, onStatusChange, variant = "de
           </div>
         </div>
         
-        <div className="space-y-1 text-xs text-muted-foreground mb-2">
+        <div className="space-y-1 text-xs text-muted-foreground mb-1">
           <div className="flex items-center space-x-1">
             <Calendar className="w-3 h-3" />
             <span>{formatAirdate(episode.airdate)}</span>
@@ -137,7 +137,7 @@ export default function EpisodeCard({ userEpisode, onStatusChange, variant = "de
           </div>
         </div>
         
-        <div className="space-y-1 text-xs text-muted-foreground mb-4">
+        <div className="space-y-1 text-xs text-muted-foreground mb-2">
           <div className="flex items-center space-x-1">
             <Calendar className="w-3 h-3" />
             <span>{formatAirdate(episode.airdate)}</span>
@@ -208,7 +208,7 @@ export default function EpisodeCard({ userEpisode, onStatusChange, variant = "de
         </div>
       </div>
       
-      <div className="space-y-1 text-sm text-muted-foreground mb-4">
+      <div className="space-y-1 text-sm text-muted-foreground mb-2">
         <div className="flex items-center space-x-1">
           <Calendar className="w-4 h-4" />
           <span>{formatAirdate(episode.airdate)}</span>
