@@ -90,12 +90,21 @@ export default function Dashboard() {
         watched: queryClient.getQueryData(["/api/user/episodes", "watched"]),
       };
 
+      let updatedEpisodeInfo = null;
+
       // Find the episode in all query caches and update optimistically
       Object.entries(previousData).forEach(([currentStatus, data]: [string, any]) => {
         if (data && Array.isArray(data)) {
           const episodeIndex = data.findIndex((ep: any) => ep.episode.id === episodeId);
           if (episodeIndex !== -1) {
             const episode = data[episodeIndex];
+            
+            // Store episode info for toast notification
+            updatedEpisodeInfo = {
+              showName: episode.episode.show.name,
+              season: episode.episode.season,
+              number: episode.episode.number
+            };
             
             // Remove from current status cache
             const updatedCurrentData = data.filter((_: any, index: number) => index !== episodeIndex);
@@ -115,8 +124,8 @@ export default function Dashboard() {
         }
       });
 
-      // Return a context object with the snapshotted value
-      return { previousData };
+      // Return a context object with the snapshotted value and episode info
+      return { previousData, episodeInfo: updatedEpisodeInfo };
     },
     onError: (err, variables, context) => {
       // If the mutation fails, use the context returned from onMutate to roll back
@@ -131,12 +140,20 @@ export default function Dashboard() {
         variant: "destructive",
       });
     },
-    onSuccess: () => {
+    onSuccess: (data, variables, context) => {
       // Invalidate queries to ensure we have the latest data from server
       queryClient.invalidateQueries({ queryKey: ["/api/user/episodes"] });
+      
+      // Create informative toast message with show name and episode number
+      let toastTitle = "Episode updated";
+      if (context?.episodeInfo) {
+        const { showName, season, number } = context.episodeInfo;
+        toastTitle = `${showName} ${season}x${number}`;
+      }
+      
       toast({
-        title: "Episode updated",
-        description: "The episode status has been updated.",
+        title: toastTitle,
+        description: "Episode status has been updated.",
       });
     },
   });
