@@ -1,17 +1,35 @@
 import { useQuery } from "@tanstack/react-query";
 import { useParams } from "wouter";
-import { ArrowLeft, Star, Calendar, Clock, Globe, Tv, Users } from "lucide-react";
+import { ArrowLeft, Star, Calendar, Clock, Globe, Tv, Users, Monitor, Play, Hash } from "lucide-react";
 import { Link } from "wouter";
 import Header from "@/components/header";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { TVMazeShow } from "@/lib/tvmaze";
 
+interface ShowStats {
+  totalEpisodes: number;
+  seasons: number;
+  lastEpisode: any;
+}
+
 export default function ShowDetail() {
   const { id } = useParams<{ id: string }>();
   
   const { data: show, isLoading, error } = useQuery<TVMazeShow>({
     queryKey: ['/api/shows', id],
+    enabled: !!id,
+  });
+
+  const { data: showStats } = useQuery<ShowStats>({
+    queryKey: ['/api/shows', id, 'stats'],
+    queryFn: async () => {
+      const response = await fetch(`/api/shows/${id}/stats`);
+      if (!response.ok) {
+        throw new Error('Failed to fetch show stats');
+      }
+      return response.json();
+    },
     enabled: !!id,
   });
 
@@ -72,10 +90,32 @@ export default function ShowDetail() {
   };
 
   const getNetworkInfo = () => {
+    if (show.webChannel?.name) {
+      return `${show.webChannel.name}${show.webChannel.country?.name ? ` (${show.webChannel.country.name})` : ''}`;
+    }
     if (show.network?.name) {
       return `${show.network.name}${show.network.country?.name ? ` (${show.network.country.name})` : ''}`;
     }
     return 'Unknown Network';
+  };
+
+  const getScheduleInfo = () => {
+    if (!show.schedule || !show.schedule.days || show.schedule.days.length === 0) {
+      return 'Schedule not available';
+    }
+    const days = show.schedule.days.join(', ');
+    const time = show.schedule.time || 'Time not specified';
+    return `${days} at ${time}`;
+  };
+
+  const getReturnDate = () => {
+    if (show.ended) {
+      return `Ended: ${show.ended}`;
+    }
+    if (show.status === 'Running') {
+      return 'Currently airing';
+    }
+    return 'Return date not available';
   };
 
   const cleanSummary = (summary?: string) => {
@@ -141,21 +181,53 @@ export default function ShowDetail() {
               {show.premiered && (
                 <div className="flex items-center space-x-2" data-testid={`text-show-premiered-${show.id}`}>
                   <Calendar className="w-5 h-5 text-muted-foreground" />
-                  <span className="text-foreground">{show.premiered}</span>
+                  <span className="text-foreground">Premiered: {show.premiered}</span>
                 </div>
               )}
 
-              {show.runtime && (
+              <div className="flex items-center space-x-2" data-testid={`text-show-return-date-${show.id}`}>
+                <Calendar className="w-5 h-5 text-muted-foreground" />
+                <span className="text-foreground">{getReturnDate()}</span>
+              </div>
+
+              {(show.runtime || show.averageRuntime) && (
                 <div className="flex items-center space-x-2" data-testid={`text-show-runtime-${show.id}`}>
                   <Clock className="w-5 h-5 text-muted-foreground" />
-                  <span className="text-foreground">{show.runtime} minutes</span>
+                  <span className="text-foreground">
+                    {show.averageRuntime ? `${show.averageRuntime} min avg` : `${show.runtime} min`}
+                  </span>
                 </div>
               )}
 
               <div className="flex items-center space-x-2" data-testid={`text-show-network-${show.id}`}>
-                <Tv className="w-5 h-5 text-muted-foreground" />
+                {show.webChannel ? (
+                  <Monitor className="w-5 h-5 text-muted-foreground" />
+                ) : (
+                  <Tv className="w-5 h-5 text-muted-foreground" />
+                )}
                 <span className="text-foreground">{getNetworkInfo()}</span>
               </div>
+
+              <div className="flex items-center space-x-2" data-testid={`text-show-schedule-${show.id}`}>
+                <Clock className="w-5 h-5 text-muted-foreground" />
+                <span className="text-foreground">{getScheduleInfo()}</span>
+              </div>
+
+              {show.type && (
+                <div className="flex items-center space-x-2" data-testid={`text-show-type-${show.id}`}>
+                  <Play className="w-5 h-5 text-muted-foreground" />
+                  <span className="text-foreground">{show.type}</span>
+                </div>
+              )}
+
+              {showStats && (
+                <div className="flex items-center space-x-2" data-testid={`text-show-episodes-${show.id}`}>
+                  <Hash className="w-5 h-5 text-muted-foreground" />
+                  <span className="text-foreground">
+                    {showStats.totalEpisodes} episodes ({showStats.seasons} seasons)
+                  </span>
+                </div>
+              )}
 
               {show.genres && show.genres.length > 0 && (
                 <div className="flex items-center space-x-2 md:col-span-2" data-testid={`text-show-genres-${show.id}`}>

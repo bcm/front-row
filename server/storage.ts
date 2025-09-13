@@ -13,6 +13,7 @@ export interface IStorage {
   getShow(id: number): Promise<Show | undefined>;
   createShow(show: InsertShow): Promise<Show>;
   updateShow(id: number, show: Partial<InsertShow>): Promise<Show | undefined>;
+  syncShowFromTVMaze(showId: number): Promise<Show | undefined>;
   searchShows(query: string): Promise<Show[]>;
   searchUserShows(userId: string, query: string): Promise<Show[]>;
   
@@ -100,6 +101,57 @@ export class DatabaseStorage implements IStorage {
     return updatedShow || undefined;
   }
 
+  async syncShowFromTVMaze(showId: number): Promise<Show | undefined> {
+    try {
+      // Fetch detailed show data from TVMaze API
+      const response = await fetch(`https://api.tvmaze.com/shows/${showId}`);
+      if (!response.ok) {
+        if (response.status === 404) {
+          return undefined;
+        }
+        throw new Error(`TVMaze API error: ${response.status}`);
+      }
+
+      const tvmazeShow = await response.json();
+      
+      // Update the show with complete data from TVMaze
+      const showData = {
+        name: tvmazeShow.name,
+        summary: tvmazeShow.summary,
+        image: tvmazeShow.image as { medium?: string; original?: string } | null,
+        network: tvmazeShow.network as { name?: string; country?: { name?: string } } | null,
+        webChannel: tvmazeShow.webChannel ? {
+          name: tvmazeShow.webChannel.name,
+          country: tvmazeShow.webChannel.country,
+          officialSite: tvmazeShow.webChannel.officialSite
+        } : null,
+        genres: tvmazeShow.genres || [],
+        status: tvmazeShow.status,
+        premiered: tvmazeShow.premiered,
+        ended: tvmazeShow.ended,
+        rating: tvmazeShow.rating as { average?: number } | null,
+        runtime: tvmazeShow.runtime,
+        averageRuntime: tvmazeShow.averageRuntime,
+        schedule: tvmazeShow.schedule as { time?: string; days?: string[] } | null,
+        officialSite: tvmazeShow.officialSite,
+        language: tvmazeShow.language,
+        type: tvmazeShow.type,
+        updated: tvmazeShow.updated,
+      };
+
+      const [updatedShow] = await db
+        .update(shows)
+        .set(showData)
+        .where(eq(shows.id, showId))
+        .returning();
+
+      return updatedShow || undefined;
+    } catch (error) {
+      console.error(`Error syncing show ${showId} from TVMaze:`, error);
+      return undefined;
+    }
+  }
+
   async searchShows(query: string): Promise<Show[]> {
     return await db
       .select()
@@ -115,11 +167,15 @@ export class DatabaseStorage implements IStorage {
         summary: shows.summary,
         image: shows.image,
         network: shows.network,
+        webChannel: shows.webChannel,
         genres: shows.genres,
         status: shows.status,
         premiered: shows.premiered,
+        ended: shows.ended,
         rating: shows.rating,
         runtime: shows.runtime,
+        averageRuntime: shows.averageRuntime,
+        schedule: shows.schedule,
         officialSite: shows.officialSite,
         language: shows.language,
         type: shows.type,

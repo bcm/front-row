@@ -28,20 +28,56 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/shows/:id", async (req, res) => {
     try {
       const { id } = req.params;
-      const response = await fetch(`https://api.tvmaze.com/shows/${id}`);
+      const showId = parseInt(id);
       
-      if (!response.ok) {
-        if (response.status === 404) {
-          return res.status(404).json({ error: "Show not found" });
+      // Try to get from database first
+      let show = await storage.getShow(showId);
+      
+      // If not in database or missing extended info, sync from TVMaze
+      if (!show || !show.webChannel) {
+        const syncedShow = await storage.syncShowFromTVMaze(showId);
+        if (syncedShow) {
+          show = syncedShow;
         }
-        throw new Error(`TVMaze API error: ${response.status}`);
+      }
+      
+      // If still no show, try direct TVMaze API as fallback
+      if (!show) {
+        const response = await fetch(`https://api.tvmaze.com/shows/${id}`);
+        
+        if (!response.ok) {
+          if (response.status === 404) {
+            return res.status(404).json({ error: "Show not found" });
+          }
+          throw new Error(`TVMaze API error: ${response.status}`);
+        }
+
+        show = await response.json();
       }
 
-      const show = await response.json();
       res.json(show);
     } catch (error) {
       console.error("Error fetching show:", error);
       res.status(500).json({ error: "Failed to fetch show" });
+    }
+  });
+
+  // Endpoint to manually sync show data from TVMaze
+  app.post("/api/shows/:id/sync", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const showId = parseInt(id);
+      
+      const syncedShow = await storage.syncShowFromTVMaze(showId);
+      
+      if (!syncedShow) {
+        return res.status(404).json({ error: "Show not found or failed to sync" });
+      }
+
+      res.json(syncedShow);
+    } catch (error) {
+      console.error("Error syncing show:", error);
+      res.status(500).json({ error: "Failed to sync show" });
     }
   });
 
@@ -59,6 +95,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching episodes:", error);
       res.status(500).json({ error: "Failed to fetch episodes" });
+    }
+  });
+
+  // Get episode count and stats for a show
+  app.get("/api/shows/:id/stats", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const response = await fetch(`https://api.tvmaze.com/shows/${id}/episodes`);
+      
+      if (!response.ok) {
+        if (response.status === 404) {
+          return res.status(404).json({ error: "Show not found" });
+        }
+        throw new Error(`TVMaze API error: ${response.status}`);
+      }
+
+      const episodes = await response.json();
+      const totalEpisodes = episodes.length;
+      const seasons = [...new Set(episodes.map((ep: any) => ep.season))].filter(Boolean).length;
+      
+      res.json({
+        totalEpisodes,
+        seasons,
+        lastEpisode: episodes[episodes.length - 1] || null
+      });
+    } catch (error) {
+      console.error("Error fetching episode stats:", error);
+      res.status(500).json({ error: "Failed to fetch episode stats" });
     }
   });
 
