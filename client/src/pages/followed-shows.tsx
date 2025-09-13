@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { Heart, Tv, Loader2 } from "lucide-react";
+import { BookOpen, Tv, Loader2 } from "lucide-react";
 
 interface FollowedShow {
   show_id: number;
@@ -43,9 +43,9 @@ export default function FollowedShows() {
           throw new Error("Invalid TVMaze API credentials. Please check your API key and username.");
         }
         if (response.status === 404) {
-          throw new Error("TVMaze User API not found. You need a premium TVMaze account to access followed shows, or your username might be incorrect.");
+          throw new Error("Library service not available. Please check your account settings.");
         }
-        throw new Error("Failed to fetch followed shows");
+        throw new Error("Failed to fetch library");
       }
       return response.json() as Promise<FollowedShow[]>;
     },
@@ -58,23 +58,23 @@ export default function FollowedShows() {
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center space-x-3">
             <div className="w-6 h-6 bg-primary rounded-full flex items-center justify-center">
-              <Heart className="w-4 h-4 text-primary-foreground" />
+              <BookOpen className="w-4 h-4 text-primary-foreground" />
             </div>
-            <h2 className="text-2xl font-bold" data-testid="text-section-title-followed-shows">
-              TVMaze Followed Shows
+            <h2 className="text-2xl font-bold" data-testid="text-section-title-library">
+              Library
             </h2>
-            <span className="bg-primary text-primary-foreground px-2 py-1 rounded-full text-xs font-bold" data-testid="text-followed-shows-count">
+            <span className="bg-primary text-primary-foreground px-2 py-1 rounded-full text-xs font-bold" data-testid="text-library-count">
               {followedShows?.length || 0}
             </span>
           </div>
-          <p className="text-muted-foreground text-sm">Shows you follow on TVMaze</p>
+          <p className="text-muted-foreground text-sm">Your complete TV show collection</p>
         </div>
 
         {/* Error State */}
         {error && (
           <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-6 text-center">
             <Tv className="w-12 h-12 mx-auto text-destructive mb-4" />
-            <h3 className="text-lg font-semibold text-destructive mb-2">Failed to load followed shows</h3>
+            <h3 className="text-lg font-semibold text-destructive mb-2">Failed to load library</h3>
             <p className="text-destructive/80 text-sm" data-testid="text-error-message">
               {error.message}
             </p>
@@ -193,13 +193,10 @@ export default function FollowedShows() {
         {/* Empty State */}
         {followedShows && followedShows.length === 0 && !isLoading && !error && (
           <div className="text-center py-12">
-            <Heart className="w-16 h-16 mx-auto text-muted-foreground mb-4" />
-            <h3 className="text-xl font-semibold text-muted-foreground mb-2">No followed shows</h3>
+            <BookOpen className="w-16 h-16 mx-auto text-muted-foreground mb-4" />
+            <h3 className="text-xl font-semibold text-muted-foreground mb-2">No shows in library</h3>
             <p className="text-muted-foreground text-sm mb-4" data-testid="text-empty-state">
-              You haven't followed any shows on TVMaze yet.
-            </p>
-            <p className="text-muted-foreground text-xs">
-              Visit <a href="https://tvmaze.com" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">tvmaze.com</a> to follow shows.
+              Your library is empty. Add shows to start building your collection.
             </p>
           </div>
         )}

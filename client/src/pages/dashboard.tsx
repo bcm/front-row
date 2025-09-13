@@ -231,17 +231,8 @@ export default function Dashboard() {
           </div>
         );
 
-      case "followed":
-        return <FollowedShows />;
-
       case "library":
-        return (
-          <div className="text-center py-16">
-            <BookOpen className="w-16 h-16 mx-auto text-muted-foreground mb-4" />
-            <h3 className="text-xl font-semibold text-muted-foreground mb-2">Library Management</h3>
-            <p className="text-muted-foreground">Browse and organize your complete TV show collection</p>
-          </div>
-        );
+        return <FollowedShows />;
 
       case "shared":
         return (
