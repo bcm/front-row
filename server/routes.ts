@@ -115,6 +115,116 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Import followed shows from TVMaze into local database
+  app.post("/api/library/import", async (req, res) => {
+    try {
+      const apiKey = process.env.TVMAZE_API_KEY;
+      const username = process.env.TVMAZE_USERNAME;
+      const userId = "demo-user"; // Mock user ID
+      
+      if (!apiKey || !username) {
+        return res.status(500).json({ error: "TVMaze API credentials not configured" });
+      }
+
+      // Fetch followed shows from TVMaze API
+      const credentials = Buffer.from(`${username}:${apiKey}`).toString('base64');
+      const response = await fetch(`https://api.tvmaze.com/v1/user/follows/shows?embed=show`, {
+        headers: {
+          'Accept': 'application/json',
+          'Authorization': `Basic ${credentials}`
+        }
+      });
+      
+      if (!response.ok) {
+        if (response.status === 401) {
+          return res.status(401).json({ error: "Invalid TVMaze API credentials" });
+        }
+        if (response.status === 404) {
+          return res.status(404).json({ 
+            error: "TVMaze User API endpoint not found. This might mean the user doesn't have a premium account or the username is incorrect." 
+          });
+        }
+        throw new Error(`TVMaze User API error: ${response.status}`);
+      }
+
+      const followedShows = await response.json();
+      let importedCount = 0;
+      let skippedCount = 0;
+
+      // Process each followed show
+      for (const followedShow of followedShows) {
+        const show = followedShow._embedded.show;
+        
+        try {
+          // Check if show already exists in user's collection
+          const existingUserShow = await storage.getUserShow(userId, show.id);
+          if (existingUserShow) {
+            skippedCount++;
+            continue;
+          }
+
+          // Prepare show data for storage
+          const showToStore = insertShowSchema.parse({
+            id: show.id,
+            name: show.name,
+            summary: show.summary,
+            image: show.image,
+            network: show.network,
+            genres: show.genres || [],
+            status: show.status,
+            premiered: show.premiered,
+            rating: show.rating,
+            runtime: show.runtime,
+            officialSite: show.officialSite,
+            language: show.language,
+            type: show.type,
+            updated: show.updated,
+          });
+          
+          // Store show in database
+          await storage.createShow(showToStore);
+
+          // Add to user's collection with "later" status
+          const userShowData = insertUserShowSchema.parse({
+            userId,
+            showId: show.id,
+            status: "later",
+            priority: 0
+          });
+
+          await storage.addUserShow(userShowData);
+          importedCount++;
+        } catch (error) {
+          console.error(`Error importing show ${show.name}:`, error);
+          // Continue with other shows even if one fails
+        }
+      }
+
+      res.json({ 
+        message: "Import completed", 
+        imported: importedCount, 
+        skipped: skippedCount,
+        total: followedShows.length
+      });
+    } catch (error) {
+      console.error("Error importing followed shows:", error);
+      res.status(500).json({ error: "Failed to import followed shows" });
+    }
+  });
+
+  // Get library from local database
+  app.get("/api/library", async (req, res) => {
+    try {
+      const userId = "demo-user"; // Mock user ID
+      
+      const userShows = await storage.getUserShows(userId);
+      res.json(userShows);
+    } catch (error) {
+      console.error("Error fetching library:", error);
+      res.status(500).json({ error: "Failed to fetch library" });
+    }
+  });
+
   // User show management routes
   app.get("/api/user/shows", async (req, res) => {
     try {

@@ -1,53 +1,44 @@
-import { useQuery } from "@tanstack/react-query";
-import { BookOpen, Tv, Loader2 } from "lucide-react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { BookOpen, Tv, Loader2, Download } from "lucide-react";
+import { UserShow, Show } from "@shared/schema";
+import { apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
+import { Button } from "@/components/ui/button";
 
-interface FollowedShow {
-  show_id: number;
-  _embedded: {
-    show: {
-      id: number;
-      name: string;
-      summary?: string;
-      image?: {
-        medium?: string;
-        original?: string;
-      } | null;
-      network?: {
-        name: string;
-      } | null;
-      webChannel?: {
-        name: string;
-      } | null;
-      genres?: string[];
-      status?: string;
-      premiered?: string;
-      rating?: {
-        average?: number;
-      } | null;
-      runtime?: number;
-      officialSite?: string;
-      language?: string;
-      type?: string;
-      updated?: number;
-    };
-  };
-}
+type LibraryShow = UserShow & { show: Show };
 
 export default function FollowedShows() {
-  const { data: followedShows, isLoading, error } = useQuery({
-    queryKey: ["/api/tvmaze/followed-shows"],
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+
+  const { data: libraryShows, isLoading, error } = useQuery({
+    queryKey: ["/api/library"],
     queryFn: async () => {
-      const response = await fetch("/api/tvmaze/followed-shows");
+      const response = await fetch("/api/library");
       if (!response.ok) {
-        if (response.status === 401) {
-          throw new Error("Invalid TVMaze API credentials. Please check your API key and username.");
-        }
-        if (response.status === 404) {
-          throw new Error("Library service not available. Please check your account settings.");
-        }
         throw new Error("Failed to fetch library");
       }
-      return response.json() as Promise<FollowedShow[]>;
+      return response.json() as Promise<LibraryShow[]>;
+    },
+  });
+
+  const importMutation = useMutation({
+    mutationFn: async () => {
+      return apiRequest("POST", "/api/library/import", {});
+    },
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/library"] });
+      toast({
+        title: "Import completed",
+        description: `Imported ${data.imported} shows, skipped ${data.skipped} existing shows.`,
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Import failed",
+        description: error.message || "Failed to import shows from TVMaze",
+        variant: "destructive",
+      });
     },
   });
 
@@ -64,10 +55,26 @@ export default function FollowedShows() {
               Library
             </h2>
             <span className="bg-primary text-primary-foreground px-2 py-1 rounded-full text-xs font-bold" data-testid="text-library-count">
-              {followedShows?.length || 0}
+              {libraryShows?.length || 0}
             </span>
           </div>
-          <p className="text-muted-foreground text-sm">Your complete TV show collection</p>
+          <div className="flex items-center space-x-4">
+            <p className="text-muted-foreground text-sm">Your complete TV show collection</p>
+            <Button 
+              onClick={() => importMutation.mutate()}
+              disabled={importMutation.isPending}
+              size="sm"
+              variant="outline"
+              data-testid="button-import-shows"
+            >
+              {importMutation.isPending ? (
+                <Loader2 className="w-4 h-4 animate-spin mr-2" />
+              ) : (
+                <Download className="w-4 h-4 mr-2" />
+              )}
+              Import from TVMaze
+            </Button>
+          </div>
         </div>
 
         {/* Error State */}
@@ -102,22 +109,22 @@ export default function FollowedShows() {
         )}
 
         {/* Shows Grid */}
-        {followedShows && followedShows.length > 0 && (
+        {libraryShows && libraryShows.length > 0 && (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {followedShows.map((followedShow) => (
+            {libraryShows.map((libraryShow) => (
               <div
-                key={followedShow.show_id}
+                key={libraryShow.id}
                 className="bg-card rounded-lg p-4 border border-border hover:shadow-lg transition-shadow"
-                data-testid={`card-followed-show-${followedShow.show_id}`}
+                data-testid={`card-library-show-${libraryShow.showId}`}
               >
                 <div className="flex space-x-3 mb-4">
                   <div className="w-12 h-16 bg-muted rounded-md overflow-hidden flex-shrink-0">
-                    {followedShow._embedded.show.image?.medium ? (
+                    {libraryShow.show.image?.medium ? (
                       <img
-                        src={followedShow._embedded.show.image.medium}
-                        alt={followedShow._embedded.show.name}
+                        src={libraryShow.show.image.medium}
+                        alt={libraryShow.show.name}
                         className="w-full h-full object-cover"
-                        data-testid={`img-poster-${followedShow.show_id}`}
+                        data-testid={`img-poster-${libraryShow.showId}`}
                       />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center bg-muted">
@@ -126,23 +133,24 @@ export default function FollowedShows() {
                     )}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <h3 className="font-semibold text-sm mb-1 truncate" data-testid={`text-title-${followedShow.show_id}`}>
-                      {followedShow._embedded.show.name}
+                    <h3 className="font-semibold text-sm mb-1 truncate" data-testid={`text-title-${libraryShow.showId}`}>
+                      {libraryShow.show.name}
                     </h3>
-                    <p className="text-xs text-muted-foreground mb-2" data-testid={`text-network-${followedShow.show_id}`}>
-                      {followedShow._embedded.show.network?.name || 
-                       followedShow._embedded.show.webChannel?.name || 
-                       "Unknown Network"}
+                    <p className="text-xs text-muted-foreground mb-2" data-testid={`text-network-${libraryShow.showId}`}>
+                      {libraryShow.show.network?.name || "Unknown Network"}
                     </p>
                     <div className="flex items-center space-x-2">
-                      {followedShow._embedded.show.status && (
-                        <span className="bg-secondary text-secondary-foreground px-2 py-1 rounded text-xs" data-testid={`text-status-${followedShow.show_id}`}>
-                          {followedShow._embedded.show.status}
+                      <span className="bg-secondary text-secondary-foreground px-2 py-1 rounded text-xs" data-testid={`text-user-status-${libraryShow.showId}`}>
+                        {libraryShow.status}
+                      </span>
+                      {libraryShow.show.status && (
+                        <span className="bg-accent text-accent-foreground px-2 py-1 rounded text-xs" data-testid={`text-show-status-${libraryShow.showId}`}>
+                          {libraryShow.show.status}
                         </span>
                       )}
-                      {followedShow._embedded.show.rating?.average && (
-                        <span className="text-xs text-muted-foreground" data-testid={`text-rating-${followedShow.show_id}`}>
-                          ⭐ {followedShow._embedded.show.rating.average}
+                      {libraryShow.show.rating?.average && (
+                        <span className="text-xs text-muted-foreground" data-testid={`text-rating-${libraryShow.showId}`}>
+                          ⭐ {libraryShow.show.rating.average}
                         </span>
                       )}
                     </div>
@@ -150,21 +158,21 @@ export default function FollowedShows() {
                 </div>
                 
                 {/* Genres */}
-                {followedShow._embedded.show.genres && followedShow._embedded.show.genres.length > 0 && (
+                {libraryShow.show.genres && libraryShow.show.genres.length > 0 && (
                   <div className="mb-3">
                     <div className="flex flex-wrap gap-1">
-                      {followedShow._embedded.show.genres.slice(0, 3).map((genre) => (
+                      {libraryShow.show.genres.slice(0, 3).map((genre) => (
                         <span
                           key={genre}
                           className="bg-accent text-accent-foreground px-2 py-1 rounded-full text-xs"
-                          data-testid={`text-genre-${followedShow.show_id}-${genre.toLowerCase()}`}
+                          data-testid={`text-genre-${libraryShow.showId}-${genre.toLowerCase()}`}
                         >
                           {genre}
                         </span>
                       ))}
-                      {followedShow._embedded.show.genres.length > 3 && (
+                      {libraryShow.show.genres.length > 3 && (
                         <span className="text-xs text-muted-foreground px-2 py-1">
-                          +{followedShow._embedded.show.genres.length - 3} more
+                          +{libraryShow.show.genres.length - 3} more
                         </span>
                       )}
                     </div>
@@ -172,16 +180,16 @@ export default function FollowedShows() {
                 )}
 
                 {/* Summary */}
-                {followedShow._embedded.show.summary && (
+                {libraryShow.show.summary && (
                   <div className="text-xs text-muted-foreground leading-relaxed">
                     <div
                       className="line-clamp-3"
                       dangerouslySetInnerHTML={{
-                        __html: followedShow._embedded.show.summary
+                        __html: libraryShow.show.summary
                           .replace(/<[^>]*>/g, "")
-                          .substring(0, 120) + (followedShow._embedded.show.summary.length > 120 ? "..." : "")
+                          .substring(0, 120) + (libraryShow.show.summary.length > 120 ? "..." : "")
                       }}
-                      data-testid={`text-summary-${followedShow.show_id}`}
+                      data-testid={`text-summary-${libraryShow.showId}`}
                     />
                   </div>
                 )}
@@ -191,13 +199,25 @@ export default function FollowedShows() {
         )}
 
         {/* Empty State */}
-        {followedShows && followedShows.length === 0 && !isLoading && !error && (
+        {libraryShows && libraryShows.length === 0 && !isLoading && !error && (
           <div className="text-center py-12">
             <BookOpen className="w-16 h-16 mx-auto text-muted-foreground mb-4" />
             <h3 className="text-xl font-semibold text-muted-foreground mb-2">No shows in library</h3>
             <p className="text-muted-foreground text-sm mb-4" data-testid="text-empty-state">
-              Your library is empty. Add shows to start building your collection.
+              Your library is empty. Import shows from TVMaze or add shows manually to start building your collection.
             </p>
+            <Button 
+              onClick={() => importMutation.mutate()}
+              disabled={importMutation.isPending}
+              data-testid="button-import-shows-empty"
+            >
+              {importMutation.isPending ? (
+                <Loader2 className="w-4 h-4 animate-spin mr-2" />
+              ) : (
+                <Download className="w-4 h-4 mr-2" />
+              )}
+              Import from TVMaze
+            </Button>
           </div>
         )}
       </section>
