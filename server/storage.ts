@@ -1,4 +1,7 @@
 import { type User, type InsertUser, type Show, type InsertShow, type UserShow, type InsertUserShow, type Episode, type InsertEpisode } from "@shared/schema";
+import { users, shows, userShows, episodes } from "@shared/schema";
+import { db } from "./db";
+import { eq, and, ilike, inArray } from "drizzle-orm";
 import { randomUUID } from "crypto";
 
 export interface IStorage {
@@ -228,4 +231,180 @@ export class MemStorage implements IStorage {
   }
 }
 
-export const storage = new MemStorage();
+export class DatabaseStorage implements IStorage {
+  // User methods
+  async getUser(id: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.id, id));
+    return user || undefined;
+  }
+
+  async getUserByUsername(username: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.username, username));
+    return user || undefined;
+  }
+
+  async createUser(insertUser: InsertUser): Promise<User> {
+    const [user] = await db
+      .insert(users)
+      .values([insertUser])
+      .returning();
+    return user;
+  }
+
+  // Show methods
+  async getShow(id: number): Promise<Show | undefined> {
+    const [show] = await db.select().from(shows).where(eq(shows.id, id));
+    return show || undefined;
+  }
+
+  async createShow(show: InsertShow): Promise<Show> {
+    const showData = {
+      ...show,
+      image: show.image as { medium?: string; original?: string } | null,
+      network: show.network as { name?: string; country?: { name?: string } } | null,
+      rating: show.rating as { average?: number } | null
+    };
+    const [newShow] = await db
+      .insert(shows)
+      .values([showData])
+      .onConflictDoUpdate({
+        target: shows.id,
+        set: showData
+      })
+      .returning();
+    return newShow;
+  }
+
+  async updateShow(id: number, updates: Partial<InsertShow>): Promise<Show | undefined> {
+    const updateData: any = { ...updates };
+    if (updates.image !== undefined) {
+      updateData.image = updates.image as { medium?: string; original?: string } | null;
+    }
+    if (updates.network !== undefined) {
+      updateData.network = updates.network as { name?: string; country?: { name?: string } } | null;
+    }
+    if (updates.rating !== undefined) {
+      updateData.rating = updates.rating as { average?: number } | null;
+    }
+    const [updatedShow] = await db
+      .update(shows)
+      .set(updateData)
+      .where(eq(shows.id, id))
+      .returning();
+    return updatedShow || undefined;
+  }
+
+  async searchShows(query: string): Promise<Show[]> {
+    return await db
+      .select()
+      .from(shows)
+      .where(ilike(shows.name, `%${query}%`));
+  }
+
+  // User show methods
+  async getUserShows(userId: string, status?: string): Promise<(UserShow & { show: Show })[]> {
+    const whereClause = status 
+      ? and(eq(userShows.userId, userId), eq(userShows.status, status))
+      : eq(userShows.userId, userId);
+
+    const results = await db
+      .select({
+        id: userShows.id,
+        userId: userShows.userId,
+        showId: userShows.showId,
+        status: userShows.status,
+        priority: userShows.priority,
+        currentSeason: userShows.currentSeason,
+        currentEpisode: userShows.currentEpisode,
+        isShared: userShows.isShared,
+        addedAt: userShows.addedAt,
+        watchedAt: userShows.watchedAt,
+        show: shows
+      })
+      .from(userShows)
+      .innerJoin(shows, eq(userShows.showId, shows.id))
+      .where(whereClause);
+
+    return results.map(row => ({
+      id: row.id,
+      userId: row.userId,
+      showId: row.showId,
+      status: row.status,
+      priority: row.priority,
+      currentSeason: row.currentSeason,
+      currentEpisode: row.currentEpisode,
+      isShared: row.isShared,
+      addedAt: row.addedAt,
+      watchedAt: row.watchedAt,
+      show: row.show
+    }));
+  }
+
+  async getUserShow(userId: string, showId: number): Promise<UserShow | undefined> {
+    const [userShow] = await db
+      .select()
+      .from(userShows)
+      .where(and(eq(userShows.userId, userId), eq(userShows.showId, showId)));
+    return userShow || undefined;
+  }
+
+  async addUserShow(userShow: InsertUserShow): Promise<UserShow> {
+    const [newUserShow] = await db
+      .insert(userShows)
+      .values([userShow])
+      .returning();
+    return newUserShow;
+  }
+
+  async updateUserShow(userId: string, showId: number, updates: Partial<UserShow>): Promise<UserShow | undefined> {
+    const [updatedUserShow] = await db
+      .update(userShows)
+      .set(updates)
+      .where(and(eq(userShows.userId, userId), eq(userShows.showId, showId)))
+      .returning();
+    return updatedUserShow || undefined;
+  }
+
+  async removeUserShow(userId: string, showId: number): Promise<boolean> {
+    const result = await db
+      .delete(userShows)
+      .where(and(eq(userShows.userId, userId), eq(userShows.showId, showId)));
+    return (result.rowCount ?? 0) > 0;
+  }
+
+  // Episode methods
+  async getEpisodes(showId: number): Promise<Episode[]> {
+    return await db
+      .select()
+      .from(episodes)
+      .where(eq(episodes.showId, showId));
+  }
+
+  async createEpisode(episode: InsertEpisode): Promise<Episode> {
+    const episodeData = {
+      ...episode,
+      image: episode.image as { medium?: string; original?: string } | null
+    };
+    const [newEpisode] = await db
+      .insert(episodes)
+      .values([episodeData])
+      .onConflictDoUpdate({
+        target: episodes.id,
+        set: episodeData
+      })
+      .returning();
+    return newEpisode;
+  }
+
+  async getLatestEpisodes(showIds: number[]): Promise<Episode[]> {
+    if (showIds.length === 0) return [];
+    
+    return await db
+      .select()
+      .from(episodes)
+      .where(inArray(episodes.showId, showIds))
+      .orderBy(episodes.airdate);
+  }
+}
+
+export const storage = new DatabaseStorage();
