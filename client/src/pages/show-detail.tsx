@@ -358,13 +358,6 @@ export default function ShowDetail() {
                 </div>
               )}
 
-              {show.genres && show.genres.length > 0 && (
-                <div className="flex items-center space-x-2 md:col-span-2" data-testid={`text-show-genres-${show.id}`}>
-                  <Users className="w-5 h-5 text-muted-foreground" />
-                  <span className="text-foreground">{formatGenres(show.genres)}</span>
-                </div>
-              )}
-
               {show.officialSite && (
                 <div className="flex items-center space-x-2 md:col-span-2">
                   <Globe className="w-5 h-5 text-muted-foreground" />
@@ -401,6 +394,23 @@ export default function ShowDetail() {
                 <p className="text-muted-foreground leading-relaxed" data-testid={`text-show-summary-${show.id}`}>
                   {cleanSummary(show.summary)}
                 </p>
+              </div>
+            )}
+
+            {/* Genres */}
+            {show.genres && show.genres.length > 0 && (
+              <div className="space-y-2">
+                <h2 className="text-xl font-semibold text-foreground">Genres</h2>
+                <div className="flex flex-wrap gap-2" data-testid={`text-show-genres-${show.id}`}>
+                  {show.genres.map((genre) => (
+                    <span
+                      key={genre}
+                      className="bg-accent text-accent-foreground px-3 py-1 rounded-full text-sm"
+                    >
+                      {genre}
+                    </span>
+                  ))}
+                </div>
               </div>
             )}
 
