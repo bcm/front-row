@@ -82,7 +82,7 @@ export default function Header({ onSearch }: HeaderProps) {
 
   const getActiveTab = () => {
     if (location === "/" || location === "/dashboard") return "dashboard";
-    if (location === "/library") return "library";
+    if (location === "/library" || location.startsWith("/show/") || location.startsWith("/episode/")) return "library";
     if (location === "/shared") return "shared";
     if (location === "/settings") return "settings";
     return "dashboard";
