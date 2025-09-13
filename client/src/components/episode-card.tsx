@@ -57,10 +57,10 @@ export default function EpisodeCard({ userEpisode, onStatusChange, variant = "de
           <img 
             src={episode.image?.medium || show.image?.medium || "/placeholder-show.jpg"}
             alt={`${show.name} poster`}
-            className="w-12 h-8 object-cover rounded-md flex-shrink-0"
+            className="w-16 h-12 object-cover rounded-md flex-shrink-0"
             onError={(e) => {
               const target = e.target as HTMLImageElement;
-              target.src = "https://via.placeholder.com/80x60/374151/9ca3af?text=" + encodeURIComponent(show.name);
+              target.src = "https://via.placeholder.com/100x75/374151/9ca3af?text=" + encodeURIComponent(show.name);
             }}
           />
           <div className="flex-1 min-w-0">
@@ -97,10 +97,10 @@ export default function EpisodeCard({ userEpisode, onStatusChange, variant = "de
           <img 
             src={episode.image?.medium || show.image?.medium || "/placeholder-show.jpg"}
             alt={`${show.name} poster`}
-            className="w-16 h-12 object-cover rounded-md flex-shrink-0"
+            className="w-24 h-18 object-cover rounded-md flex-shrink-0"
             onError={(e) => {
               const target = e.target as HTMLImageElement;
-              target.src = "https://via.placeholder.com/100x75/374151/9ca3af?text=" + encodeURIComponent(show.name);
+              target.src = "https://via.placeholder.com/150x112/374151/9ca3af?text=" + encodeURIComponent(show.name);
             }}
           />
           <div className="flex-1 min-w-0">
@@ -167,10 +167,10 @@ export default function EpisodeCard({ userEpisode, onStatusChange, variant = "de
         <img 
           src={episode.image?.medium || show.image?.medium || "/placeholder-show.jpg"}
           alt={`${show.name} poster`}
-          className="w-20 h-14 object-cover rounded-md flex-shrink-0"
+          className="w-32 h-24 object-cover rounded-md flex-shrink-0"
           onError={(e) => {
             const target = e.target as HTMLImageElement;
-            target.src = "https://via.placeholder.com/120x90/374151/9ca3af?text=" + encodeURIComponent(show.name);
+            target.src = "https://via.placeholder.com/200x150/374151/9ca3af?text=" + encodeURIComponent(show.name);
           }}
         />
         <div className="flex-1 min-w-0">
