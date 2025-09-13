@@ -4,6 +4,7 @@ import { UserShow, Show } from "@shared/schema";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Link } from "wouter";
 
@@ -12,6 +13,19 @@ type LibraryShow = UserShow & { show: Show };
 export default function FollowedShows() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+
+  const getStatusColor = (status?: string) => {
+    switch (status) {
+      case 'Running':
+        return 'bg-green-500/20 text-green-400 border-green-500/30';
+      case 'Ended':
+        return 'bg-red-500/20 text-red-400 border-red-500/30';
+      case 'To Be Determined':
+        return 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30';
+      default:
+        return 'bg-gray-500/20 text-gray-400 border-gray-500/30';
+    }
+  };
 
   const { data: libraryShows, isLoading, error } = useQuery({
     queryKey: ["/api/library"],
@@ -244,9 +258,9 @@ export default function FollowedShows() {
                         </span>
                       )}
                       {libraryShow.show.status && (
-                        <span className="bg-accent text-accent-foreground px-2 py-1 rounded text-xs" data-testid={`text-show-status-${libraryShow.showId}`}>
+                        <Badge className={getStatusColor(libraryShow.show.status)} data-testid={`badge-show-status-${libraryShow.showId}`}>
                           {libraryShow.show.status}
-                        </span>
+                        </Badge>
                       )}
                     </div>
                   </div>
