@@ -3,6 +3,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Calendar, Clock, Eye, ArrowRight, MoreHorizontal } from "lucide-react";
+import { Link } from "wouter";
 import { cn } from "@/lib/utils";
 
 interface EpisodeCardProps {
@@ -80,6 +81,11 @@ export default function EpisodeCard({ userEpisode, onStatusChange, variant = "de
           
           {/* Content */}
           <div className="flex-1 min-w-0">
+            <Link href={`/show/${show.id}`}>
+              <h2 className="font-medium text-sm text-primary hover:text-primary/80 truncate mb-1" data-testid={`text-show-name-${episode.id}`}>
+                {show.name}
+              </h2>
+            </Link>
             <h3 className="font-semibold text-lg truncate text-foreground mb-1" data-testid={`text-episode-title-${episode.id}`}>
               {getEpisodeTitle()}
             </h3>
