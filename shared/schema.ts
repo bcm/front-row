@@ -35,7 +35,6 @@ export const userShows = pgTable("user_shows", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").notNull(),
   showId: integer("show_id").notNull(),
-  status: text("status").notNull(), // 'new', 'watching', 'later', 'archived'
   addedAt: timestamp("added_at").defaultNow(),
 });
 
