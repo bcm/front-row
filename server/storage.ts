@@ -1,7 +1,7 @@
 import { type User, type InsertUser, type Show, type InsertShow, type UserShow, type InsertUserShow, type Episode, type InsertEpisode } from "@shared/schema";
 import { users, shows, userShows, episodes } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, ilike, inArray } from "drizzle-orm";
+import { eq, and, ilike, inArray, desc } from "drizzle-orm";
 import { randomUUID } from "crypto";
 
 export interface IStorage {
@@ -323,7 +323,8 @@ export class DatabaseStorage implements IStorage {
       })
       .from(userShows)
       .innerJoin(shows, eq(userShows.showId, shows.id))
-      .where(whereClause);
+      .where(whereClause)
+      .orderBy(desc(userShows.priority), desc(userShows.addedAt));
 
     return results.map(row => ({
       id: row.id,
@@ -368,8 +369,9 @@ export class DatabaseStorage implements IStorage {
   async removeUserShow(userId: string, showId: number): Promise<boolean> {
     const result = await db
       .delete(userShows)
-      .where(and(eq(userShows.userId, userId), eq(userShows.showId, showId)));
-    return (result.rowCount ?? 0) > 0;
+      .where(and(eq(userShows.userId, userId), eq(userShows.showId, showId)))
+      .returning({ id: userShows.id });
+    return result.length > 0;
   }
 
   // Episode methods
@@ -399,11 +401,22 @@ export class DatabaseStorage implements IStorage {
   async getLatestEpisodes(showIds: number[]): Promise<Episode[]> {
     if (showIds.length === 0) return [];
     
-    return await db
+    // Get all episodes for the specified shows, ordered by airdate descending
+    const allEpisodes = await db
       .select()
       .from(episodes)
       .where(inArray(episodes.showId, showIds))
-      .orderBy(episodes.airdate);
+      .orderBy(desc(episodes.airdate));
+    
+    // Get the latest episode for each show (like MemStorage does)
+    const latestByShow = new Map<number, Episode>();
+    for (const episode of allEpisodes) {
+      if (!latestByShow.has(episode.showId)) {
+        latestByShow.set(episode.showId, episode);
+      }
+    }
+    
+    return Array.from(latestByShow.values());
   }
 }
 
