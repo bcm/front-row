@@ -15,23 +15,11 @@ export default function EpisodeCard({ userEpisode, onStatusChange, variant = "de
   const { show } = episode;
 
   const getStatusBadge = (status: string, variant?: string) => {
-    // Don't show "next" badge for priority variant
-    if (variant === "priority" && status === "next") {
-      return null;
-    }
-    
-    // Don't show "later" badge for compact variant
-    if (variant === "compact" && status === "later") {
-      return null;
-    }
-    
     switch (status) {
       case "untriaged":
-        return null; // Don't show badge for untriaged episodes
       case "next":
-        return <Badge className="bg-green-500/20 text-green-400 border border-green-500/30">NEXT</Badge>;
       case "later":
-        return <Badge className="bg-blue-500/20 text-blue-400 border border-blue-500/30">LATER</Badge>;
+        return null; // Don't show badges for untriaged, next, or later episodes
       case "watched":
         return <Badge className="bg-purple-500/20 text-purple-400 border border-purple-500/30">WATCHED</Badge>;
       case "skipped":
