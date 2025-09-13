@@ -37,6 +37,18 @@ export default function ShowDetail() {
     enabled: !!id,
   });
 
+  const { data: episodes, isLoading: episodesLoading } = useQuery({
+    queryKey: ['/api/shows', id, 'episodes'],
+    queryFn: async () => {
+      const response = await fetch(`/api/shows/${id}/episodes`);
+      if (!response.ok) {
+        throw new Error('Failed to fetch episodes');
+      }
+      return response.json();
+    },
+    enabled: !!id,
+  });
+
   const syncMutation = useMutation({
     mutationFn: async () => {
       return apiRequest("POST", `/api/shows/${id}/sync`, {});
@@ -45,6 +57,7 @@ export default function ShowDetail() {
       // Invalidate and refetch show data and stats
       queryClient.invalidateQueries({ queryKey: ['/api/shows', id] });
       queryClient.invalidateQueries({ queryKey: ['/api/shows', id, 'stats'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/shows', id, 'episodes'] });
       queryClient.invalidateQueries({ queryKey: ['/api/user/episodes'] });
       
       toast({
@@ -177,6 +190,26 @@ export default function ShowDetail() {
     if (!summary) return 'No description available.';
     // Remove HTML tags from the summary
     return summary.replace(/<[^>]*>/g, '');
+  };
+
+  const groupEpisodesBySeason = (episodes: any[]) => {
+    if (!episodes) return {};
+    
+    const grouped = episodes.reduce((acc: Record<number, any[]>, episode: any) => {
+      const season = episode.season || 0;
+      if (!acc[season]) {
+        acc[season] = [];
+      }
+      acc[season].push(episode);
+      return acc;
+    }, {});
+
+    // Sort episodes within each season by episode number (reverse order - newest first)
+    Object.keys(grouped).forEach(season => {
+      grouped[parseInt(season)].sort((a: any, b: any) => (b.number || 0) - (a.number || 0));
+    });
+
+    return grouped;
   };
 
   return (
@@ -331,6 +364,92 @@ export default function ShowDetail() {
                 <p className="text-muted-foreground leading-relaxed" data-testid={`text-show-summary-${show.id}`}>
                   {cleanSummary(show.summary)}
                 </p>
+              </div>
+            )}
+
+            {/* Episodes List */}
+            {episodes && episodes.length > 0 && (
+              <div className="space-y-4 mt-8">
+                <h2 className="text-2xl font-semibold text-foreground">Episodes</h2>
+                
+                {episodesLoading ? (
+                  <div className="space-y-4">
+                    {Array.from({ length: 3 }).map((_, i) => (
+                      <div key={i} className="bg-card rounded-lg p-4 animate-pulse">
+                        <div className="h-6 bg-muted rounded mb-4 w-32"></div>
+                        <div className="space-y-3">
+                          {Array.from({ length: 5 }).map((_, j) => (
+                            <div key={j} className="flex space-x-3">
+                              <div className="w-16 h-12 bg-muted rounded flex-shrink-0"></div>
+                              <div className="flex-1 space-y-2">
+                                <div className="h-4 bg-muted rounded"></div>
+                                <div className="h-3 bg-muted rounded w-3/4"></div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="space-y-6">
+                    {Object.entries(groupEpisodesBySeason(episodes))
+                      .sort(([a], [b]) => parseInt(b) - parseInt(a)) // Sort seasons in reverse order
+                      .map(([season, seasonEpisodes]) => (
+                        <div key={season} className="bg-card rounded-lg p-6 border border-border">
+                          <h3 className="text-xl font-semibold text-foreground mb-4 border-b border-border pb-2">
+                            Season {season}
+                          </h3>
+                          <div className="space-y-3">
+                            {seasonEpisodes.map((episode: any) => (
+                              <div 
+                                key={episode.id} 
+                                className="flex space-x-4 p-3 hover:bg-muted/50 rounded-md transition-colors"
+                                data-testid={`episode-${episode.id}`}
+                              >
+                                <div className="w-16 h-12 bg-muted rounded overflow-hidden flex-shrink-0">
+                                  {episode.image?.medium ? (
+                                    <img
+                                      src={episode.image.medium}
+                                      alt={`Episode ${episode.number}`}
+                                      className="w-full h-full object-cover"
+                                    />
+                                  ) : (
+                                    <div className="w-full h-full flex items-center justify-center bg-muted">
+                                      <Play className="w-4 h-4 text-muted-foreground" />
+                                    </div>
+                                  )}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-start justify-between">
+                                    <div className="flex-1 min-w-0">
+                                      <h4 className="font-medium text-foreground truncate">
+                                        {episode.number ? `${episode.number}. ` : ''}{episode.name || `Episode ${episode.number}`}
+                                      </h4>
+                                      {episode.summary && (
+                                        <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
+                                          {episode.summary.replace(/<[^>]*>/g, '')}
+                                        </p>
+                                      )}
+                                    </div>
+                                    <div className="flex flex-col items-end text-sm text-muted-foreground ml-4 flex-shrink-0">
+                                      {episode.airdate && (
+                                        <span>{new Date(episode.airdate).toLocaleDateString('en-US')}</span>
+                                      )}
+                                      {episode.runtime && (
+                                        <span>{episode.runtime} min</span>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ))
+                    }
+                  </div>
+                )}
               </div>
             )}
           </div>
