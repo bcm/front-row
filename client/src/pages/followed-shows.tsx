@@ -7,12 +7,14 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Link } from "wouter";
+import { useState } from "react";
 
 type LibraryShow = UserShow & { show: Show };
 
 export default function FollowedShows() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const [syncingShowId, setSyncingShowId] = useState<number | null>(null);
 
   const getStatusColor = (status?: string) => {
     switch (status) {
@@ -41,9 +43,11 @@ export default function FollowedShows() {
   // Sync individual show mutation
   const syncShowMutation = useMutation({
     mutationFn: async (showId: number) => {
+      setSyncingShowId(showId);
       return apiRequest("POST", `/api/shows/${showId}/sync`, {});
     },
     onSuccess: (data: any, showId: number) => {
+      setSyncingShowId(null);
       // Invalidate and refetch show data and stats
       queryClient.invalidateQueries({ queryKey: ["/api/shows", showId] });
       queryClient.invalidateQueries({ queryKey: ["/api/shows", showId, "stats"] });
@@ -58,6 +62,7 @@ export default function FollowedShows() {
       });
     },
     onError: (error: any) => {
+      setSyncingShowId(null);
       toast({
         title: "Sync Failed",
         description: error.message || "Failed to sync show data from TVMaze",
@@ -297,11 +302,11 @@ export default function FollowedShows() {
                               e.stopPropagation();
                               syncShowMutation.mutate(libraryShow.showId);
                             }}
-                            disabled={syncShowMutation.isPending}
+                            disabled={syncingShowId === libraryShow.showId}
                             className="h-6 w-6 p-0"
                             data-testid={`button-sync-show-${libraryShow.showId}`}
                           >
-                            <RefreshCw className={`w-3 h-3 ${syncShowMutation.isPending ? 'animate-spin' : ''}`} />
+                            <RefreshCw className={`w-3 h-3 ${syncingShowId === libraryShow.showId ? 'animate-spin' : ''}`} />
                           </Button>
                         </TooltipTrigger>
                         <TooltipContent>
