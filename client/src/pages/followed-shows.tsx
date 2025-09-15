@@ -1,13 +1,15 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { BookOpen, Tv, Loader2, Download, PlayCircle, RefreshCw } from "lucide-react";
-import { UserShow, Show } from "@shared/schema";
+import { BookOpen, Tv, Loader2, Download, PlayCircle, RefreshCw, Eye, EyeOff } from "lucide-react";
+import { UserShow, Show, UserSettings } from "@shared/schema";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 import { Link } from "wouter";
-import { useState } from "react";
+import { useState, useMemo } from "react";
 
 type LibraryShow = UserShow & { show: Show };
 
@@ -37,6 +39,46 @@ export default function FollowedShows() {
         throw new Error("Failed to fetch library");
       }
       return response.json() as Promise<LibraryShow[]>;
+    },
+  });
+
+  // User settings query
+  const { data: userSettings } = useQuery({
+    queryKey: ["/api/user/settings"],
+    queryFn: async () => {
+      const response = await fetch("/api/user/settings");
+      if (!response.ok) {
+        throw new Error("Failed to fetch user settings");
+      }
+      return response.json() as Promise<UserSettings>;
+    },
+  });
+
+  // Filter shows based on settings
+  const filteredShows = useMemo(() => {
+    if (!libraryShows || !userSettings) return libraryShows || [];
+    
+    if (userSettings.hideFinishedShows) {
+      return libraryShows.filter(show => show.show.status !== "Ended");
+    }
+    
+    return libraryShows;
+  }, [libraryShows, userSettings]);
+
+  // Settings update mutation
+  const updateSettingsMutation = useMutation({
+    mutationFn: async (settings: Partial<UserSettings>) => {
+      return apiRequest("PATCH", "/api/user/settings", settings);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/user/settings"] });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to update settings",
+        variant: "destructive",
+      });
     },
   });
 
@@ -167,11 +209,31 @@ export default function FollowedShows() {
               Library
             </h2>
             <span className="bg-primary text-primary-foreground px-2 py-1 rounded-full text-xs font-bold" data-testid="text-library-count">
-              {libraryShows?.length || 0}
+              {filteredShows?.length || 0}
             </span>
+            {libraryShows && filteredShows && libraryShows.length !== filteredShows.length && (
+              <span className="text-xs text-muted-foreground">
+                ({libraryShows.length - filteredShows.length} hidden)
+              </span>
+            )}
           </div>
           <div className="flex items-center space-x-4">
-            <p className="text-muted-foreground text-sm">Your complete TV show collection</p>
+            <div className="flex items-center space-x-3">
+              <div className="flex items-center space-x-2">
+                <Switch
+                  id="hide-finished-shows"
+                  checked={!userSettings?.hideFinishedShows}
+                  onCheckedChange={(checked) => {
+                    updateSettingsMutation.mutate({ hideFinishedShows: !checked });
+                  }}
+                  disabled={updateSettingsMutation.isPending}
+                  data-testid="switch-hide-finished-shows"
+                />
+                <Label htmlFor="hide-finished-shows" className="text-sm text-muted-foreground cursor-pointer">
+                  Show finished shows
+                </Label>
+              </div>
+            </div>
             <div className="flex space-x-2">
               <ButtonWithTooltip 
                 onClick={() => importMutation.mutate()}
@@ -245,9 +307,9 @@ export default function FollowedShows() {
         )}
 
         {/* Shows Grid */}
-        {libraryShows && libraryShows.length > 0 && (
+        {filteredShows && filteredShows.length > 0 && (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {libraryShows.map((libraryShow) => (
+            {filteredShows.map((libraryShow) => (
               <div
                 key={libraryShow.id}
                 className="bg-card rounded-lg p-4 border border-border hover:shadow-lg transition-shadow"
@@ -355,7 +417,7 @@ export default function FollowedShows() {
         )}
 
         {/* Empty State */}
-        {libraryShows && libraryShows.length === 0 && !isLoading && !error && (
+        {!isLoading && !error && libraryShows && libraryShows.length === 0 && (
           <div className="text-center py-12">
             <BookOpen className="w-16 h-16 mx-auto text-muted-foreground mb-4" />
             <h3 className="text-xl font-semibold text-muted-foreground mb-2">No shows in library</h3>
