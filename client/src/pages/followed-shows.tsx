@@ -65,20 +65,44 @@ export default function FollowedShows() {
     return libraryShows;
   }, [libraryShows, userSettings]);
 
-  // Settings update mutation
+  // Settings update mutation with optimistic updates
   const updateSettingsMutation = useMutation({
     mutationFn: async (settings: Partial<UserSettings>) => {
       return apiRequest("PATCH", "/api/user/settings", settings);
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/user/settings"] });
+    onMutate: async (newSettings: Partial<UserSettings>) => {
+      // Cancel any outgoing refetches to avoid overwriting our optimistic update
+      await queryClient.cancelQueries({ queryKey: ["/api/user/settings"] });
+
+      // Snapshot the previous value for rollback
+      const previousSettings = queryClient.getQueryData(["/api/user/settings"]) as UserSettings;
+
+      // Optimistically update the settings
+      if (previousSettings) {
+        queryClient.setQueryData(["/api/user/settings"], {
+          ...previousSettings,
+          ...newSettings,
+        });
+      }
+
+      // Return context object with snapshotted value
+      return { previousSettings };
     },
-    onError: (error: any) => {
+    onError: (error: any, newSettings, context) => {
+      // If the mutation fails, use the context returned from onMutate to roll back
+      if (context?.previousSettings) {
+        queryClient.setQueryData(["/api/user/settings"], context.previousSettings);
+      }
+      
       toast({
         title: "Error",
         description: error.message || "Failed to update settings",
         variant: "destructive",
       });
+    },
+    onSettled: () => {
+      // Always refetch after error or success to ensure we have the latest data
+      queryClient.invalidateQueries({ queryKey: ["/api/user/settings"] });
     },
   });
 
