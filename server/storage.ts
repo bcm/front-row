@@ -15,14 +15,15 @@ export interface IStorage {
   updateShow(id: number, show: Partial<InsertShow>): Promise<Show | undefined>;
   syncShowFromTVMaze(showId: number): Promise<Show | undefined>;
   searchShows(query: string): Promise<Show[]>;
-  searchUserShows(userId: string, query: string): Promise<Show[]>;
+  searchUserShows(userId: string, query: string, includeRemoved?: boolean): Promise<Show[]>;
   
   // User show methods
-  getUserShows(userId: string, status?: string): Promise<(UserShow & { show: Show })[]>;
+  getUserShows(userId: string, includeRemoved?: boolean): Promise<(UserShow & { show: Show })[]>;
   getUserShow(userId: string, showId: number): Promise<UserShow | undefined>;
   addUserShow(userShow: InsertUserShow): Promise<UserShow>;
   updateUserShow(userId: string, showId: number, updates: Partial<UserShow>): Promise<UserShow | undefined>;
   removeUserShow(userId: string, showId: number): Promise<boolean>;
+  softRemoveUserShow(userId: string, showId: number): Promise<UserShow | undefined>;
   
   // Episode methods
   getEpisodes(showId: number): Promise<Episode[]>;
@@ -186,7 +187,16 @@ export class DatabaseStorage implements IStorage {
       .where(ilike(shows.name, `%${query}%`));
   }
 
-  async searchUserShows(userId: string, query: string): Promise<Show[]> {
+  async searchUserShows(userId: string, query: string, includeRemoved: boolean = false): Promise<Show[]> {
+    const whereConditions = [
+      eq(userShows.userId, userId),
+      ilike(shows.name, `%${query}%`)
+    ];
+    
+    if (!includeRemoved) {
+      whereConditions.push(eq(userShows.isRemoved, false));
+    }
+
     const results = await db
       .select({
         id: shows.id,
@@ -211,18 +221,19 @@ export class DatabaseStorage implements IStorage {
       })
       .from(userShows)
       .innerJoin(shows, eq(userShows.showId, shows.id))
-      .where(and(
-        eq(userShows.userId, userId),
-        ilike(shows.name, `%${query}%`)
-      ))
+      .where(and(...whereConditions))
       .limit(20);
 
     return results;
   }
 
   // User show methods
-  async getUserShows(userId: string): Promise<(UserShow & { show: Show })[]> {
-    const whereClause = eq(userShows.userId, userId);
+  async getUserShows(userId: string, includeRemoved: boolean = false): Promise<(UserShow & { show: Show })[]> {
+    const whereConditions = [eq(userShows.userId, userId)];
+    
+    if (!includeRemoved) {
+      whereConditions.push(eq(userShows.isRemoved, false));
+    }
 
     const results = await db
       .select({
@@ -230,11 +241,12 @@ export class DatabaseStorage implements IStorage {
         userId: userShows.userId,
         showId: userShows.showId,
         addedAt: userShows.addedAt,
+        isRemoved: userShows.isRemoved,
         show: shows
       })
       .from(userShows)
       .innerJoin(shows, eq(userShows.showId, shows.id))
-      .where(whereClause)
+      .where(and(...whereConditions))
       .orderBy(asc(shows.name));
 
     return results.map(row => ({
@@ -242,6 +254,7 @@ export class DatabaseStorage implements IStorage {
       userId: row.userId,
       showId: row.showId,
       addedAt: row.addedAt,
+      isRemoved: row.isRemoved,
       show: row.show
     }));
   }
@@ -277,6 +290,15 @@ export class DatabaseStorage implements IStorage {
       .where(and(eq(userShows.userId, userId), eq(userShows.showId, showId)))
       .returning({ id: userShows.id });
     return result.length > 0;
+  }
+
+  async softRemoveUserShow(userId: string, showId: number): Promise<UserShow | undefined> {
+    const [removedUserShow] = await db
+      .update(userShows)
+      .set({ isRemoved: true })
+      .where(and(eq(userShows.userId, userId), eq(userShows.showId, showId)))
+      .returning();
+    return removedUserShow || undefined;
   }
 
   // Episode methods
