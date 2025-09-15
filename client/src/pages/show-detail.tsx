@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useParams } from "wouter";
-import { ArrowLeft, Star, Calendar, Clock, Globe, Tv, Users, Monitor, Play, Hash, ExternalLink, RefreshCw } from "lucide-react";
+import { useParams, useLocation } from "wouter";
+import { ArrowLeft, Star, Calendar, Clock, Globe, Tv, Users, Monitor, Play, Hash, ExternalLink, RefreshCw, Trash2 } from "lucide-react";
 import { Link } from "wouter";
 import Header from "@/components/header";
 import { Button } from "@/components/ui/button";
@@ -9,6 +9,18 @@ import { Breadcrumb, BreadcrumbList, BreadcrumbItem, BreadcrumbLink, BreadcrumbP
 import { TVMazeShow } from "@/lib/tvmaze";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { useState } from "react";
 
 interface ShowStats {
   totalEpisodes: number;
@@ -20,6 +32,8 @@ export default function ShowDetail() {
   const { id } = useParams<{ id: string }>();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const [, setLocation] = useLocation();
+  const [isRemoveDialogOpen, setIsRemoveDialogOpen] = useState(false);
   
   const { data: show, isLoading, error } = useQuery<TVMazeShow>({
     queryKey: ['/api/shows', id],
@@ -61,6 +75,35 @@ export default function ShowDetail() {
     },
     enabled: !!id,
   });
+
+  // Remove show mutation
+  const removeShowMutation = useMutation({
+    mutationFn: async () => {
+      return apiRequest("DELETE", `/api/user/shows/${id}`, {});
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/library"] });
+      toast({
+        title: "Show removed",
+        description: `"${show?.name}" has been removed from your library and unfollowed on TVMaze.`,
+      });
+      setIsRemoveDialogOpen(false);
+      // Navigate back to library after removal
+      setLocation("/library");
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Remove failed",
+        description: error.message || `Failed to remove "${show?.name}"`,
+        variant: "destructive",
+      });
+      setIsRemoveDialogOpen(false);
+    },
+  });
+
+  const handleConfirmRemove = () => {
+    removeShowMutation.mutate();
+  };
 
   const syncMutation = useMutation({
     mutationFn: async () => {
@@ -436,12 +479,45 @@ export default function ShowDetail() {
                 <h1 className="text-4xl font-bold text-foreground flex-1 min-w-0 mr-4" data-testid={`text-show-title-${show.id}`}>
                   {show.name}
                 </h1>
-                {show.rating?.average && (
-                  <div className="flex items-center space-x-1 flex-shrink-0" data-testid={`text-show-rating-${show.id}`}>
-                    <Star className="w-5 h-5 text-yellow-500" />
-                    <span className="text-foreground font-medium">{formatRating(show.rating)}</span>
-                  </div>
-                )}
+                <div className="flex items-center space-x-3 flex-shrink-0">
+                  {show.rating?.average && (
+                    <div className="flex items-center space-x-1" data-testid={`text-show-rating-${show.id}`}>
+                      <Star className="w-5 h-5 text-yellow-500" />
+                      <span className="text-foreground font-medium">{formatRating(show.rating)}</span>
+                    </div>
+                  )}
+                  <AlertDialog open={isRemoveDialogOpen} onOpenChange={setIsRemoveDialogOpen}>
+                    <AlertDialogTrigger asChild>
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        className="h-8"
+                        data-testid={`button-remove-show-${show.id}`}
+                      >
+                        <Trash2 className="h-4 w-4 mr-2" />
+                        Remove Show
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Remove Show</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          Are you sure you want to remove "{show.name}" from your library? This will unfollow the show on TVMaze but keep your episode data.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction
+                          onClick={handleConfirmRemove}
+                          disabled={removeShowMutation.isPending}
+                          className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                        >
+                          {removeShowMutation.isPending ? "Removing..." : "Remove Show"}
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                </div>
               </div>
               {show.status && (
                 <Badge className={getStatusColor(show.status)} data-testid={`badge-show-status-${show.id}`}>

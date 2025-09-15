@@ -89,10 +89,11 @@ export default function ShowCard({ userShow, variant = "default", onRemove }: Sh
               variant="destructive"
               size="sm"
               onClick={(e) => e.stopPropagation()}
-              className="absolute top-2 right-2 h-6 w-6 p-0"
+              className="absolute top-2 right-2 h-8 w-8 p-0"
+              aria-label="Remove show"
               data-testid={`button-remove-show-${show.id}`}
             >
-              <Trash2 className="h-3 w-3" />
+              <Trash2 className="h-4 w-4" />
             </Button>
           </AlertDialogTrigger>
           <AlertDialogContent>
@@ -138,10 +139,11 @@ export default function ShowCard({ userShow, variant = "default", onRemove }: Sh
               variant="destructive"
               size="sm"
               onClick={(e) => e.stopPropagation()}
-              className="absolute top-2 right-2 h-6 w-6 p-0"
+              className="absolute top-2 right-2 h-8 w-8 p-0"
+              aria-label="Remove show"
               data-testid={`button-remove-show-${show.id}`}
             >
-              <Trash2 className="h-3 w-3" />
+              <Trash2 className="h-4 w-4" />
             </Button>
           </AlertDialogTrigger>
           <AlertDialogContent>
