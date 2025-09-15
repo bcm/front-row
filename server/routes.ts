@@ -826,6 +826,56 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // User settings routes
+  app.get("/api/user/settings", async (req, res) => {
+    try {
+      const userId = "demo-user"; // Mock user ID
+      
+      let settings = await storage.getUserSettings(userId);
+      
+      // Create default settings if they don't exist
+      if (!settings) {
+        const defaultSettings = {
+          userId,
+          hideFinishedShows: true,
+        };
+        settings = await storage.createUserSettings(defaultSettings);
+      }
+      
+      res.json(settings);
+    } catch (error) {
+      console.error("Error fetching user settings:", error);
+      res.status(500).json({ error: "Failed to fetch user settings" });
+    }
+  });
+
+  app.patch("/api/user/settings", async (req, res) => {
+    try {
+      const userId = "demo-user"; // Mock user ID
+      const updates = req.body;
+      
+      // Ensure user settings exist first
+      let settings = await storage.getUserSettings(userId);
+      if (!settings) {
+        const defaultSettings = {
+          userId,
+          hideFinishedShows: true,
+        };
+        settings = await storage.createUserSettings(defaultSettings);
+      }
+      
+      const updatedSettings = await storage.updateUserSettings(userId, updates);
+      if (!updatedSettings) {
+        return res.status(404).json({ error: "Settings not found" });
+      }
+      
+      res.json(updatedSettings);
+    } catch (error) {
+      console.error("Error updating user settings:", error);
+      res.status(500).json({ error: "Failed to update user settings" });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }
