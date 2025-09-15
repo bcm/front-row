@@ -548,10 +548,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const userId = "demo-user"; // Mock user ID
       const { showId } = req.params;
+      const apiKey = process.env.TVMAZE_API_KEY;
+      const username = process.env.TVMAZE_USERNAME;
 
-      const success = await storage.removeUserShow(userId, parseInt(showId));
-      if (!success) {
+      // Soft remove the show from user's library
+      const removedShow = await storage.softRemoveUserShow(userId, parseInt(showId));
+      if (!removedShow) {
         return res.status(404).json({ error: "Show not found in your collection" });
+      }
+
+      // Try to unfollow the show on TVMaze if credentials are available
+      if (apiKey && username) {
+        try {
+          const credentials = Buffer.from(`${username}:${apiKey}`).toString('base64');
+          const unfollowResponse = await fetch(`https://api.tvmaze.com/v1/user/follows/shows/${showId}`, {
+            method: 'DELETE',
+            headers: {
+              'Accept': 'application/json',
+              'Authorization': `Basic ${credentials}`
+            }
+          });
+
+          if (unfollowResponse.ok) {
+            console.log(`Successfully unfollowed show ${showId} on TVMaze`);
+          } else if (unfollowResponse.status !== 404) {
+            console.warn(`Failed to unfollow show ${showId} on TVMaze: ${unfollowResponse.status}`);
+          }
+        } catch (unfollowError) {
+          console.error(`Error unfollowing show ${showId} on TVMaze:`, unfollowError);
+        }
       }
 
       res.status(204).send();
