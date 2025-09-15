@@ -62,6 +62,13 @@ export const userEpisodes = pgTable("user_episodes", {
   uniqueUserEpisode: unique().on(table.userId, table.episodeId),
 }));
 
+export const userSettings = pgTable("user_settings", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().unique(),
+  hideFinishedShows: boolean("hide_finished_shows").notNull().default(true),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
 export const insertUserSchema = createInsertSchema(users).pick({
   username: true,
   password: true,
@@ -85,6 +92,11 @@ export const insertUserEpisodeSchema = createInsertSchema(userEpisodes).omit({
   triagedAt: true,
 });
 
+export const insertUserSettingsSchema = createInsertSchema(userSettings).omit({
+  id: true,
+  updatedAt: true,
+});
+
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
 export type Show = typeof shows.$inferSelect;
@@ -95,3 +107,5 @@ export type Episode = typeof episodes.$inferSelect;
 export type InsertEpisode = z.infer<typeof insertEpisodeSchema>;
 export type UserEpisode = typeof userEpisodes.$inferSelect;
 export type InsertUserEpisode = z.infer<typeof insertUserEpisodeSchema>;
+export type UserSettings = typeof userSettings.$inferSelect;
+export type InsertUserSettings = z.infer<typeof insertUserSettingsSchema>;
