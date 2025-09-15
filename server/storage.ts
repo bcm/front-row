@@ -1,5 +1,5 @@
-import { type User, type InsertUser, type Show, type InsertShow, type UserShow, type InsertUserShow, type Episode, type InsertEpisode, type UserEpisode, type InsertUserEpisode } from "@shared/schema";
-import { users, shows, userShows, episodes, userEpisodes } from "@shared/schema";
+import { type User, type InsertUser, type Show, type InsertShow, type UserShow, type InsertUserShow, type Episode, type InsertEpisode, type UserEpisode, type InsertUserEpisode, type UserSettings, type InsertUserSettings } from "@shared/schema";
+import { users, shows, userShows, episodes, userEpisodes, userSettings } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, ilike, inArray, desc, asc, lte, sql } from "drizzle-orm";
 
@@ -37,6 +37,11 @@ export interface IStorage {
   addUserEpisode(userEpisode: InsertUserEpisode): Promise<UserEpisode>;
   updateUserEpisode(userId: string, episodeId: number, updates: Partial<UserEpisode>): Promise<UserEpisode | undefined>;
   getUserEpisode(userId: string, episodeId: number): Promise<UserEpisode | undefined>;
+  
+  // User settings methods
+  getUserSettings(userId: string): Promise<UserSettings | undefined>;
+  createUserSettings(userSettings: InsertUserSettings): Promise<UserSettings>;
+  updateUserSettings(userId: string, settings: Partial<UserSettings>): Promise<UserSettings | undefined>;
 }
 
 
@@ -520,6 +525,32 @@ export class DatabaseStorage implements IStorage {
       .where(and(eq(userEpisodes.userId, userId), eq(userEpisodes.episodeId, episodeId)))
       .returning();
     return updatedUserEpisode || undefined;
+  }
+
+  // User settings methods
+  async getUserSettings(userId: string): Promise<UserSettings | undefined> {
+    const [settings] = await db
+      .select()
+      .from(userSettings)
+      .where(eq(userSettings.userId, userId));
+    return settings || undefined;
+  }
+
+  async createUserSettings(insertUserSettings: InsertUserSettings): Promise<UserSettings> {
+    const [settings] = await db
+      .insert(userSettings)
+      .values([insertUserSettings])
+      .returning();
+    return settings;
+  }
+
+  async updateUserSettings(userId: string, updates: Partial<UserSettings>): Promise<UserSettings | undefined> {
+    const [updatedSettings] = await db
+      .update(userSettings)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(userSettings.userId, userId))
+      .returning();
+    return updatedSettings || undefined;
   }
 }
 
