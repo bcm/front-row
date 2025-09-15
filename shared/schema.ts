@@ -36,6 +36,7 @@ export const userShows = pgTable("user_shows", {
   userId: varchar("user_id").notNull(),
   showId: integer("show_id").notNull(),
   addedAt: timestamp("added_at").defaultNow(),
+  isRemoved: boolean("is_removed").notNull().default(false),
 });
 
 export const episodes = pgTable("episodes", {
