@@ -410,8 +410,13 @@ export class DatabaseStorage implements IStorage {
       .from(userEpisodes)
       .innerJoin(episodes, eq(userEpisodes.episodeId, episodes.id))
       .innerJoin(shows, eq(episodes.showId, shows.id))
+      .innerJoin(userShows, and(
+        eq(userShows.showId, shows.id),
+        eq(userShows.userId, userId)
+      ))
       .where(and(
         eq(userEpisodes.userId, userId),
+        eq(userShows.isRemoved, false),
         ilike(episodes.name, `%${query}%`)
       ))
       .orderBy(asc(episodes.airdate))

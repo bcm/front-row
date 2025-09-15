@@ -73,6 +73,27 @@ export default function Header({ onSearch }: HeaderProps) {
     return episode.name;
   };
 
+  // Group and sort search results
+  const groupedResults = useMemo(() => {
+    if (!searchResults || searchResults.length === 0) {
+      return { shows: [], episodes: [] };
+    }
+
+    const shows = searchResults
+      .filter((result: SearchResult) => result.resultType === 'show')
+      .sort((a: SearchResult, b: SearchResult) => 
+        a.name.toLowerCase().localeCompare(b.name.toLowerCase())
+      );
+
+    const episodes = searchResults
+      .filter((result: SearchResult) => result.resultType === 'episode')
+      .sort((a: SearchResult, b: SearchResult) => 
+        a.name.toLowerCase().localeCompare(b.name.toLowerCase())
+      );
+
+    return { shows, episodes };
+  }, [searchResults]);
+
   const tabs = [
     { id: "dashboard", label: "Dashboard", href: "/" },
     { id: "library", label: "Library", href: "/library" },
@@ -118,7 +139,7 @@ export default function Header({ onSearch }: HeaderProps) {
               <Search className="absolute left-3 top-2.5 h-5 w-5 text-muted-foreground" />
               
               {/* Search Dropdown */}
-              {showDropdown && (searchResults?.length > 0 || isLoading) && (
+              {showDropdown && ((groupedResults.shows.length > 0 || groupedResults.episodes.length > 0) || isLoading) && (
                 <div className="absolute top-full left-0 right-0 mt-1 bg-card border border-border rounded-lg shadow-lg z-50 max-h-96 overflow-y-auto">
                   {isLoading ? (
                     <div className="p-4 text-sm text-muted-foreground">
@@ -126,43 +147,91 @@ export default function Header({ onSearch }: HeaderProps) {
                     </div>
                   ) : (
                     <div className="py-2">
-                      {searchResults?.map((result: SearchResult, index: number) => (
-                        <button
-                          key={`${result.resultType}-${result.id}`}
-                          onClick={() => handleResultClick(result)}
-                          data-testid={`search-result-${result.resultType}-${index}`}
-                          className="w-full px-4 py-3 text-left hover:bg-muted flex items-center space-x-3"
-                        >
-                          <div className="w-8 h-8 bg-muted rounded overflow-hidden flex items-center justify-center">
-                            {result.image?.medium ? (
-                              <img 
-                                src={result.image.medium} 
-                                alt={result.name}
-                                className="w-full h-full object-cover"
-                              />
-                            ) : (
-                              result.resultType === 'show' ? (
-                                <Tv className="w-4 h-4 text-muted-foreground" />
-                              ) : (
-                                <Film className="w-4 h-4 text-muted-foreground" />
-                              )
-                            )}
+                      {/* Shows Section */}
+                      {groupedResults.shows.length > 0 && (
+                        <div data-testid="section-shows">
+                          <div className="px-4 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wider border-b border-border">
+                            Shows ({groupedResults.shows.length})
                           </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="text-sm font-medium text-foreground truncate">
-                              {result.resultType === 'episode' ? formatEpisodeTitle(result) : result.name}
-                            </div>
-                            {result.resultType === 'episode' && result.show && (
-                              <div className="text-xs text-muted-foreground truncate">
-                                {result.show.name}
+                          {groupedResults.shows.map((result: SearchResult, index: number) => (
+                            <button
+                              key={`show-${result.id}`}
+                              onClick={() => handleResultClick(result)}
+                              data-testid={`item-show-${result.id}`}
+                              className="w-full px-4 py-3 text-left hover:bg-muted flex items-center space-x-3"
+                            >
+                              <div className="w-8 h-8 bg-muted rounded overflow-hidden flex items-center justify-center">
+                                {result.image?.medium ? (
+                                  <img 
+                                    src={result.image.medium} 
+                                    alt={result.name}
+                                    className="w-full h-full object-cover"
+                                  />
+                                ) : (
+                                  <Tv className="w-4 h-4 text-muted-foreground" />
+                                )}
                               </div>
-                            )}
-                            <div className="text-xs text-muted-foreground">
-                              {result.resultType === 'show' ? 'TV Show' : 'Episode'}
-                            </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="text-sm font-medium text-foreground truncate">
+                                  {result.name}
+                                </div>
+                                <div className="text-xs text-muted-foreground">
+                                  TV Show
+                                </div>
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                      
+                      {/* Episodes Section */}
+                      {groupedResults.episodes.length > 0 && (
+                        <div data-testid="section-episodes">
+                          <div className="px-4 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wider border-b border-border">
+                            Episodes ({groupedResults.episodes.length})
                           </div>
-                        </button>
-                      ))}
+                          {groupedResults.episodes.map((result: SearchResult, index: number) => (
+                            <button
+                              key={`episode-${result.id}`}
+                              onClick={() => handleResultClick(result)}
+                              data-testid={`item-episode-${result.id}`}
+                              className="w-full px-4 py-3 text-left hover:bg-muted flex items-center space-x-3"
+                            >
+                              <div className="w-8 h-8 bg-muted rounded overflow-hidden flex items-center justify-center">
+                                {result.image?.medium ? (
+                                  <img 
+                                    src={result.image.medium} 
+                                    alt={result.name}
+                                    className="w-full h-full object-cover"
+                                  />
+                                ) : (
+                                  <Film className="w-4 h-4 text-muted-foreground" />
+                                )}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="text-sm font-medium text-foreground truncate">
+                                  {formatEpisodeTitle(result)}
+                                </div>
+                                {result.show && (
+                                  <div className="text-xs text-muted-foreground truncate">
+                                    {result.show.name}
+                                  </div>
+                                )}
+                                <div className="text-xs text-muted-foreground">
+                                  Episode
+                                </div>
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                      
+                      {/* No Results */}
+                      {groupedResults.shows.length === 0 && groupedResults.episodes.length === 0 && (
+                        <div className="p-4 text-sm text-muted-foreground text-center">
+                          No results found
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -206,7 +275,7 @@ export default function Header({ onSearch }: HeaderProps) {
             <Search className="absolute left-3 top-2.5 h-5 w-5 text-muted-foreground" />
             
             {/* Mobile Search Dropdown */}
-            {showDropdown && (searchResults?.length > 0 || isLoading) && (
+            {showDropdown && ((groupedResults.shows.length > 0 || groupedResults.episodes.length > 0) || isLoading) && (
               <div className="absolute top-full left-0 right-0 mt-1 bg-card border border-border rounded-lg shadow-lg z-50 max-h-80 overflow-y-auto">
                 {isLoading ? (
                   <div className="p-4 text-sm text-muted-foreground">
@@ -214,43 +283,91 @@ export default function Header({ onSearch }: HeaderProps) {
                   </div>
                 ) : (
                   <div className="py-2">
-                    {searchResults?.map((result: SearchResult, index: number) => (
-                      <button
-                        key={`mobile-${result.resultType}-${result.id}`}
-                        onClick={() => handleResultClick(result)}
-                        data-testid={`search-result-mobile-${result.resultType}-${index}`}
-                        className="w-full px-4 py-3 text-left hover:bg-muted flex items-center space-x-3"
-                      >
-                        <div className="w-8 h-8 bg-muted rounded overflow-hidden flex items-center justify-center">
-                          {result.image?.medium ? (
-                            <img 
-                              src={result.image.medium} 
-                              alt={result.name}
-                              className="w-full h-full object-cover"
-                            />
-                          ) : (
-                            result.resultType === 'show' ? (
-                              <Tv className="w-4 h-4 text-muted-foreground" />
-                            ) : (
-                              <Film className="w-4 h-4 text-muted-foreground" />
-                            )
-                          )}
+                    {/* Shows Section */}
+                    {groupedResults.shows.length > 0 && (
+                      <div data-testid="section-shows-mobile">
+                        <div className="px-4 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wider border-b border-border">
+                          Shows ({groupedResults.shows.length})
                         </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="text-sm font-medium text-foreground truncate">
-                            {result.resultType === 'episode' ? formatEpisodeTitle(result) : result.name}
-                          </div>
-                          {result.resultType === 'episode' && result.show && (
-                            <div className="text-xs text-muted-foreground truncate">
-                              {result.show.name}
+                        {groupedResults.shows.map((result: SearchResult) => (
+                          <button
+                            key={`mobile-show-${result.id}`}
+                            onClick={() => handleResultClick(result)}
+                            data-testid={`item-show-mobile-${result.id}`}
+                            className="w-full px-4 py-3 text-left hover:bg-muted flex items-center space-x-3"
+                          >
+                            <div className="w-8 h-8 bg-muted rounded overflow-hidden flex items-center justify-center">
+                              {result.image?.medium ? (
+                                <img 
+                                  src={result.image.medium} 
+                                  alt={result.name}
+                                  className="w-full h-full object-cover"
+                                />
+                              ) : (
+                                <Tv className="w-4 h-4 text-muted-foreground" />
+                              )}
                             </div>
-                          )}
-                          <div className="text-xs text-muted-foreground">
-                            {result.resultType === 'show' ? 'TV Show' : 'Episode'}
-                          </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="text-sm font-medium text-foreground truncate">
+                                {result.name}
+                              </div>
+                              <div className="text-xs text-muted-foreground">
+                                TV Show
+                              </div>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    
+                    {/* Episodes Section */}
+                    {groupedResults.episodes.length > 0 && (
+                      <div data-testid="section-episodes-mobile">
+                        <div className="px-4 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wider border-b border-border">
+                          Episodes ({groupedResults.episodes.length})
                         </div>
-                      </button>
-                    ))}
+                        {groupedResults.episodes.map((result: SearchResult) => (
+                          <button
+                            key={`mobile-episode-${result.id}`}
+                            onClick={() => handleResultClick(result)}
+                            data-testid={`item-episode-mobile-${result.id}`}
+                            className="w-full px-4 py-3 text-left hover:bg-muted flex items-center space-x-3"
+                          >
+                            <div className="w-8 h-8 bg-muted rounded overflow-hidden flex items-center justify-center">
+                              {result.image?.medium ? (
+                                <img 
+                                  src={result.image.medium} 
+                                  alt={result.name}
+                                  className="w-full h-full object-cover"
+                                />
+                              ) : (
+                                <Film className="w-4 h-4 text-muted-foreground" />
+                              )}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="text-sm font-medium text-foreground truncate">
+                                {formatEpisodeTitle(result)}
+                              </div>
+                              {result.show && (
+                                <div className="text-xs text-muted-foreground truncate">
+                                  {result.show.name}
+                                </div>
+                              )}
+                              <div className="text-xs text-muted-foreground">
+                                Episode
+                              </div>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    
+                    {/* No Results */}
+                    {groupedResults.shows.length === 0 && groupedResults.episodes.length === 0 && (
+                      <div className="p-4 text-sm text-muted-foreground text-center">
+                        No results found
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
