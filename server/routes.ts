@@ -274,17 +274,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Library search routes
   app.get("/api/search", async (req, res) => {
     try {
-      const { q } = req.query;
+      const { q, includeRemoved } = req.query;
       if (!q) {
         return res.status(400).json({ error: "Query parameter 'q' is required" });
       }
 
       const query = q as string;
       const userId = "demo-user"; // Mock user ID
+      const shouldIncludeRemoved = includeRemoved === 'true';
       
       // Search both shows and episodes in user's library in parallel
       const [shows, episodes] = await Promise.all([
-        storage.searchUserShows(userId, query),
+        storage.searchUserShows(userId, query, shouldIncludeRemoved),
         storage.searchUserEpisodes(userId, query)
       ]);
 
