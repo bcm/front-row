@@ -7,6 +7,18 @@ import { useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Trash2 } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { useState } from "react";
 
 interface ShowCardProps {
   userShow: UserShow & { show: Show };
@@ -17,6 +29,7 @@ interface ShowCardProps {
 export default function ShowCard({ userShow, variant = "default", onRemove }: ShowCardProps) {
   const { show } = userShow;
   const { toast } = useToast();
+  const [isRemoveDialogOpen, setIsRemoveDialogOpen] = useState(false);
 
   // Remove show mutation
   const removeShowMutation = useMutation({
@@ -29,6 +42,7 @@ export default function ShowCard({ userShow, variant = "default", onRemove }: Sh
         title: "Show removed",
         description: `"${show.name}" has been removed from your library and unfollowed on TVMaze.`,
       });
+      setIsRemoveDialogOpen(false);
       if (onRemove) {
         onRemove();
       }
@@ -39,11 +53,11 @@ export default function ShowCard({ userShow, variant = "default", onRemove }: Sh
         description: error.message || `Failed to remove "${show.name}"`,
         variant: "destructive",
       });
+      setIsRemoveDialogOpen(false);
     },
   });
 
-  const handleRemoveShow = (e: React.MouseEvent) => {
-    e.stopPropagation(); // Prevent navigation when clicking remove button
+  const handleConfirmRemove = () => {
     removeShowMutation.mutate();
   };
 
@@ -59,7 +73,7 @@ export default function ShowCard({ userShow, variant = "default", onRemove }: Sh
 
   if (variant === "compact") {
     return (
-      <div className="show-card bg-card hover:bg-card/80 rounded-lg p-3 transition-all duration-200 cursor-pointer relative group" data-testid={`card-show-${show.id}`}>
+      <div className="show-card bg-card hover:bg-card/80 rounded-lg p-3 transition-all duration-200 cursor-pointer relative" data-testid={`card-show-${show.id}`}>
         <img 
           src={show.image?.medium || "/placeholder-show.jpg"}
           alt={`${show.name} poster`}
@@ -69,16 +83,37 @@ export default function ShowCard({ userShow, variant = "default", onRemove }: Sh
             target.src = "https://via.placeholder.com/120x180/374151/9ca3af?text=" + encodeURIComponent(show.name);
           }}
         />
-        <Button
-          variant="destructive"
-          size="sm"
-          onClick={handleRemoveShow}
-          disabled={removeShowMutation.isPending}
-          className="absolute top-2 right-2 h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
-          data-testid={`button-remove-show-${show.id}`}
-        >
-          <Trash2 className="h-3 w-3" />
-        </Button>
+        <AlertDialog open={isRemoveDialogOpen} onOpenChange={setIsRemoveDialogOpen}>
+          <AlertDialogTrigger asChild>
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={(e) => e.stopPropagation()}
+              className="absolute top-2 right-2 h-6 w-6 p-0"
+              data-testid={`button-remove-show-${show.id}`}
+            >
+              <Trash2 className="h-3 w-3" />
+            </Button>
+          </AlertDialogTrigger>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Remove Show</AlertDialogTitle>
+              <AlertDialogDescription>
+                Are you sure you want to remove "{show.name}" from your library? This will unfollow the show on TVMaze but keep your episode data.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={handleConfirmRemove}
+                disabled={removeShowMutation.isPending}
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              >
+                {removeShowMutation.isPending ? "Removing..." : "Remove Show"}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
         <Link href={`/show/${show.id}`}>
           <h3 className="font-medium text-sm truncate text-foreground hover:text-primary transition-colors" data-testid={`text-show-title-${show.id}`}>
             {show.name}
@@ -94,19 +129,40 @@ export default function ShowCard({ userShow, variant = "default", onRemove }: Sh
   if (variant === "priority") {
     return (
       <div 
-        className="show-card bg-card hover:bg-card/80 rounded-lg p-4 transition-all duration-200 cursor-pointer relative group"
+        className="show-card bg-card hover:bg-card/80 rounded-lg p-4 transition-all duration-200 cursor-pointer relative"
         data-testid={`card-show-${show.id}`}
       >
-        <Button
-          variant="destructive"
-          size="sm"
-          onClick={handleRemoveShow}
-          disabled={removeShowMutation.isPending}
-          className="absolute top-2 right-2 h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
-          data-testid={`button-remove-show-${show.id}`}
-        >
-          <Trash2 className="h-3 w-3" />
-        </Button>
+        <AlertDialog open={isRemoveDialogOpen} onOpenChange={setIsRemoveDialogOpen}>
+          <AlertDialogTrigger asChild>
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={(e) => e.stopPropagation()}
+              className="absolute top-2 right-2 h-6 w-6 p-0"
+              data-testid={`button-remove-show-${show.id}`}
+            >
+              <Trash2 className="h-3 w-3" />
+            </Button>
+          </AlertDialogTrigger>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Remove Show</AlertDialogTitle>
+              <AlertDialogDescription>
+                Are you sure you want to remove "{show.name}" from your library? This will unfollow the show on TVMaze but keep your episode data.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={handleConfirmRemove}
+                disabled={removeShowMutation.isPending}
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              >
+                {removeShowMutation.isPending ? "Removing..." : "Remove Show"}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
         <div className="flex space-x-3 mb-4">
           <img 
             src={show.image?.medium || "/placeholder-show.jpg"}
@@ -133,17 +189,38 @@ export default function ShowCard({ userShow, variant = "default", onRemove }: Sh
   }
 
   return (
-    <div className="show-card bg-card hover:bg-card/80 rounded-lg p-4 transition-all duration-200 cursor-pointer relative group" data-testid={`card-show-${show.id}`}>
-      <Button
-        variant="destructive"
-        size="sm"
-        onClick={handleRemoveShow}
-        disabled={removeShowMutation.isPending}
-        className="absolute top-2 right-2 h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
-        data-testid={`button-remove-show-${show.id}`}
-      >
-        <Trash2 className="h-3 w-3" />
-      </Button>
+    <div className="show-card bg-card hover:bg-card/80 rounded-lg p-4 transition-all duration-200 cursor-pointer relative" data-testid={`card-show-${show.id}`}>
+      <AlertDialog open={isRemoveDialogOpen} onOpenChange={setIsRemoveDialogOpen}>
+        <AlertDialogTrigger asChild>
+          <Button
+            variant="destructive"
+            size="sm"
+            onClick={(e) => e.stopPropagation()}
+            className="absolute top-2 right-2 h-6 w-6 p-0"
+            data-testid={`button-remove-show-${show.id}`}
+          >
+            <Trash2 className="h-3 w-3" />
+          </Button>
+        </AlertDialogTrigger>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove Show</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to remove "{show.name}" from your library? This will unfollow the show on TVMaze but keep your episode data.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleConfirmRemove}
+              disabled={removeShowMutation.isPending}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {removeShowMutation.isPending ? "Removing..." : "Remove Show"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       <div className="flex space-x-3 mb-4">
         <img 
           src={show.image?.medium || "/placeholder-show.jpg"}
