@@ -441,9 +441,10 @@ export class DatabaseStorage implements IStorage {
     // Get today's date in YYYY-MM-DD format for comparison
     const today = new Date().toISOString().split('T')[0];
     
-    // Base conditions: user ID and only aired episodes
+    // Base conditions: user ID, only aired episodes, and only non-removed shows
     const baseConditions = and(
       eq(userEpisodes.userId, userId),
+      eq(userShows.isRemoved, false),
       lte(episodes.airdate, today)
     );
     
@@ -467,6 +468,10 @@ export class DatabaseStorage implements IStorage {
       .from(userEpisodes)
       .innerJoin(episodes, eq(userEpisodes.episodeId, episodes.id))
       .innerJoin(shows, eq(episodes.showId, shows.id))
+      .innerJoin(userShows, and(
+        eq(userShows.showId, shows.id),
+        eq(userShows.userId, userId)
+      ))
       .where(whereClause)
       .orderBy(desc(episodes.airdate));
 
