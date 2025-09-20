@@ -152,10 +152,13 @@ export default function Dashboard() {
     if (isToggling || !newMode || newMode === showMode) return; // Prevent multiple toggles and same mode
     
     const validMode = newMode as "personal" | "shared";
+    const previousMode = showMode;
     
+    // Optimistically update the UI immediately
+    setShowMode(validMode);
     setIsToggling(true);
     
-    // Prefetch data for the target mode first to ensure smooth transition
+    // Prefetch data for the target mode in background
     try {
       await Promise.all([
         queryClient.prefetchQuery({
@@ -192,14 +195,14 @@ export default function Dashboard() {
         }),
       ]);
       
-      // Now switch the mode optimistically since data is ready
-      setShowMode(validMode);
-      
       toast({
         title: "View updated",
         description: `Now showing ${validMode} shows`,
       });
     } catch (error) {
+      // Revert the optimistic update on error
+      setShowMode(previousMode);
+      
       toast({
         title: "Toggle failed",
         description: "Failed to switch view mode. Please try again.",
