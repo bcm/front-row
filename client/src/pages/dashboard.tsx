@@ -6,11 +6,13 @@ import Header from "@/components/header";
 import EpisodeCard from "@/components/episode-card";
 import FloatingAddButton from "@/components/floating-add-button";
 import AddShowDialog from "@/components/add-show-dialog";
-import { AlertTriangle, PlayCircle, Clock, Eye, Users, ChevronDown, Play, RotateCcw, SkipForward, ArrowDown } from "lucide-react";
+import { AlertTriangle, PlayCircle, Clock, Eye, Users, ChevronDown, Play, RotateCcw, SkipForward, ArrowDown, Share, User } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Link } from "wouter";
 
 export default function Dashboard() {
@@ -30,6 +32,16 @@ export default function Dashboard() {
       const response = await fetch(`/api/user/episodes?status=untriaged`);
       if (!response.ok) throw new Error("Failed to fetch untriaged episodes");
       return response.json() as Promise<(UserEpisode & { episode: Episode & { show: Show } })[]>;
+    },
+  });
+
+  // User shows query to get sharing status
+  const { data: userShows } = useQuery({
+    queryKey: ["/api/user/shows"],
+    queryFn: async () => {
+      const response = await fetch("/api/user/shows");
+      if (!response.ok) throw new Error("Failed to fetch user shows");
+      return response.json() as Promise<{id: string; showId: number; isShared: boolean; addedAt: string}[]>;
     },
   });
 
@@ -294,6 +306,16 @@ export default function Dashboard() {
     }
   };
 
+  // Helper function to get show sharing status
+  const getShowSharingStatus = (showId: number): { isShared?: boolean; userShowId?: string } => {
+    if (!userShows) return {};
+    const userShow = userShows.find(us => us.showId === showId);
+    return {
+      isShared: userShow?.isShared,
+      userShowId: userShow?.id
+    };
+  };
+
   const checkAutoProgression = (episodeId: number, showId: string) => {
     const showData = groupEpisodesByShowAndSeason[showId];
     if (!showData) return;
@@ -426,6 +448,36 @@ export default function Dashboard() {
       toast({
         title: toastTitle,
         description: "Episode status has been updated.",
+      });
+    },
+  });
+
+  // Update show sharing status mutation
+  const updateShowSharingMutation = useMutation({
+    mutationFn: async ({ showId, isShared }: { showId: number; isShared: boolean }) => {
+      return apiRequest("PATCH", `/api/user/shows/${showId}/shared`, { isShared });
+    },
+    onSuccess: (data, variables) => {
+      // Update the userShows cache
+      queryClient.setQueryData(["/api/user/shows"], (oldData: any) => {
+        if (!oldData) return oldData;
+        return oldData.map((userShow: any) => 
+          userShow.showId === variables.showId 
+            ? { ...userShow, isShared: variables.isShared }
+            : userShow
+        );
+      });
+      
+      toast({
+        title: "Show updated",
+        description: `Show marked as ${variables.isShared ? 'shared' : 'personal'}`,
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: "Error",
+        description: "Failed to update show sharing status",
+        variant: "destructive",
       });
     },
   });
@@ -584,14 +636,81 @@ export default function Dashboard() {
                     
                     if (!hasVisibleEpisodes) return null;
                     
+                    const showSharingInfo = getShowSharingStatus(parseInt(showId));
+                    
                     return (
                       <div key={showId} className="space-y-4">
-                        {/* Show Title */}
-                        <Link href={`/show/${showId}`}>
-                          <h3 className="text-lg font-semibold text-foreground border-b border-border pb-2 hover:text-primary transition-colors cursor-pointer">
-                            {showData.show.name}
-                          </h3>
-                        </Link>
+                        {/* Show Title with Sharing Status */}
+                        <div className="flex items-center justify-between border-b border-border pb-2">
+                          <Link href={`/show/${showId}`}>
+                            <h3 className="text-lg font-semibold text-foreground hover:text-primary transition-colors cursor-pointer">
+                              {showData.show.name}
+                            </h3>
+                          </Link>
+                          
+                          {/* Sharing Status and Controls */}
+                          <div className="flex items-center space-x-3">
+                            {showSharingInfo.isShared !== undefined ? (
+                              <>
+                                {/* Current Status Badge */}
+                                <Badge 
+                                  variant={showSharingInfo.isShared ? "default" : "secondary"}
+                                  className="flex items-center space-x-1"
+                                >
+                                  {showSharingInfo.isShared ? (
+                                    <Share className="w-3 h-3" />
+                                  ) : (
+                                    <User className="w-3 h-3" />
+                                  )}
+                                  <span>{showSharingInfo.isShared ? 'Shared' : 'Personal'}</span>
+                                </Badge>
+                                
+                                {/* Change Status Select */}
+                                <Select
+                                  value={showSharingInfo.isShared ? 'shared' : 'personal'}
+                                  onValueChange={(value) => {
+                                    const isShared = value === 'shared';
+                                    updateShowSharingMutation.mutate({
+                                      showId: parseInt(showId),
+                                      isShared
+                                    });
+                                  }}
+                                  disabled={updateShowSharingMutation.isPending}
+                                >
+                                  <SelectTrigger className="w-auto h-8 text-xs">
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="personal">Make Personal</SelectItem>
+                                    <SelectItem value="shared">Make Shared</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              </>
+                            ) : (
+                              <div className="flex items-center space-x-2">
+                                <span className="text-xs text-muted-foreground">Set as:</span>
+                                <Select
+                                  onValueChange={(value) => {
+                                    const isShared = value === 'shared';
+                                    updateShowSharingMutation.mutate({
+                                      showId: parseInt(showId),
+                                      isShared
+                                    });
+                                  }}
+                                  disabled={updateShowSharingMutation.isPending}
+                                >
+                                  <SelectTrigger className="w-auto h-8 text-xs">
+                                    <SelectValue placeholder="Choose..." />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="personal">Personal</SelectItem>
+                                    <SelectItem value="shared">Shared</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                            )}
+                          </div>
+                        </div>
                         
                         {/* Seasons */}
                         <div className="space-y-6">
