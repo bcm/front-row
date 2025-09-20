@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { UserEpisode, Episode, Show } from "@shared/schema";
@@ -6,16 +6,18 @@ import Header from "@/components/header";
 import EpisodeCard from "@/components/episode-card";
 import FloatingAddButton from "@/components/floating-add-button";
 import AddShowDialog from "@/components/add-show-dialog";
-import { AlertTriangle, PlayCircle, Clock, Eye, Users } from "lucide-react";
+import { AlertTriangle, PlayCircle, Clock, Eye, Users, ChevronDown } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/button";
 import { Link } from "wouter";
 
 export default function Dashboard() {
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [showMode, setShowMode] = useState<"personal" | "shared">("personal");
   const [hiddenEpisodes, setHiddenEpisodes] = useState<Set<number>>(new Set());
+  const [expandedSeasons, setExpandedSeasons] = useState<Record<string, Set<number>>>({});
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -56,6 +58,114 @@ export default function Dashboard() {
     },
   });
 
+  // Helper functions for seasonal grouping
+  const groupEpisodesByShowAndSeason = useMemo(() => {
+    if (!untriagedEpisodes) return {};
+    
+    const filteredEpisodes = untriagedEpisodes.filter(userEpisode => !hiddenEpisodes.has(userEpisode.episode.id));
+    
+    const grouped: Record<string, {
+      show: Show;
+      seasons: Record<number, (UserEpisode & { episode: Episode & { show: Show } })[]>;
+      mostRecentSeason: number;
+      allSeasons: number[];
+    }> = {};
+
+    // Group episodes by show, then by season
+    filteredEpisodes.forEach(userEpisode => {
+      const { show } = userEpisode.episode;
+      const season = userEpisode.episode.season || 1;
+      
+      if (!grouped[show.id]) {
+        grouped[show.id] = {
+          show,
+          seasons: {},
+          mostRecentSeason: season,
+          allSeasons: []
+        };
+      }
+      
+      if (!grouped[show.id].seasons[season]) {
+        grouped[show.id].seasons[season] = [];
+      }
+      
+      grouped[show.id].seasons[season].push(userEpisode);
+      
+      // Update most recent season
+      if (season > grouped[show.id].mostRecentSeason) {
+        grouped[show.id].mostRecentSeason = season;
+      }
+    });
+
+    // Sort episodes within each season and collect all seasons
+    Object.values(grouped).forEach(showData => {
+      showData.allSeasons = Object.keys(showData.seasons)
+        .map(Number)
+        .sort((a, b) => b - a); // Sort descending (most recent first)
+      
+      Object.values(showData.seasons).forEach(seasonEpisodes => {
+        seasonEpisodes.sort((a, b) => {
+          const episodeA = a.episode.number || 0;
+          const episodeB = b.episode.number || 0;
+          return episodeA - episodeB;
+        });
+      });
+    });
+
+    return grouped;
+  }, [untriagedEpisodes, hiddenEpisodes]);
+
+  const getVisibleSeasonsForShow = (showId: string, showData: any) => {
+    const expandedForShow = expandedSeasons[showId] || new Set();
+    const { mostRecentSeason, allSeasons } = showData;
+    
+    // Always include the most recent season + any expanded seasons
+    const visibleSeasons = new Set([mostRecentSeason]);
+    Array.from(expandedForShow).forEach((season: number) => visibleSeasons.add(season));
+    
+    // Return sorted array (most recent first)
+    return allSeasons.filter((season: number) => visibleSeasons.has(season));
+  };
+
+  const loadEarlierSeason = (showId: string, currentVisibleSeasons: number[], allSeasons: number[]) => {
+    // Find the next older season to load
+    const oldestVisible = Math.min(...currentVisibleSeasons);
+    const nextOlderSeason = allSeasons.find(season => season < oldestVisible);
+    
+    if (nextOlderSeason) {
+      setExpandedSeasons(prev => ({
+        ...prev,
+        [showId]: new Set([...Array.from(prev[showId] || []), nextOlderSeason])
+      }));
+    }
+  };
+
+  const checkAutoProgression = (episodeId: number, showId: string) => {
+    const showData = groupEpisodesByShowAndSeason[showId];
+    if (!showData) return;
+
+    const visibleSeasons = getVisibleSeasonsForShow(showId, showData);
+    
+    // Check if this was the last episode in any visible season
+    for (const season of visibleSeasons) {
+      const seasonEpisodes = showData.seasons[season] || [];
+      const remainingEpisodes = seasonEpisodes.filter(ep => 
+        ep.episode.id !== episodeId && !hiddenEpisodes.has(ep.episode.id)
+      );
+      
+      // If this season is now empty and there are older seasons available
+      if (remainingEpisodes.length === 0) {
+        const nextOlderSeason = showData.allSeasons.find(s => s < season);
+        if (nextOlderSeason && !visibleSeasons.includes(nextOlderSeason)) {
+          setExpandedSeasons(prev => ({
+            ...prev,
+            [showId]: new Set([...Array.from(prev[showId] || []), nextOlderSeason])
+          }));
+          break;
+        }
+      }
+    }
+  };
 
   // Episode update mutation with optimistic updates
   const updateEpisodeMutation = useMutation({
@@ -167,9 +277,25 @@ export default function Dashboard() {
   });
 
   const handleEpisodeStatusChange = (episodeId: number, status: string) => {
+    // Find the show ID for auto-progression logic
+    let showId = '';
+    if (untriagedEpisodes) {
+      const episode = untriagedEpisodes.find(ep => ep.episode.id === episodeId);
+      if (episode) {
+        showId = String(episode.episode.show.id);
+      }
+    }
+
     // For untriaged episodes, immediately hide them for fast UI response
     if (status !== "untriaged") {
       setHiddenEpisodes(prev => new Set(prev).add(episodeId));
+      
+      // Check for auto-progression after a short delay to allow state updates
+      if (showId) {
+        setTimeout(() => {
+          checkAutoProgression(episodeId, showId);
+        }, 100);
+      }
     }
     updateEpisodeMutation.mutate({ episodeId, status });
   };
@@ -277,32 +403,85 @@ export default function Dashboard() {
                     </div>
                   </div>
                 ))
-              ) : untriagedEpisodes && untriagedEpisodes.length > 0 ? (
-                untriagedEpisodes
-                  .filter(userEpisode => !hiddenEpisodes.has(userEpisode.episode.id))
-                  .sort((a, b) => {
-                    // First sort by show name alphabetically
-                    const showComparison = a.episode.show.name.localeCompare(b.episode.show.name);
-                    if (showComparison !== 0) return showComparison;
+              ) : Object.keys(groupEpisodesByShowAndSeason).length > 0 ? (
+                Object.entries(groupEpisodesByShowAndSeason)
+                  .sort(([, a], [, b]) => a.show.name.localeCompare(b.show.name))
+                  .map(([showId, showData]) => {
+                    const visibleSeasons = getVisibleSeasonsForShow(showId, showData);
                     
-                    // Then sort by season number
-                    const seasonA = a.episode.season || 0;
-                    const seasonB = b.episode.season || 0;
-                    if (seasonA !== seasonB) return seasonA - seasonB;
+                    // Check if this show has any visible episodes
+                    const hasVisibleEpisodes = visibleSeasons.some((season: number) => {
+                      const seasonEpisodes = showData.seasons[season] || [];
+                      return seasonEpisodes.some(ep => !hiddenEpisodes.has(ep.episode.id));
+                    });
                     
-                    // Finally sort by episode number
-                    const episodeA = a.episode.number || 0;
-                    const episodeB = b.episode.number || 0;
-                    return episodeA - episodeB;
+                    if (!hasVisibleEpisodes) return null;
+                    
+                    return (
+                      <div key={showId} className="space-y-4">
+                        {/* Show Title */}
+                        <Link href={`/show/${showId}`}>
+                          <h3 className="text-lg font-semibold text-foreground border-b border-border pb-2 hover:text-primary transition-colors cursor-pointer">
+                            {showData.show.name}
+                          </h3>
+                        </Link>
+                        
+                        {/* Seasons */}
+                        <div className="space-y-6">
+                          {visibleSeasons.map((season: number) => {
+                            const seasonEpisodes = showData.seasons[season] || [];
+                            const visibleEpisodes = seasonEpisodes.filter(ep => !hiddenEpisodes.has(ep.episode.id));
+                            
+                            if (visibleEpisodes.length === 0) return null;
+                            
+                            return (
+                              <div key={season} className="space-y-3">
+                                {/* Season Header */}
+                                <div className="flex items-center justify-between">
+                                  <h4 className="text-md font-medium text-muted-foreground">
+                                    Season {season}
+                                  </h4>
+                                  <div className="text-sm text-muted-foreground">
+                                    {visibleEpisodes.length} episode{visibleEpisodes.length !== 1 ? 's' : ''}
+                                  </div>
+                                </div>
+                                
+                                {/* Episodes */}
+                                <div className="space-y-3">
+                                  {visibleEpisodes.map((userEpisode) => (
+                                    <EpisodeCard
+                                      key={userEpisode.id}
+                                      userEpisode={userEpisode}
+                                      onStatusChange={handleEpisodeStatusChange}
+                                      variant="wide"
+                                    />
+                                  ))}
+                                </div>
+                                
+                                {/* Load Earlier Season Button */}
+                                {season === Math.min(...visibleSeasons) && 
+                                 showData.allSeasons.some(s => s < season) && (
+                                  <div className="flex justify-center pt-2">
+                                    <Button 
+                                      variant="outline" 
+                                      size="sm"
+                                      onClick={() => loadEarlierSeason(showId, visibleSeasons, showData.allSeasons)}
+                                      data-testid={`button-load-earlier-season-${showId}`}
+                                      className="text-muted-foreground hover:text-foreground"
+                                    >
+                                      <ChevronDown className="w-4 h-4 mr-2" />
+                                      Load Earlier Season
+                                    </Button>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
                   })
-                  .map((userEpisode) => (
-                    <EpisodeCard
-                      key={userEpisode.id}
-                      userEpisode={userEpisode}
-                      onStatusChange={handleEpisodeStatusChange}
-                      variant="wide"
-                    />
-                  ))
+                  .filter(Boolean)
               ) : (
                 <div className="col-span-full text-center py-8">
                   <AlertTriangle className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
