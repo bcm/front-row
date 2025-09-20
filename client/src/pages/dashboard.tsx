@@ -15,6 +15,7 @@ import { Link } from "wouter";
 export default function Dashboard() {
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [showMode, setShowMode] = useState<"personal" | "shared">("personal");
+  const [hiddenEpisodes, setHiddenEpisodes] = useState<Set<number>>(new Set());
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -65,9 +66,8 @@ export default function Dashboard() {
       // Cancel any outgoing refetches to avoid overwriting our optimistic update
       await queryClient.cancelQueries({ queryKey: ["/api/user/episodes"] });
 
-      // Snapshot the previous values for rollback
+      // Snapshot the previous values for rollback (excluding untriaged since we use local state now)
       const previousData = {
-        untriaged: queryClient.getQueryData(["/api/user/episodes", "untriaged"]),
         next: queryClient.getQueryData(["/api/user/episodes", "next", showMode]),
         later: queryClient.getQueryData(["/api/user/episodes", "later", showMode]),
         watched: queryClient.getQueryData(["/api/user/episodes", "watched", showMode]),
@@ -75,7 +75,7 @@ export default function Dashboard() {
 
       let updatedEpisodeInfo = null;
 
-      // Find the episode in all query caches and update optimistically
+      // Find the episode in query caches and update optimistically (skip untriaged, handled by local state)
       Object.entries(previousData).forEach(([currentStatus, data]: [string, any]) => {
         if (data && Array.isArray(data)) {
           const episodeIndex = data.findIndex((ep: any) => ep.episode.id === episodeId);
@@ -91,10 +91,7 @@ export default function Dashboard() {
             
             // Remove from current status cache
             const updatedCurrentData = data.filter((_: any, index: number) => index !== episodeIndex);
-            const cacheKey = currentStatus === "untriaged" 
-              ? ["/api/user/episodes", currentStatus] 
-              : ["/api/user/episodes", currentStatus, showMode];
-            queryClient.setQueryData(cacheKey, updatedCurrentData);
+            queryClient.setQueryData(["/api/user/episodes", currentStatus, showMode], updatedCurrentData);
             
             // Add to new status cache with updated status and timestamps
             const updatedEpisode = {
@@ -104,28 +101,47 @@ export default function Dashboard() {
               ...(status === "watched" && { watchedAt: new Date().toISOString() })
             };
             
-            const newStatusCacheKey = status === "untriaged" 
-              ? ["/api/user/episodes", status] 
-              : ["/api/user/episodes", status, showMode];
-            const newStatusData = queryClient.getQueryData(newStatusCacheKey) as any[] || [];
-            queryClient.setQueryData(newStatusCacheKey, [...newStatusData, updatedEpisode]);
+            const newStatusData = queryClient.getQueryData(["/api/user/episodes", status, showMode]) as any[] || [];
+            queryClient.setQueryData(["/api/user/episodes", status, showMode], [...newStatusData, updatedEpisode]);
           }
         }
       });
 
+      // Also check untriaged episodes for episode info (but don't modify cache)
+      if (!updatedEpisodeInfo) {
+        const untriagedData = queryClient.getQueryData(["/api/user/episodes", "untriaged"]) as any[];
+        if (untriagedData) {
+          const episode = untriagedData.find((ep: any) => ep.episode.id === episodeId);
+          if (episode) {
+            updatedEpisodeInfo = {
+              showName: episode.episode.show.name,
+              season: episode.episode.season,
+              number: episode.episode.number
+            };
+          }
+        }
+      }
+
       // Return a context object with the snapshotted value and episode info
-      return { previousData, episodeInfo: updatedEpisodeInfo };
+      return { previousData, episodeInfo: updatedEpisodeInfo, episodeId };
     },
     onError: (err, variables, context) => {
       // If the mutation fails, use the context returned from onMutate to roll back
       if (context?.previousData) {
         Object.entries(context.previousData).forEach(([status, data]) => {
-          const cacheKey = status === "untriaged" 
-            ? ["/api/user/episodes", status] 
-            : ["/api/user/episodes", status, showMode];
-          queryClient.setQueryData(cacheKey, data);
+          queryClient.setQueryData(["/api/user/episodes", status, showMode], data);
         });
       }
+      
+      // Also remove the episode from hiddenEpisodes on error to show it again
+      if (context?.episodeId) {
+        setHiddenEpisodes(prev => {
+          const newSet = new Set(prev);
+          newSet.delete(context.episodeId);
+          return newSet;
+        });
+      }
+      
       toast({
         title: "Error",
         description: "Failed to update episode. Please try again.",
@@ -151,6 +167,10 @@ export default function Dashboard() {
   });
 
   const handleEpisodeStatusChange = (episodeId: number, status: string) => {
+    // For untriaged episodes, immediately hide them for fast UI response
+    if (status !== "untriaged") {
+      setHiddenEpisodes(prev => new Set(prev).add(episodeId));
+    }
     updateEpisodeMutation.mutate({ episodeId, status });
   };
 
@@ -259,6 +279,7 @@ export default function Dashboard() {
                 ))
               ) : untriagedEpisodes && untriagedEpisodes.length > 0 ? (
                 untriagedEpisodes
+                  .filter(userEpisode => !hiddenEpisodes.has(userEpisode.episode.id))
                   .sort((a, b) => {
                     // First sort by show name alphabetically
                     const showComparison = a.episode.show.name.localeCompare(b.episode.show.name);
