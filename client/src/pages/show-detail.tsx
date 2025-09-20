@@ -117,26 +117,68 @@ export default function ShowDetail() {
     },
   });
 
-  // Update shared status mutation
+  // Update shared status mutation with optimistic updates
   const updateSharedStatusMutation = useMutation({
     mutationFn: async (isShared: boolean) => {
       return apiRequest("PATCH", `/api/user/shows/${id}/shared`, { isShared });
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/library"] });
-      queryClient.invalidateQueries({ queryKey: ['/api/user/shows', id] });
-      queryClient.invalidateQueries({ queryKey: ['/api/user/episodes'] });
-      toast({
-        title: "Shared status updated",
-        description: `"${show?.name}" has been ${userShow?.isShared ? 'unmarked' : 'marked'} as shared.`,
+    onMutate: async (isShared: boolean) => {
+      // Cancel any outgoing refetches to avoid overwriting our optimistic update
+      await queryClient.cancelQueries({ queryKey: ['/api/user/shows', id] });
+      await queryClient.cancelQueries({ queryKey: ['/api/library'] });
+
+      // Snapshot the previous values for rollback
+      const previousUserShow = queryClient.getQueryData(['/api/user/shows', id]);
+      const previousLibrary = queryClient.getQueryData(['/api/library']);
+
+      // Optimistically update the user show cache
+      queryClient.setQueryData(['/api/user/shows', id], (old: any) => {
+        if (old) {
+          return { ...old, isShared };
+        }
+        return old;
       });
+
+      // Optimistically update the library cache
+      queryClient.setQueryData(['/api/library'], (old: any) => {
+        if (old && Array.isArray(old)) {
+          return old.map((us: any) => 
+            us?.show?.id === parseInt(id) 
+              ? { ...us, isShared }
+              : us
+          );
+        }
+        return old;
+      });
+
+      return { previousUserShow, previousLibrary, targetValue: isShared };
     },
-    onError: (error: any) => {
+    onError: (error: any, isShared: boolean, context: any) => {
+      // Restore the cache from snapshots on error
+      if (context?.previousUserShow !== undefined) {
+        queryClient.setQueryData(['/api/user/shows', id], context.previousUserShow);
+      }
+      if (context?.previousLibrary !== undefined) {
+        queryClient.setQueryData(['/api/library'], context.previousLibrary);
+      }
+      
       toast({
         title: "Update failed",
         description: error.message || `Failed to update shared status for "${show?.name}"`,
         variant: "destructive",
       });
+    },
+    onSuccess: (data: any, isShared: boolean, context: any) => {
+      toast({
+        title: "Shared status updated",
+        description: `"${show?.name}" has been ${context?.targetValue ? 'marked' : 'unmarked'} as shared.`,
+      });
+    },
+    onSettled: () => {
+      // Invalidate queries to refetch canonical state from server
+      queryClient.invalidateQueries({ queryKey: ["/api/library"] });
+      queryClient.invalidateQueries({ queryKey: ['/api/user/shows', id] });
+      queryClient.invalidateQueries({ queryKey: ['/api/user/episodes'] });
     },
   });
 
