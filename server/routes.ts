@@ -768,6 +768,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "Episode not found in your collection" });
       }
 
+      // If episode is marked as watched, also mark it as watched in TVMaze
+      if (updates.status === "watched") {
+        const apiKey = process.env.TVMAZE_API_KEY;
+        const username = process.env.TVMAZE_USERNAME;
+        
+        if (apiKey && username) {
+          try {
+            const credentials = Buffer.from(`${username}:${apiKey}`).toString('base64');
+            const tvmazeResponse = await fetch(`https://api.tvmaze.com/v1/user/episodes/${episodeId}`, {
+              method: 'PUT',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Basic ${credentials}`
+              },
+              body: JSON.stringify({ type: 1 }) // 1 = watched in TVMaze
+            });
+
+            if (tvmazeResponse.ok) {
+              console.log(`Successfully marked episode ${episodeId} as watched in TVMaze`);
+            } else if (tvmazeResponse.status === 404) {
+              // Episode might not exist in user's TVMaze profile, which is fine
+              console.log(`Episode ${episodeId} not found in TVMaze user profile (user might not follow this show)`);
+            } else {
+              console.warn(`Failed to mark episode ${episodeId} as watched in TVMaze: ${tvmazeResponse.status}`);
+              const errorText = await tvmazeResponse.text();
+              console.warn(`TVMaze error response: ${errorText}`);
+            }
+          } catch (tvmazeError) {
+            console.error(`Error syncing episode ${episodeId} to TVMaze:`, tvmazeError);
+            // Don't fail the main request if TVMaze sync fails
+          }
+        } else {
+          console.log("TVMaze credentials not configured, skipping sync");
+        }
+      }
+
       res.json(updatedUserEpisode);
     } catch (error) {
       console.error("Error updating user episode:", error);
