@@ -776,7 +776,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (apiKey && username) {
           try {
             const credentials = Buffer.from(`${username}:${apiKey}`).toString('base64');
-            const tvmazeType = updates.status === "watched" ? 1 : 2; // 1 = watched, 2 = skipped in TVMaze
+            const tvmazeType = updates.status === "watched" ? 0 : 2; // 0 = watched, 1 = acquired, 2 = skipped in TVMaze
             const tvmazeResponse = await fetch(`https://api.tvmaze.com/v1/user/episodes/${episodeId}`, {
               method: 'PUT',
               headers: {
