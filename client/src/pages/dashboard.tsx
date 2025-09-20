@@ -62,7 +62,10 @@ export default function Dashboard() {
   const groupEpisodesByShowAndSeason = useMemo(() => {
     if (!untriagedEpisodes) return {};
     
-    const filteredEpisodes = untriagedEpisodes.filter(userEpisode => !hiddenEpisodes.has(userEpisode.episode.id));
+    const filteredEpisodes = untriagedEpisodes.filter(userEpisode => 
+      !hiddenEpisodes.has(userEpisode.episode.id) && 
+      userEpisode.episode.airdate // Exclude episodes without air dates (future unscheduled episodes)
+    );
     
     const grouped: Record<string, {
       show: Show;
@@ -412,7 +415,7 @@ export default function Dashboard() {
                     // Check if this show has any visible episodes
                     const hasVisibleEpisodes = visibleSeasons.some((season: number) => {
                       const seasonEpisodes = showData.seasons[season] || [];
-                      return seasonEpisodes.some(ep => !hiddenEpisodes.has(ep.episode.id));
+                      return seasonEpisodes.some(ep => !hiddenEpisodes.has(ep.episode.id) && ep.episode.airdate);
                     });
                     
                     if (!hasVisibleEpisodes) return null;
@@ -430,7 +433,7 @@ export default function Dashboard() {
                         <div className="space-y-6">
                           {visibleSeasons.map((season: number) => {
                             const seasonEpisodes = showData.seasons[season] || [];
-                            const visibleEpisodes = seasonEpisodes.filter(ep => !hiddenEpisodes.has(ep.episode.id));
+                            const visibleEpisodes = seasonEpisodes.filter(ep => !hiddenEpisodes.has(ep.episode.id) && ep.episode.airdate);
                             
                             if (visibleEpisodes.length === 0) return null;
                             

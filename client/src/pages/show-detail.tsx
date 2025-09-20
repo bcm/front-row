@@ -481,6 +481,14 @@ export default function ShowDetail() {
   });
 
   const handleEpisodeStatusToggle = (episodeId: number, currentStatus: string) => {
+    // Find the episode to check if it has an airdate
+    const episode = episodes?.find((ep: any) => ep.id === episodeId);
+    
+    // Don't allow status cycling for episodes without air dates (future unscheduled episodes)
+    if (!episode?.airdate) {
+      return;
+    }
+
     // Cycle through all possible statuses: untriaged → next → later → watched → skipped → untriaged
     let newStatus: string;
     
@@ -647,15 +655,18 @@ export default function ShowDetail() {
   };
 
   const getEpisodeStatusBadge = (episode: any) => {
+    // Don't show status badge for episodes without air dates (future unscheduled episodes)
+    if (!episode.airdate) {
+      return null;
+    }
+
     // Don't show status badge for episodes that haven't aired yet
-    if (episode.airdate) {
-      const airDate = new Date(episode.airdate);
-      const today = new Date();
-      today.setHours(0, 0, 0, 0); // Reset time to compare just dates
-      
-      if (airDate > today) {
-        return null; // Episode hasn't aired yet
-      }
+    const airDate = new Date(episode.airdate);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0); // Reset time to compare just dates
+    
+    if (airDate > today) {
+      return null; // Episode hasn't aired yet
     }
 
     const episodeId = episode.id;
