@@ -242,6 +242,7 @@ export class DatabaseStorage implements IStorage {
         showId: userShows.showId,
         addedAt: userShows.addedAt,
         isRemoved: userShows.isRemoved,
+        isShared: userShows.isShared,
         show: shows
       })
       .from(userShows)
@@ -255,6 +256,7 @@ export class DatabaseStorage implements IStorage {
       showId: row.showId,
       addedAt: row.addedAt,
       isRemoved: row.isRemoved,
+      isShared: row.isShared,
       show: row.show
     }));
   }
