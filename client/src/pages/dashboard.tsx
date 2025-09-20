@@ -6,7 +6,7 @@ import Header from "@/components/header";
 import EpisodeCard from "@/components/episode-card";
 import FloatingAddButton from "@/components/floating-add-button";
 import AddShowDialog from "@/components/add-show-dialog";
-import { AlertTriangle, PlayCircle, Clock, Eye, Users, ChevronDown } from "lucide-react";
+import { AlertTriangle, PlayCircle, Clock, Eye, Users, ChevronDown, Play, RotateCcw, SkipForward, ArrowDown } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Label } from "@/components/ui/label";
@@ -430,6 +430,19 @@ export default function Dashboard() {
     },
   });
 
+  // Bulk season status change function
+  const handleBulkSeasonStatusChange = (episodesList: any[], status: string) => {
+    // Update each episode in the season
+    episodesList.forEach(userEpisode => {
+      updateEpisodeMutation.mutate({ episodeId: userEpisode.episode.id, status });
+      
+      // For untriaged episodes, immediately hide them for fast UI response
+      if (status !== "untriaged") {
+        setHiddenEpisodes(prev => new Set(prev).add(userEpisode.episode.id));
+      }
+    });
+  };
+
   const handleEpisodeStatusChange = (episodeId: number, status: string) => {
     // Find the show ID for auto-progression logic
     let showId = '';
@@ -592,11 +605,62 @@ export default function Dashboard() {
                               <div key={season} className="space-y-3">
                                 {/* Season Header */}
                                 <div className="flex items-center justify-between">
-                                  <h4 className="text-md font-medium text-muted-foreground">
-                                    Season {season}
-                                  </h4>
-                                  <div className="text-sm text-muted-foreground">
-                                    {visibleEpisodes.length} episode{visibleEpisodes.length !== 1 ? 's' : ''}
+                                  <div className="flex items-center space-x-4">
+                                    <h4 className="text-md font-medium text-muted-foreground">
+                                      Season {season}
+                                    </h4>
+                                    <div className="text-sm text-muted-foreground">
+                                      {visibleEpisodes.length} episode{visibleEpisodes.length !== 1 ? 's' : ''}
+                                    </div>
+                                  </div>
+                                  
+                                  {/* Bulk Action Buttons */}
+                                  <div className="flex items-center space-x-1">
+                                    <span className="text-xs text-muted-foreground mr-2">Mark all:</span>
+                                    <Button 
+                                      size="sm" 
+                                      variant="outline"
+                                      onClick={() => handleBulkSeasonStatusChange(visibleEpisodes, "next")}
+                                      data-testid={`button-bulk-next-${showId}-${season}`}
+                                      className="h-7 px-2 text-xs hover:bg-green-50 hover:text-green-700 hover:border-green-300"
+                                      title="Mark season as Next"
+                                    >
+                                      <Play className="w-3 h-3 mr-1" />
+                                      Next
+                                    </Button>
+                                    <Button 
+                                      size="sm" 
+                                      variant="outline"
+                                      onClick={() => handleBulkSeasonStatusChange(visibleEpisodes, "later")}
+                                      data-testid={`button-bulk-later-${showId}-${season}`}
+                                      className="h-7 px-2 text-xs hover:bg-blue-50 hover:text-blue-700 hover:border-blue-300"
+                                      title="Mark season as Later"
+                                    >
+                                      <Clock className="w-3 h-3 mr-1" />
+                                      Later
+                                    </Button>
+                                    <Button 
+                                      size="sm" 
+                                      variant="outline"
+                                      onClick={() => handleBulkSeasonStatusChange(visibleEpisodes, "watched")}
+                                      data-testid={`button-bulk-watched-${showId}-${season}`}
+                                      className="h-7 px-2 text-xs hover:bg-purple-50 hover:text-purple-700 hover:border-purple-300"
+                                      title="Mark season as Watched"
+                                    >
+                                      <Eye className="w-3 h-3 mr-1" />
+                                      Watched
+                                    </Button>
+                                    <Button 
+                                      size="sm" 
+                                      variant="outline"
+                                      onClick={() => handleBulkSeasonStatusChange(visibleEpisodes, "skipped")}
+                                      data-testid={`button-bulk-skipped-${showId}-${season}`}
+                                      className="h-7 px-2 text-xs hover:bg-red-50 hover:text-red-700 hover:border-red-300"
+                                      title="Mark season as Skipped"
+                                    >
+                                      <SkipForward className="w-3 h-3 mr-1" />
+                                      Skipped
+                                    </Button>
                                   </div>
                                 </div>
                                 
