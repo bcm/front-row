@@ -711,11 +711,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get user episodes with filtering by status
   app.get("/api/user/episodes", async (req, res) => {
     try {
-      const { status, hideShared } = req.query;
+      const { status, showMode } = req.query;
       const userId = "demo-user"; // Mock user ID
       
-      const hideSharedFlag = hideShared === 'true';
-      const episodes = await storage.getUserEpisodes(userId, status as string, hideSharedFlag);
+      const episodes = await storage.getUserEpisodes(userId, status as string, showMode as string);
       res.json(episodes);
     } catch (error) {
       console.error("Error fetching user episodes:", error);
