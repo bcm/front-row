@@ -230,8 +230,8 @@ export default function Dashboard() {
               disabled={isToggling}
               data-testid="toggle-show-mode"
             />
-            <p className="text-xs text-muted-foreground ml-auto">
-              {showMode === "shared" ? "Viewing shared shows only" : "Viewing personal shows only"}
+            <p className="text-sm font-medium ml-auto">
+              {showMode === "shared" ? "Shared" : "Personal"}
             </p>
           </div>
 
