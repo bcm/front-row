@@ -714,7 +714,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { status, showMode } = req.query;
       const userId = "demo-user"; // Mock user ID
       
-      const episodes = await storage.getUserEpisodes(userId, status as string, showMode as string);
+      // Validate showMode parameter
+      const validShowModes = ['personal', 'shared', 'all'];
+      const parsedShowMode = typeof showMode === 'string' && validShowModes.includes(showMode) 
+        ? showMode 
+        : undefined;
+      
+      const episodes = await storage.getUserEpisodes(userId, status as string, parsedShowMode);
       res.json(episodes);
     } catch (error) {
       console.error("Error fetching user episodes:", error);

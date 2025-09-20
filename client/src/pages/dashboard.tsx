@@ -14,42 +14,42 @@ import { Link } from "wouter";
 
 export default function Dashboard() {
   const [showAddDialog, setShowAddDialog] = useState(false);
-  const [hideSharedShows, setHideSharedShows] = useState(false);
+  const [showMode, setShowMode] = useState<"personal" | "shared">("personal");
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
   // Episode queries
   const { data: untriagedEpisodes, isLoading: untriagedLoading } = useQuery({
-    queryKey: ["/api/user/episodes", "untriaged", hideSharedShows],
+    queryKey: ["/api/user/episodes", "untriaged", showMode],
     queryFn: async () => {
-      const response = await fetch(`/api/user/episodes?status=untriaged&hideShared=${hideSharedShows}`);
+      const response = await fetch(`/api/user/episodes?status=untriaged&showMode=${showMode}`);
       if (!response.ok) throw new Error("Failed to fetch untriaged episodes");
       return response.json() as Promise<(UserEpisode & { episode: Episode & { show: Show } })[]>;
     },
   });
 
   const { data: nextEpisodes, isLoading: nextLoading } = useQuery({
-    queryKey: ["/api/user/episodes", "next", hideSharedShows],
+    queryKey: ["/api/user/episodes", "next", showMode],
     queryFn: async () => {
-      const response = await fetch(`/api/user/episodes?status=next&hideShared=${hideSharedShows}`);
+      const response = await fetch(`/api/user/episodes?status=next&showMode=${showMode}`);
       if (!response.ok) throw new Error("Failed to fetch next episodes");
       return response.json() as Promise<(UserEpisode & { episode: Episode & { show: Show } })[]>;
     },
   });
 
   const { data: laterEpisodes, isLoading: laterLoading } = useQuery({
-    queryKey: ["/api/user/episodes", "later", hideSharedShows],
+    queryKey: ["/api/user/episodes", "later", showMode],
     queryFn: async () => {
-      const response = await fetch(`/api/user/episodes?status=later&hideShared=${hideSharedShows}`);
+      const response = await fetch(`/api/user/episodes?status=later&showMode=${showMode}`);
       if (!response.ok) throw new Error("Failed to fetch later episodes");
       return response.json() as Promise<(UserEpisode & { episode: Episode & { show: Show } })[]>;
     },
   });
 
   const { data: watchedEpisodes, isLoading: watchedLoading } = useQuery({
-    queryKey: ["/api/user/episodes", "watched", hideSharedShows],
+    queryKey: ["/api/user/episodes", "watched", showMode],
     queryFn: async () => {
-      const response = await fetch(`/api/user/episodes?status=watched&hideShared=${hideSharedShows}`);
+      const response = await fetch(`/api/user/episodes?status=watched&showMode=${showMode}`);
       if (!response.ok) throw new Error("Failed to fetch watched episodes");
       return response.json() as Promise<(UserEpisode & { episode: Episode & { show: Show } })[]>;
     },
@@ -67,10 +67,10 @@ export default function Dashboard() {
 
       // Snapshot the previous values for rollback
       const previousData = {
-        untriaged: queryClient.getQueryData(["/api/user/episodes", "untriaged"]),
-        next: queryClient.getQueryData(["/api/user/episodes", "next"]),
-        later: queryClient.getQueryData(["/api/user/episodes", "later"]),
-        watched: queryClient.getQueryData(["/api/user/episodes", "watched"]),
+        untriaged: queryClient.getQueryData(["/api/user/episodes", "untriaged", showMode]),
+        next: queryClient.getQueryData(["/api/user/episodes", "next", showMode]),
+        later: queryClient.getQueryData(["/api/user/episodes", "later", showMode]),
+        watched: queryClient.getQueryData(["/api/user/episodes", "watched", showMode]),
       };
 
       let updatedEpisodeInfo = null;
@@ -91,7 +91,7 @@ export default function Dashboard() {
             
             // Remove from current status cache
             const updatedCurrentData = data.filter((_: any, index: number) => index !== episodeIndex);
-            queryClient.setQueryData(["/api/user/episodes", currentStatus], updatedCurrentData);
+            queryClient.setQueryData(["/api/user/episodes", currentStatus, showMode], updatedCurrentData);
             
             // Add to new status cache with updated status and timestamps
             const updatedEpisode = {
@@ -101,8 +101,8 @@ export default function Dashboard() {
               ...(status === "watched" && { watchedAt: new Date().toISOString() })
             };
             
-            const newStatusData = queryClient.getQueryData(["/api/user/episodes", status]) as any[] || [];
-            queryClient.setQueryData(["/api/user/episodes", status], [...newStatusData, updatedEpisode]);
+            const newStatusData = queryClient.getQueryData(["/api/user/episodes", status, showMode]) as any[] || [];
+            queryClient.setQueryData(["/api/user/episodes", status, showMode], [...newStatusData, updatedEpisode]);
           }
         }
       });
@@ -114,7 +114,7 @@ export default function Dashboard() {
       // If the mutation fails, use the context returned from onMutate to roll back
       if (context?.previousData) {
         Object.entries(context.previousData).forEach(([status, data]) => {
-          queryClient.setQueryData(["/api/user/episodes", status], data);
+          queryClient.setQueryData(["/api/user/episodes", status, showMode], data);
         });
       }
       toast({
@@ -145,6 +145,70 @@ export default function Dashboard() {
     updateEpisodeMutation.mutate({ episodeId, status });
   };
 
+  // Track toggle loading state
+  const [isToggling, setIsToggling] = useState(false);
+
+  const handleToggleShowMode = async () => {
+    if (isToggling) return; // Prevent multiple toggles
+    
+    const newMode = showMode === "personal" ? "shared" : "personal";
+    setIsToggling(true);
+    
+    // Prefetch data for the target mode first to ensure smooth transition
+    try {
+      await Promise.all([
+        queryClient.prefetchQuery({
+          queryKey: ["/api/user/episodes", "untriaged", newMode],
+          queryFn: async () => {
+            const response = await fetch(`/api/user/episodes?status=untriaged&showMode=${newMode}`);
+            if (!response.ok) throw new Error("Failed to fetch untriaged episodes");
+            return response.json();
+          },
+        }),
+        queryClient.prefetchQuery({
+          queryKey: ["/api/user/episodes", "next", newMode],
+          queryFn: async () => {
+            const response = await fetch(`/api/user/episodes?status=next&showMode=${newMode}`);
+            if (!response.ok) throw new Error("Failed to fetch next episodes");
+            return response.json();
+          },
+        }),
+        queryClient.prefetchQuery({
+          queryKey: ["/api/user/episodes", "later", newMode],
+          queryFn: async () => {
+            const response = await fetch(`/api/user/episodes?status=later&showMode=${newMode}`);
+            if (!response.ok) throw new Error("Failed to fetch later episodes");
+            return response.json();
+          },
+        }),
+        queryClient.prefetchQuery({
+          queryKey: ["/api/user/episodes", "watched", newMode],
+          queryFn: async () => {
+            const response = await fetch(`/api/user/episodes?status=watched&showMode=${newMode}`);
+            if (!response.ok) throw new Error("Failed to fetch watched episodes");
+            return response.json();
+          },
+        }),
+      ]);
+      
+      // Now switch the mode optimistically since data is ready
+      setShowMode(newMode);
+      
+      toast({
+        title: "View updated",
+        description: `Now showing ${newMode} shows`,
+      });
+    } catch (error) {
+      toast({
+        title: "Toggle failed",
+        description: "Failed to switch view mode. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsToggling(false);
+    }
+  };
+
 
   return (
     <div className="min-h-screen bg-background">
@@ -153,20 +217,21 @@ export default function Dashboard() {
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="space-y-8">
 
-          {/* Shared Shows Toggle */}
+          {/* Show Mode Toggle */}
           <div className="flex items-center space-x-3 p-4 bg-card rounded-lg border">
             <Users className="w-5 h-5 text-muted-foreground" />
-            <Label htmlFor="hide-shared-toggle" className="text-sm font-medium">
-              Hide shared shows
+            <Label htmlFor="show-mode-toggle" className="text-sm font-medium">
+              Show shared shows
             </Label>
             <Switch
-              id="hide-shared-toggle"
-              checked={hideSharedShows}
-              onCheckedChange={setHideSharedShows}
-              data-testid="toggle-hide-shared"
+              id="show-mode-toggle"
+              checked={showMode === "shared"}
+              onCheckedChange={handleToggleShowMode}
+              disabled={isToggling}
+              data-testid="toggle-show-mode"
             />
             <p className="text-xs text-muted-foreground ml-auto">
-              When enabled, shared shows won't appear in "Next" and "Later" sections
+              {showMode === "shared" ? "Viewing shared shows only" : "Viewing personal shows only"}
             </p>
           </div>
 
