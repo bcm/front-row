@@ -768,30 +768,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "Episode not found in your collection" });
       }
 
-      // If episode is marked as watched, also mark it as watched in TVMaze
-      if (updates.status === "watched") {
+      // If episode is marked as watched or skipped, sync to TVMaze
+      if (updates.status === "watched" || updates.status === "skipped") {
         const apiKey = process.env.TVMAZE_API_KEY;
         const username = process.env.TVMAZE_USERNAME;
         
         if (apiKey && username) {
           try {
             const credentials = Buffer.from(`${username}:${apiKey}`).toString('base64');
+            const tvmazeType = updates.status === "watched" ? 1 : 2; // 1 = watched, 2 = skipped in TVMaze
             const tvmazeResponse = await fetch(`https://api.tvmaze.com/v1/user/episodes/${episodeId}`, {
               method: 'PUT',
               headers: {
                 'Content-Type': 'application/json',
                 'Authorization': `Basic ${credentials}`
               },
-              body: JSON.stringify({ type: 1 }) // 1 = watched in TVMaze
+              body: JSON.stringify({ type: tvmazeType })
             });
 
             if (tvmazeResponse.ok) {
-              console.log(`Successfully marked episode ${episodeId} as watched in TVMaze`);
+              console.log(`Successfully marked episode ${episodeId} as ${updates.status} in TVMaze`);
             } else if (tvmazeResponse.status === 404) {
               // Episode might not exist in user's TVMaze profile, which is fine
               console.log(`Episode ${episodeId} not found in TVMaze user profile (user might not follow this show)`);
             } else {
-              console.warn(`Failed to mark episode ${episodeId} as watched in TVMaze: ${tvmazeResponse.status}`);
+              console.warn(`Failed to mark episode ${episodeId} as ${updates.status} in TVMaze: ${tvmazeResponse.status}`);
               const errorText = await tvmazeResponse.text();
               console.warn(`TVMaze error response: ${errorText}`);
             }

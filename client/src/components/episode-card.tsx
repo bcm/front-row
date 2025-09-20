@@ -2,7 +2,7 @@ import { UserEpisode, Episode, Show } from "@shared/schema";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { Calendar, Clock, Eye, ArrowRight, MoreHorizontal } from "lucide-react";
+import { Calendar, Clock, Eye, ArrowRight, MoreHorizontal, X } from "lucide-react";
 import { Link } from "wouter";
 import { cn } from "@/lib/utils";
 
@@ -148,6 +148,16 @@ export default function EpisodeCard({ userEpisode, onStatusChange, variant = "de
                 <Eye className="w-4 h-4 lg:mr-0 mr-1" />
                 <span className="lg:hidden">Watched</span>
               </ButtonWithTooltip>
+              <ButtonWithTooltip 
+                size="sm" 
+                variant="outline"
+                onClick={() => onStatusChange(episode.id, "skipped")}
+                data-testid={`button-skip-${episode.id}`}
+                tooltip="Skip"
+              >
+                <X className="w-4 h-4 lg:mr-0 mr-1" />
+                <span className="lg:hidden">Skip</span>
+              </ButtonWithTooltip>
             </div>
           </div>
         </div>
@@ -263,6 +273,16 @@ export default function EpisodeCard({ userEpisode, onStatusChange, variant = "de
               <MoreHorizontal className="w-3 h-3 lg:mr-0 mr-1 lg:block hidden" />
               <span className="lg:hidden">Later</span>
             </ButtonWithTooltip>
+            <ButtonWithTooltip 
+              size="sm" 
+              variant="outline"
+              onClick={() => onStatusChange(episode.id, "skipped")}
+              data-testid={`button-skip-${episode.id}`}
+              tooltip="Skip"
+            >
+              <X className="w-3 h-3 lg:mr-0 mr-1" />
+              <span className="lg:hidden">Skip</span>
+            </ButtonWithTooltip>
           </div>
         </div>
       </div>
@@ -340,6 +360,16 @@ export default function EpisodeCard({ userEpisode, onStatusChange, variant = "de
           >
             <Eye className="w-4 h-4 lg:mr-0 mr-1" />
             <span className="lg:hidden">Watched</span>
+          </ButtonWithTooltip>
+          <ButtonWithTooltip 
+            size="sm" 
+            variant="outline"
+            onClick={() => onStatusChange(episode.id, "skipped")}
+            data-testid={`button-skip-${episode.id}`}
+            tooltip="Skip"
+          >
+            <X className="w-4 h-4 lg:mr-0 mr-1" />
+            <span className="lg:hidden">Skip</span>
           </ButtonWithTooltip>
         </div>
       </div>

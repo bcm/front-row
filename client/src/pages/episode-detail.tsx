@@ -83,7 +83,7 @@ export default function EpisodeDetail() {
   const handleEpisodeStatusToggle = (currentStatus: string) => {
     if (!episodeData) return;
     
-    // Cycle through all possible statuses: untriaged → next → later → watched → untriaged
+    // Cycle through all possible statuses: untriaged → next → later → watched → skipped → untriaged
     let newStatus: string;
     
     switch (currentStatus) {
@@ -97,6 +97,9 @@ export default function EpisodeDetail() {
         newStatus = "watched";
         break;
       case "watched":
+        newStatus = "skipped";
+        break;
+      case "skipped":
         newStatus = "untriaged";
         break;
       default:
@@ -147,7 +150,15 @@ export default function EpisodeDetail() {
           </Badge>
         );
       case "skipped":
-        return <Badge className="bg-gray-500/20 text-gray-400 border border-gray-500/30 text-xs">SKIPPED</Badge>;
+        return (
+          <Badge 
+            className="bg-gray-500/20 text-gray-400 border border-gray-500/30 text-xs cursor-pointer hover:bg-muted hover:text-muted-foreground hover:border-muted-foreground/30 transition-colors"
+            onClick={() => handleEpisodeStatusToggle(status)}
+            data-testid={`badge-episode-status-${episodeData.id}`}
+          >
+            SKIPPED
+          </Badge>
+        );
       case "next":
         return (
           <Badge 
