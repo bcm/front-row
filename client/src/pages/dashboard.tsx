@@ -20,9 +20,9 @@ export default function Dashboard() {
 
   // Episode queries
   const { data: untriagedEpisodes, isLoading: untriagedLoading } = useQuery({
-    queryKey: ["/api/user/episodes", "untriaged", showMode],
+    queryKey: ["/api/user/episodes", "untriaged"],
     queryFn: async () => {
-      const response = await fetch(`/api/user/episodes?status=untriaged&showMode=${showMode}`);
+      const response = await fetch(`/api/user/episodes?status=untriaged`);
       if (!response.ok) throw new Error("Failed to fetch untriaged episodes");
       return response.json() as Promise<(UserEpisode & { episode: Episode & { show: Show } })[]>;
     },
@@ -67,7 +67,7 @@ export default function Dashboard() {
 
       // Snapshot the previous values for rollback
       const previousData = {
-        untriaged: queryClient.getQueryData(["/api/user/episodes", "untriaged", showMode]),
+        untriaged: queryClient.getQueryData(["/api/user/episodes", "untriaged"]),
         next: queryClient.getQueryData(["/api/user/episodes", "next", showMode]),
         later: queryClient.getQueryData(["/api/user/episodes", "later", showMode]),
         watched: queryClient.getQueryData(["/api/user/episodes", "watched", showMode]),
@@ -91,7 +91,10 @@ export default function Dashboard() {
             
             // Remove from current status cache
             const updatedCurrentData = data.filter((_: any, index: number) => index !== episodeIndex);
-            queryClient.setQueryData(["/api/user/episodes", currentStatus, showMode], updatedCurrentData);
+            const cacheKey = currentStatus === "untriaged" 
+              ? ["/api/user/episodes", currentStatus] 
+              : ["/api/user/episodes", currentStatus, showMode];
+            queryClient.setQueryData(cacheKey, updatedCurrentData);
             
             // Add to new status cache with updated status and timestamps
             const updatedEpisode = {
@@ -101,8 +104,11 @@ export default function Dashboard() {
               ...(status === "watched" && { watchedAt: new Date().toISOString() })
             };
             
-            const newStatusData = queryClient.getQueryData(["/api/user/episodes", status, showMode]) as any[] || [];
-            queryClient.setQueryData(["/api/user/episodes", status, showMode], [...newStatusData, updatedEpisode]);
+            const newStatusCacheKey = status === "untriaged" 
+              ? ["/api/user/episodes", status] 
+              : ["/api/user/episodes", status, showMode];
+            const newStatusData = queryClient.getQueryData(newStatusCacheKey) as any[] || [];
+            queryClient.setQueryData(newStatusCacheKey, [...newStatusData, updatedEpisode]);
           }
         }
       });
@@ -114,7 +120,10 @@ export default function Dashboard() {
       // If the mutation fails, use the context returned from onMutate to roll back
       if (context?.previousData) {
         Object.entries(context.previousData).forEach(([status, data]) => {
-          queryClient.setQueryData(["/api/user/episodes", status, showMode], data);
+          const cacheKey = status === "untriaged" 
+            ? ["/api/user/episodes", status] 
+            : ["/api/user/episodes", status, showMode];
+          queryClient.setQueryData(cacheKey, data);
         });
       }
       toast({
@@ -161,14 +170,6 @@ export default function Dashboard() {
     // Prefetch data for the target mode in background
     try {
       await Promise.all([
-        queryClient.prefetchQuery({
-          queryKey: ["/api/user/episodes", "untriaged", validMode],
-          queryFn: async () => {
-            const response = await fetch(`/api/user/episodes?status=untriaged&showMode=${validMode}`);
-            if (!response.ok) throw new Error("Failed to fetch untriaged episodes");
-            return response.json();
-          },
-        }),
         queryClient.prefetchQuery({
           queryKey: ["/api/user/episodes", "next", validMode],
           queryFn: async () => {
@@ -220,29 +221,6 @@ export default function Dashboard() {
       
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="space-y-8">
-
-          {/* Show Mode Toggle */}
-          <div className="flex items-center space-x-3 p-4 bg-card rounded-lg border">
-            <Users className="w-5 h-5 text-muted-foreground" />
-            <Label className="text-sm font-medium">
-              Show Mode
-            </Label>
-            <ToggleGroup
-              type="single"
-              value={showMode}
-              onValueChange={handleToggleShowMode}
-              disabled={isToggling}
-              data-testid="toggle-show-mode"
-              className="ml-auto"
-            >
-              <ToggleGroupItem value="personal" aria-label="Personal shows">
-                Personal
-              </ToggleGroupItem>
-              <ToggleGroupItem value="shared" aria-label="Shared shows">
-                Shared
-              </ToggleGroupItem>
-            </ToggleGroup>
-          </div>
 
           {/* New in Feed Section */}
           <section>
@@ -313,6 +291,29 @@ export default function Dashboard() {
               )}
             </div>
           </section>
+
+          {/* Show Mode Toggle */}
+          <div className="flex items-center space-x-3 p-4 bg-card rounded-lg border">
+            <Users className="w-5 h-5 text-muted-foreground" />
+            <Label className="text-sm font-medium">
+              Show Mode
+            </Label>
+            <ToggleGroup
+              type="single"
+              value={showMode}
+              onValueChange={handleToggleShowMode}
+              disabled={isToggling}
+              data-testid="toggle-show-mode"
+              className="ml-auto"
+            >
+              <ToggleGroupItem value="personal" aria-label="Personal shows">
+                Personal
+              </ToggleGroupItem>
+              <ToggleGroupItem value="shared" aria-label="Shared shows">
+                Shared
+              </ToggleGroupItem>
+            </ToggleGroup>
+          </div>
 
           {/* Next to Watch Section */}
           <section>
