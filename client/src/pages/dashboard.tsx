@@ -452,28 +452,42 @@ export default function Dashboard() {
     },
   });
 
-  // Update show sharing status mutation
+  // Update show sharing status mutation with optimistic updates
   const updateShowSharingMutation = useMutation({
     mutationFn: async ({ showId, isShared }: { showId: number; isShared: boolean }) => {
       return apiRequest("PATCH", `/api/user/shows/${showId}/shared`, { isShared });
     },
-    onSuccess: (data, variables) => {
-      // Update the userShows cache
+    onMutate: async ({ showId, isShared }) => {
+      // Cancel any outgoing refetches
+      await queryClient.cancelQueries({ queryKey: ["/api/user/shows"] });
+      
+      // Snapshot the previous value for rollback
+      const previousUserShows = queryClient.getQueryData(["/api/user/shows"]);
+      
+      // Optimistically update the userShows cache
       queryClient.setQueryData(["/api/user/shows"], (oldData: any) => {
         if (!oldData) return oldData;
         return oldData.map((userShow: any) => 
-          userShow.showId === variables.showId 
-            ? { ...userShow, isShared: variables.isShared }
+          userShow.showId === showId 
+            ? { ...userShow, isShared }
             : userShow
         );
       });
       
+      return { previousUserShows };
+    },
+    onSuccess: (data, variables) => {
       toast({
         title: "Show updated",
         description: `Show marked as ${variables.isShared ? 'shared' : 'personal'}`,
       });
     },
-    onError: (error) => {
+    onError: (error, variables, context) => {
+      // Rollback the optimistic update
+      if (context?.previousUserShows) {
+        queryClient.setQueryData(["/api/user/shows"], context.previousUserShows);
+      }
+      
       toast({
         title: "Error",
         description: "Failed to update show sharing status",
@@ -482,17 +496,104 @@ export default function Dashboard() {
     },
   });
 
+  // Bulk season status change mutation with optimistic updates
+  const bulkSeasonStatusMutation = useMutation({
+    mutationFn: async ({ episodesList, status }: { episodesList: any[], status: string }) => {
+      // Send all episode updates in parallel
+      const promises = episodesList.map(userEpisode => 
+        apiRequest("PATCH", `/api/user/episodes/${userEpisode.episode.id}`, { status })
+      );
+      return Promise.all(promises);
+    },
+    onMutate: async ({ episodesList, status }) => {
+      // Cancel any outgoing refetches
+      await queryClient.cancelQueries({ queryKey: ["/api/user/episodes"] });
+
+      // Snapshot the previous values for rollback
+      const previousData = {
+        next: queryClient.getQueryData(["/api/user/episodes", "next", showMode]),
+        later: queryClient.getQueryData(["/api/user/episodes", "later", showMode]),
+        watched: queryClient.getQueryData(["/api/user/episodes", "watched", showMode]),
+      };
+
+      // Immediately hide episodes from untriaged view for fast UI response
+      if (status !== "untriaged") {
+        episodesList.forEach(userEpisode => {
+          setHiddenEpisodes(prev => new Set(prev).add(userEpisode.episode.id));
+        });
+      }
+
+      // Optimistically update query caches for each episode
+      episodesList.forEach(userEpisode => {
+        const episodeId = userEpisode.episode.id;
+        
+        // Remove from current status caches
+        Object.entries(previousData).forEach(([currentStatus, data]: [string, any]) => {
+          if (data && Array.isArray(data)) {
+            const episodeIndex = data.findIndex((ep: any) => ep.episode.id === episodeId);
+            if (episodeIndex !== -1) {
+              const updatedCurrentData = data.filter((_: any, index: number) => index !== episodeIndex);
+              queryClient.setQueryData(["/api/user/episodes", currentStatus, showMode], updatedCurrentData);
+              
+              // Add to new status cache with updated status and timestamps
+              const episode = data[episodeIndex];
+              const updatedEpisode = {
+                ...episode,
+                status,
+                triagedAt: new Date().toISOString(),
+                ...(status === "watched" && { watchedAt: new Date().toISOString() })
+              };
+              
+              const newStatusData = queryClient.getQueryData(["/api/user/episodes", status, showMode]) as any[] || [];
+              queryClient.setQueryData(["/api/user/episodes", status, showMode], [...newStatusData, updatedEpisode]);
+            }
+          }
+        });
+      });
+
+      return { 
+        previousData,
+        episodeIds: episodesList.map(ep => ep.episode.id),
+        showName: episodesList[0]?.episode?.show?.name,
+        season: episodesList[0]?.episode?.season
+      };
+    },
+    onSuccess: (data, variables, context) => {
+      if (context?.showName && context?.season) {
+        toast({
+          title: `${context.showName} Season ${context.season}`,
+          description: `${variables.episodesList.length} episodes marked as ${variables.status}`,
+        });
+      }
+    },
+    onError: (error, variables, context) => {
+      // Rollback optimistic updates
+      if (context?.previousData) {
+        Object.entries(context.previousData).forEach(([status, data]) => {
+          queryClient.setQueryData(["/api/user/episodes", status, showMode], data);
+        });
+      }
+      
+      // Restore hidden episodes
+      if (context?.episodeIds) {
+        setHiddenEpisodes(prev => {
+          const newSet = new Set(prev);
+          context.episodeIds.forEach((id: number) => newSet.delete(id));
+          return newSet;
+        });
+      }
+      
+      toast({
+        title: "Error",
+        description: "Failed to update episodes. Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
   // Bulk season status change function
   const handleBulkSeasonStatusChange = (episodesList: any[], status: string) => {
-    // Update each episode in the season
-    episodesList.forEach(userEpisode => {
-      updateEpisodeMutation.mutate({ episodeId: userEpisode.episode.id, status });
-      
-      // For untriaged episodes, immediately hide them for fast UI response
-      if (status !== "untriaged") {
-        setHiddenEpisodes(prev => new Set(prev).add(userEpisode.episode.id));
-      }
-    });
+    bulkSeasonStatusMutation.mutate({ episodesList, status });
   };
 
   const handleEpisodeStatusChange = (episodeId: number, status: string) => {
