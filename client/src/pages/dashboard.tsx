@@ -651,41 +651,18 @@ export default function Dashboard() {
                           {/* Sharing Status and Controls */}
                           <div className="flex items-center space-x-3">
                             {showSharingInfo.isShared !== undefined ? (
-                              <>
-                                {/* Current Status Badge */}
-                                <Badge 
-                                  variant={showSharingInfo.isShared ? "default" : "secondary"}
-                                  className="flex items-center space-x-1"
-                                >
-                                  {showSharingInfo.isShared ? (
-                                    <Share className="w-3 h-3" />
-                                  ) : (
-                                    <User className="w-3 h-3" />
-                                  )}
-                                  <span>{showSharingInfo.isShared ? 'Shared' : 'Personal'}</span>
-                                </Badge>
-                                
-                                {/* Change Status Select */}
-                                <Select
-                                  value={showSharingInfo.isShared ? 'shared' : 'personal'}
-                                  onValueChange={(value) => {
-                                    const isShared = value === 'shared';
-                                    updateShowSharingMutation.mutate({
-                                      showId: parseInt(showId),
-                                      isShared
-                                    });
-                                  }}
-                                  disabled={updateShowSharingMutation.isPending}
-                                >
-                                  <SelectTrigger className="w-auto h-8 text-xs">
-                                    <SelectValue />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    <SelectItem value="personal">Make Personal</SelectItem>
-                                    <SelectItem value="shared">Make Shared</SelectItem>
-                                  </SelectContent>
-                                </Select>
-                              </>
+                              /* Current Status Badge Only */
+                              <Badge 
+                                variant={showSharingInfo.isShared ? "default" : "secondary"}
+                                className="flex items-center space-x-1"
+                              >
+                                {showSharingInfo.isShared ? (
+                                  <Share className="w-3 h-3" />
+                                ) : (
+                                  <User className="w-3 h-3" />
+                                )}
+                                <span>{showSharingInfo.isShared ? 'Shared' : 'Personal'}</span>
+                              </Badge>
                             ) : (
                               <div className="flex items-center space-x-2">
                                 <span className="text-xs text-muted-foreground">Set as:</span>
