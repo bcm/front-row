@@ -6,47 +6,50 @@ import Header from "@/components/header";
 import EpisodeCard from "@/components/episode-card";
 import FloatingAddButton from "@/components/floating-add-button";
 import AddShowDialog from "@/components/add-show-dialog";
-import { AlertTriangle, PlayCircle, Clock, Eye } from "lucide-react";
+import { AlertTriangle, PlayCircle, Clock, Eye, Users } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 import { Link } from "wouter";
 
 export default function Dashboard() {
   const [showAddDialog, setShowAddDialog] = useState(false);
+  const [hideSharedShows, setHideSharedShows] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
   // Episode queries
   const { data: untriagedEpisodes, isLoading: untriagedLoading } = useQuery({
-    queryKey: ["/api/user/episodes", "untriaged"],
+    queryKey: ["/api/user/episodes", "untriaged", hideSharedShows],
     queryFn: async () => {
-      const response = await fetch("/api/user/episodes?status=untriaged");
+      const response = await fetch(`/api/user/episodes?status=untriaged&hideShared=${hideSharedShows}`);
       if (!response.ok) throw new Error("Failed to fetch untriaged episodes");
       return response.json() as Promise<(UserEpisode & { episode: Episode & { show: Show } })[]>;
     },
   });
 
   const { data: nextEpisodes, isLoading: nextLoading } = useQuery({
-    queryKey: ["/api/user/episodes", "next"],
+    queryKey: ["/api/user/episodes", "next", hideSharedShows],
     queryFn: async () => {
-      const response = await fetch("/api/user/episodes?status=next");
+      const response = await fetch(`/api/user/episodes?status=next&hideShared=${hideSharedShows}`);
       if (!response.ok) throw new Error("Failed to fetch next episodes");
       return response.json() as Promise<(UserEpisode & { episode: Episode & { show: Show } })[]>;
     },
   });
 
   const { data: laterEpisodes, isLoading: laterLoading } = useQuery({
-    queryKey: ["/api/user/episodes", "later"],
+    queryKey: ["/api/user/episodes", "later", hideSharedShows],
     queryFn: async () => {
-      const response = await fetch("/api/user/episodes?status=later");
+      const response = await fetch(`/api/user/episodes?status=later&hideShared=${hideSharedShows}`);
       if (!response.ok) throw new Error("Failed to fetch later episodes");
       return response.json() as Promise<(UserEpisode & { episode: Episode & { show: Show } })[]>;
     },
   });
 
   const { data: watchedEpisodes, isLoading: watchedLoading } = useQuery({
-    queryKey: ["/api/user/episodes", "watched"],
+    queryKey: ["/api/user/episodes", "watched", hideSharedShows],
     queryFn: async () => {
-      const response = await fetch("/api/user/episodes?status=watched");
+      const response = await fetch(`/api/user/episodes?status=watched&hideShared=${hideSharedShows}`);
       if (!response.ok) throw new Error("Failed to fetch watched episodes");
       return response.json() as Promise<(UserEpisode & { episode: Episode & { show: Show } })[]>;
     },
@@ -149,6 +152,23 @@ export default function Dashboard() {
       
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="space-y-8">
+
+          {/* Shared Shows Toggle */}
+          <div className="flex items-center space-x-3 p-4 bg-card rounded-lg border">
+            <Users className="w-5 h-5 text-muted-foreground" />
+            <Label htmlFor="hide-shared-toggle" className="text-sm font-medium">
+              Hide shared shows
+            </Label>
+            <Switch
+              id="hide-shared-toggle"
+              checked={hideSharedShows}
+              onCheckedChange={setHideSharedShows}
+              data-testid="toggle-hide-shared"
+            />
+            <p className="text-xs text-muted-foreground ml-auto">
+              When enabled, shared shows won't appear in "Next" and "Later" sections
+            </p>
+          </div>
 
           {/* New in Feed Section */}
           <section>
