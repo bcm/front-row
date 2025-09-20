@@ -261,14 +261,14 @@ export default function ShowDetail() {
           if (data.type === 'init' || data.type === 'progress') {
             setSyncProgress(prev => ({
               ...prev,
-              status: data.data.status || prev.status,
-              phase: data.data.phase || prev.phase,
-              percent: data.data.percent || prev.percent,
-              completedEpisodes: data.data.completedEpisodes || prev.completedEpisodes,
-              totalEpisodes: data.data.totalEpisodes || prev.totalEpisodes,
+              status: data.data.status ?? prev.status,
+              phase: data.data.phase ?? prev.phase,
+              percent: data.data.percent ?? prev.percent,
+              completedEpisodes: data.data.completedEpisodes ?? prev.completedEpisodes,
+              totalEpisodes: data.data.totalEpisodes ?? prev.totalEpisodes,
               etaSeconds: data.data.etaSeconds,
-              message: data.data.message || prev.message,
-              errors: data.data.errors || prev.errors
+              message: data.data.message ?? prev.message,
+              errors: data.data.errors ?? prev.errors
             }));
           } else if (data.type === 'complete') {
             setSyncProgress(prev => ({

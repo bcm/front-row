@@ -444,6 +444,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     });
   });
 
+  // Get sync job status (for polling fallback)
   app.get("/api/sync/:id/status", (req, res) => {
     const { id } = req.params;
     const job = syncJobManager.getJob(id);
@@ -452,19 +453,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return res.status(404).json({ error: "Job not found" });
     }
 
-    res.json(job);
+    res.json({
+      status: job.status,
+      phase: job.phase,
+      percent: job.percent,
+      completedEpisodes: job.completedEpisodes,
+      totalEpisodes: job.totalEpisodes,
+      etaSeconds: job.etaSeconds,
+      lastMessage: job.lastMessage,
+      errors: job.errors,
+      episodesImported: job.episodesImported,
+      episodesUpdated: job.episodesUpdated
+    });
   });
 
+  // Cancel sync job
   app.delete("/api/sync/:id", (req, res) => {
     const { id } = req.params;
-    const canceled = syncJobManager.cancelJob(id);
+    const job = syncJobManager.getJob(id);
     
-    if (!canceled) {
-      return res.status(404).json({ error: "Job not found or not running" });
+    if (!job) {
+      return res.status(404).json({ error: "Job not found" });
     }
 
-    res.json({ message: "Job canceled successfully" });
+    if (job.status === 'running') {
+      syncJobManager.cancelJob(id);
+      res.json({ message: "Sync job canceled" });
+    } else {
+      res.json({ message: "Job already completed or not running" });
+    }
   });
+
 
   app.get("/api/shows/:id/episodes", async (req, res) => {
     try {

@@ -20,6 +20,7 @@ function Router() {
       <Route path="/shared" component={Shared} />
       <Route path="/settings" component={SettingsPage} />
       <Route path="/show/:id" component={ShowDetail} />
+      <Route path="/shows/:id" component={ShowDetail} />
       <Route path="/episode/:id" component={EpisodeDetail} />
       <Route component={NotFound} />
     </Switch>
