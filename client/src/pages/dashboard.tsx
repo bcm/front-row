@@ -8,7 +8,7 @@ import FloatingAddButton from "@/components/floating-add-button";
 import AddShowDialog from "@/components/add-show-dialog";
 import { AlertTriangle, PlayCircle, Clock, Eye, Users } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { Switch } from "@/components/ui/switch";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Label } from "@/components/ui/label";
 import { Link } from "wouter";
 
@@ -148,43 +148,44 @@ export default function Dashboard() {
   // Track toggle loading state
   const [isToggling, setIsToggling] = useState(false);
 
-  const handleToggleShowMode = async () => {
-    if (isToggling) return; // Prevent multiple toggles
+  const handleToggleShowMode = async (newMode: string) => {
+    if (isToggling || !newMode || newMode === showMode) return; // Prevent multiple toggles and same mode
     
-    const newMode = showMode === "personal" ? "shared" : "personal";
+    const validMode = newMode as "personal" | "shared";
+    
     setIsToggling(true);
     
     // Prefetch data for the target mode first to ensure smooth transition
     try {
       await Promise.all([
         queryClient.prefetchQuery({
-          queryKey: ["/api/user/episodes", "untriaged", newMode],
+          queryKey: ["/api/user/episodes", "untriaged", validMode],
           queryFn: async () => {
-            const response = await fetch(`/api/user/episodes?status=untriaged&showMode=${newMode}`);
+            const response = await fetch(`/api/user/episodes?status=untriaged&showMode=${validMode}`);
             if (!response.ok) throw new Error("Failed to fetch untriaged episodes");
             return response.json();
           },
         }),
         queryClient.prefetchQuery({
-          queryKey: ["/api/user/episodes", "next", newMode],
+          queryKey: ["/api/user/episodes", "next", validMode],
           queryFn: async () => {
-            const response = await fetch(`/api/user/episodes?status=next&showMode=${newMode}`);
+            const response = await fetch(`/api/user/episodes?status=next&showMode=${validMode}`);
             if (!response.ok) throw new Error("Failed to fetch next episodes");
             return response.json();
           },
         }),
         queryClient.prefetchQuery({
-          queryKey: ["/api/user/episodes", "later", newMode],
+          queryKey: ["/api/user/episodes", "later", validMode],
           queryFn: async () => {
-            const response = await fetch(`/api/user/episodes?status=later&showMode=${newMode}`);
+            const response = await fetch(`/api/user/episodes?status=later&showMode=${validMode}`);
             if (!response.ok) throw new Error("Failed to fetch later episodes");
             return response.json();
           },
         }),
         queryClient.prefetchQuery({
-          queryKey: ["/api/user/episodes", "watched", newMode],
+          queryKey: ["/api/user/episodes", "watched", validMode],
           queryFn: async () => {
-            const response = await fetch(`/api/user/episodes?status=watched&showMode=${newMode}`);
+            const response = await fetch(`/api/user/episodes?status=watched&showMode=${validMode}`);
             if (!response.ok) throw new Error("Failed to fetch watched episodes");
             return response.json();
           },
@@ -192,11 +193,11 @@ export default function Dashboard() {
       ]);
       
       // Now switch the mode optimistically since data is ready
-      setShowMode(newMode);
+      setShowMode(validMode);
       
       toast({
         title: "View updated",
-        description: `Now showing ${newMode} shows`,
+        description: `Now showing ${validMode} shows`,
       });
     } catch (error) {
       toast({
@@ -220,19 +221,24 @@ export default function Dashboard() {
           {/* Show Mode Toggle */}
           <div className="flex items-center space-x-3 p-4 bg-card rounded-lg border">
             <Users className="w-5 h-5 text-muted-foreground" />
-            <Label htmlFor="show-mode-toggle" className="text-sm font-medium">
-              Show shared shows
+            <Label className="text-sm font-medium">
+              Show Mode
             </Label>
-            <Switch
-              id="show-mode-toggle"
-              checked={showMode === "shared"}
-              onCheckedChange={handleToggleShowMode}
+            <ToggleGroup
+              type="single"
+              value={showMode}
+              onValueChange={handleToggleShowMode}
               disabled={isToggling}
               data-testid="toggle-show-mode"
-            />
-            <p className="text-sm font-medium ml-auto">
-              {showMode === "shared" ? "Shared" : "Personal"}
-            </p>
+              className="ml-auto"
+            >
+              <ToggleGroupItem value="personal" aria-label="Personal shows">
+                Personal
+              </ToggleGroupItem>
+              <ToggleGroupItem value="shared" aria-label="Shared shows">
+                Shared
+              </ToggleGroupItem>
+            </ToggleGroup>
           </div>
 
           {/* New in Feed Section */}
