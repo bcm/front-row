@@ -369,25 +369,6 @@ export default function Header({ onSearch }: HeaderProps) {
               </div>
             )}
           </div>
-          
-          {/* Mobile Tab Navigation */}
-          <div className="flex space-x-1 mt-4 overflow-x-auto">
-            {tabs.map((tab) => (
-              <Link 
-                key={tab.id}
-                href={tab.href}
-                data-testid={`button-tab-${tab.id}-mobile`}
-                className={cn(
-                  "px-4 py-2 rounded-md text-sm font-medium whitespace-nowrap",
-                  activeTab === tab.id
-                    ? "bg-primary text-primary-foreground"
-                    : "text-muted-foreground hover:text-foreground"
-                )}
-              >
-                {tab.label}
-              </Link>
-            ))}
-          </div>
         </div>
       </div>
     </header>
