@@ -18,6 +18,8 @@ export default function Dashboard() {
   const [showMode, setShowMode] = useState<"personal" | "shared">("personal");
   const [hiddenEpisodes, setHiddenEpisodes] = useState<Set<number>>(new Set());
   const [expandedSeasons, setExpandedSeasons] = useState<Record<string, Set<number>>>({});
+  const [expandedNextSeasons, setExpandedNextSeasons] = useState<Record<string, Set<number>>>({});
+  const [expandedLaterSeasons, setExpandedLaterSeasons] = useState<Record<string, Set<number>>>({});
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -118,6 +120,115 @@ export default function Dashboard() {
     return grouped;
   }, [untriagedEpisodes, hiddenEpisodes]);
 
+  // Group episodes by show and season for next/later episodes (earliest season first)
+  const groupNextEpisodesByShowAndSeason = useMemo(() => {
+    if (!nextEpisodes) return {};
+    
+    const grouped: Record<string, {
+      show: Show;
+      seasons: Record<number, (UserEpisode & { episode: Episode & { show: Show } })[]>;
+      earliestSeason: number;
+      allSeasons: number[];
+    }> = {};
+
+    // Group episodes by show, then by season
+    nextEpisodes.forEach(userEpisode => {
+      const { show } = userEpisode.episode;
+      const season = userEpisode.episode.season || 1;
+      
+      if (!grouped[show.id]) {
+        grouped[show.id] = {
+          show,
+          seasons: {},
+          earliestSeason: season,
+          allSeasons: []
+        };
+      }
+      
+      if (!grouped[show.id].seasons[season]) {
+        grouped[show.id].seasons[season] = [];
+      }
+      
+      grouped[show.id].seasons[season].push(userEpisode);
+      
+      // Update earliest season
+      if (season < grouped[show.id].earliestSeason) {
+        grouped[show.id].earliestSeason = season;
+      }
+    });
+
+    // Sort episodes within each season and collect all seasons
+    Object.values(grouped).forEach(showData => {
+      showData.allSeasons = Object.keys(showData.seasons)
+        .map(Number)
+        .sort((a, b) => a - b); // Sort ascending (earliest first)
+      
+      Object.values(showData.seasons).forEach(seasonEpisodes => {
+        seasonEpisodes.sort((a, b) => {
+          const episodeA = a.episode.number || 0;
+          const episodeB = b.episode.number || 0;
+          return episodeA - episodeB;
+        });
+      });
+    });
+
+    return grouped;
+  }, [nextEpisodes]);
+
+  const groupLaterEpisodesByShowAndSeason = useMemo(() => {
+    if (!laterEpisodes) return {};
+    
+    const grouped: Record<string, {
+      show: Show;
+      seasons: Record<number, (UserEpisode & { episode: Episode & { show: Show } })[]>;
+      earliestSeason: number;
+      allSeasons: number[];
+    }> = {};
+
+    // Group episodes by show, then by season
+    laterEpisodes.forEach(userEpisode => {
+      const { show } = userEpisode.episode;
+      const season = userEpisode.episode.season || 1;
+      
+      if (!grouped[show.id]) {
+        grouped[show.id] = {
+          show,
+          seasons: {},
+          earliestSeason: season,
+          allSeasons: []
+        };
+      }
+      
+      if (!grouped[show.id].seasons[season]) {
+        grouped[show.id].seasons[season] = [];
+      }
+      
+      grouped[show.id].seasons[season].push(userEpisode);
+      
+      // Update earliest season
+      if (season < grouped[show.id].earliestSeason) {
+        grouped[show.id].earliestSeason = season;
+      }
+    });
+
+    // Sort episodes within each season and collect all seasons
+    Object.values(grouped).forEach(showData => {
+      showData.allSeasons = Object.keys(showData.seasons)
+        .map(Number)
+        .sort((a, b) => a - b); // Sort ascending (earliest first)
+      
+      Object.values(showData.seasons).forEach(seasonEpisodes => {
+        seasonEpisodes.sort((a, b) => {
+          const episodeA = a.episode.number || 0;
+          const episodeB = b.episode.number || 0;
+          return episodeA - episodeB;
+        });
+      });
+    });
+
+    return grouped;
+  }, [laterEpisodes]);
+
   const getVisibleSeasonsForShow = (showId: string, showData: any) => {
     const expandedForShow = expandedSeasons[showId] || new Set();
     const { mostRecentSeason, allSeasons } = showData;
@@ -130,6 +241,30 @@ export default function Dashboard() {
     return allSeasons.filter((season: number) => visibleSeasons.has(season));
   };
 
+  const getVisibleSeasonsForNextShow = (showId: string, showData: any) => {
+    const expandedForShow = expandedNextSeasons[showId] || new Set();
+    const { earliestSeason, allSeasons } = showData;
+    
+    // Always include the earliest season + any expanded seasons
+    const visibleSeasons = new Set([earliestSeason]);
+    Array.from(expandedForShow).forEach((season: number) => visibleSeasons.add(season));
+    
+    // Return sorted array (earliest first)
+    return allSeasons.filter((season: number) => visibleSeasons.has(season));
+  };
+
+  const getVisibleSeasonsForLaterShow = (showId: string, showData: any) => {
+    const expandedForShow = expandedLaterSeasons[showId] || new Set();
+    const { earliestSeason, allSeasons } = showData;
+    
+    // Always include the earliest season + any expanded seasons
+    const visibleSeasons = new Set([earliestSeason]);
+    Array.from(expandedForShow).forEach((season: number) => visibleSeasons.add(season));
+    
+    // Return sorted array (earliest first)
+    return allSeasons.filter((season: number) => visibleSeasons.has(season));
+  };
+
   const loadEarlierSeason = (showId: string, currentVisibleSeasons: number[], allSeasons: number[]) => {
     // Find the next older season to load
     const oldestVisible = Math.min(...currentVisibleSeasons);
@@ -139,6 +274,22 @@ export default function Dashboard() {
       setExpandedSeasons(prev => ({
         ...prev,
         [showId]: new Set([...Array.from(prev[showId] || []), nextOlderSeason])
+      }));
+    }
+  };
+
+  const loadNextSeason = (showId: string, currentVisibleSeasons: number[], allSeasons: number[], isNext: boolean = true) => {
+    // Find the next newer season to load
+    const newestVisible = Math.max(...currentVisibleSeasons);
+    const nextNewerSeason = allSeasons.find(season => season > newestVisible);
+    
+    if (nextNewerSeason) {
+      const setExpandedFunction = isNext ? setExpandedNextSeasons : setExpandedLaterSeasons;
+      const currentExpanded = isNext ? expandedNextSeasons : expandedLaterSeasons;
+      
+      setExpandedFunction(prev => ({
+        ...prev,
+        [showId]: new Set([...Array.from(currentExpanded[showId] || []), nextNewerSeason])
       }));
     }
   };
@@ -557,49 +708,76 @@ export default function Dashboard() {
                     </div>
                   ))}
                 </div>
-              ) : nextEpisodes && nextEpisodes.length > 0 ? (
-                Object.entries(
-                  nextEpisodes.reduce((acc, userEpisode) => {
-                    const showName = userEpisode.episode.show.name;
-                    if (!acc[showName]) {
-                      acc[showName] = [];
-                    }
-                    acc[showName].push(userEpisode);
-                    return acc;
-                  }, {} as Record<string, typeof nextEpisodes>)
-                )
-                .sort(([a], [b]) => a.localeCompare(b))
-                .map(([showName, showEpisodes]) => (
-                  <div key={showName} className="space-y-3">
-                    <Link href={`/show/${showEpisodes[0].episode.show.id}`}>
-                      <h3 className="text-lg font-semibold text-foreground border-b border-border pb-2 hover:text-primary transition-colors cursor-pointer">
-                        {showName}
-                      </h3>
-                    </Link>
-                    <div className="space-y-4">
-                      {showEpisodes
-                        .sort((a, b) => {
-                          // Sort by season number first
-                          const seasonA = a.episode.season || 0;
-                          const seasonB = b.episode.season || 0;
-                          if (seasonA !== seasonB) return seasonA - seasonB;
-                          
-                          // Then by episode number within the season
-                          const episodeA = a.episode.number || 0;
-                          const episodeB = b.episode.number || 0;
-                          return episodeA - episodeB;
-                        })
-                        .map((userEpisode) => (
-                          <EpisodeCard
-                            key={userEpisode.id}
-                            userEpisode={userEpisode}
-                            onStatusChange={handleEpisodeStatusChange}
-                            variant="wide"
-                          />
-                        ))}
-                    </div>
-                  </div>
-                ))
+              ) : Object.keys(groupNextEpisodesByShowAndSeason).length > 0 ? (
+                Object.entries(groupNextEpisodesByShowAndSeason)
+                  .sort(([, a], [, b]) => a.show.name.localeCompare(b.show.name))
+                  .map(([showId, showData]) => {
+                    const visibleSeasons = getVisibleSeasonsForNextShow(showId, showData);
+                    
+                    return (
+                      <div key={showId} className="space-y-4">
+                        {/* Show Title */}
+                        <Link href={`/show/${showId}`}>
+                          <h3 className="text-lg font-semibold text-foreground border-b border-border pb-2 hover:text-primary transition-colors cursor-pointer">
+                            {showData.show.name}
+                          </h3>
+                        </Link>
+                        
+                        {/* Seasons */}
+                        <div className="space-y-6">
+                          {visibleSeasons.map((season: number) => {
+                            const seasonEpisodes = showData.seasons[season] || [];
+                            
+                            return (
+                              <div key={season} className="space-y-3">
+                                {/* Season Header */}
+                                <div className="flex items-center justify-between">
+                                  <h4 className="text-md font-medium text-muted-foreground">
+                                    Season {season}
+                                  </h4>
+                                  <div className="text-sm text-muted-foreground">
+                                    {seasonEpisodes.length} episode{seasonEpisodes.length !== 1 ? 's' : ''}
+                                  </div>
+                                </div>
+                                
+                                {/* Episodes */}
+                                <div className="space-y-3">
+                                  {seasonEpisodes.map((userEpisode) => (
+                                    <EpisodeCard
+                                      key={userEpisode.id}
+                                      userEpisode={userEpisode}
+                                      onStatusChange={handleEpisodeStatusChange}
+                                      variant="wide"
+                                    />
+                                  ))}
+                                </div>
+                                
+                                {/* Load Next Season Button */}
+                                {season === Math.max(...visibleSeasons) && 
+                                 showData.allSeasons.some(s => s > season) && (() => {
+                                   const nextNewerSeason = showData.allSeasons.find(s => s > season);
+                                   return (
+                                     <div className="flex justify-center pt-2">
+                                       <Button 
+                                         variant="outline" 
+                                         size="sm"
+                                         onClick={() => loadNextSeason(showId, visibleSeasons, showData.allSeasons, true)}
+                                         data-testid={`button-load-next-season-${showId}`}
+                                         className="text-muted-foreground hover:text-foreground"
+                                       >
+                                         <ChevronDown className="w-4 h-4 mr-2" />
+                                         Load Season {nextNewerSeason}
+                                       </Button>
+                                     </div>
+                                   );
+                                 })()}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })
               ) : (
                 <div className="text-center py-8">
                   <PlayCircle className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
@@ -646,49 +824,76 @@ export default function Dashboard() {
                     </div>
                   ))}
                 </div>
-              ) : laterEpisodes && laterEpisodes.length > 0 ? (
-                Object.entries(
-                  laterEpisodes.reduce((acc, userEpisode) => {
-                    const showName = userEpisode.episode.show.name;
-                    if (!acc[showName]) {
-                      acc[showName] = [];
-                    }
-                    acc[showName].push(userEpisode);
-                    return acc;
-                  }, {} as Record<string, typeof laterEpisodes>)
-                )
-                .sort(([a], [b]) => a.localeCompare(b))
-                .map(([showName, showEpisodes]) => (
-                  <div key={showName} className="space-y-3">
-                    <Link href={`/show/${showEpisodes[0].episode.show.id}`}>
-                      <h3 className="text-lg font-semibold text-foreground border-b border-border pb-2 hover:text-primary transition-colors cursor-pointer">
-                        {showName}
-                      </h3>
-                    </Link>
-                    <div className="space-y-4">
-                      {showEpisodes
-                        .sort((a, b) => {
-                          // Sort by season number
-                          const seasonA = a.episode.season || 0;
-                          const seasonB = b.episode.season || 0;
-                          if (seasonA !== seasonB) return seasonA - seasonB;
-                          
-                          // Then sort by episode number
-                          const episodeA = a.episode.number || 0;
-                          const episodeB = b.episode.number || 0;
-                          return episodeA - episodeB;
-                        })
-                        .map((userEpisode) => (
-                          <EpisodeCard
-                            key={userEpisode.id}
-                            userEpisode={userEpisode}
-                            onStatusChange={handleEpisodeStatusChange}
-                            variant="wide"
-                          />
-                        ))}
-                    </div>
-                  </div>
-                ))
+              ) : Object.keys(groupLaterEpisodesByShowAndSeason).length > 0 ? (
+                Object.entries(groupLaterEpisodesByShowAndSeason)
+                  .sort(([, a], [, b]) => a.show.name.localeCompare(b.show.name))
+                  .map(([showId, showData]) => {
+                    const visibleSeasons = getVisibleSeasonsForLaterShow(showId, showData);
+                    
+                    return (
+                      <div key={showId} className="space-y-4">
+                        {/* Show Title */}
+                        <Link href={`/show/${showId}`}>
+                          <h3 className="text-lg font-semibold text-foreground border-b border-border pb-2 hover:text-primary transition-colors cursor-pointer">
+                            {showData.show.name}
+                          </h3>
+                        </Link>
+                        
+                        {/* Seasons */}
+                        <div className="space-y-6">
+                          {visibleSeasons.map((season: number) => {
+                            const seasonEpisodes = showData.seasons[season] || [];
+                            
+                            return (
+                              <div key={season} className="space-y-3">
+                                {/* Season Header */}
+                                <div className="flex items-center justify-between">
+                                  <h4 className="text-md font-medium text-muted-foreground">
+                                    Season {season}
+                                  </h4>
+                                  <div className="text-sm text-muted-foreground">
+                                    {seasonEpisodes.length} episode{seasonEpisodes.length !== 1 ? 's' : ''}
+                                  </div>
+                                </div>
+                                
+                                {/* Episodes */}
+                                <div className="space-y-3">
+                                  {seasonEpisodes.map((userEpisode) => (
+                                    <EpisodeCard
+                                      key={userEpisode.id}
+                                      userEpisode={userEpisode}
+                                      onStatusChange={handleEpisodeStatusChange}
+                                      variant="wide"
+                                    />
+                                  ))}
+                                </div>
+                                
+                                {/* Load Next Season Button */}
+                                {season === Math.max(...visibleSeasons) && 
+                                 showData.allSeasons.some(s => s > season) && (() => {
+                                   const nextNewerSeason = showData.allSeasons.find(s => s > season);
+                                   return (
+                                     <div className="flex justify-center pt-2">
+                                       <Button 
+                                         variant="outline" 
+                                         size="sm"
+                                         onClick={() => loadNextSeason(showId, visibleSeasons, showData.allSeasons, false)}
+                                         data-testid={`button-load-next-season-later-${showId}`}
+                                         className="text-muted-foreground hover:text-foreground"
+                                       >
+                                         <ChevronDown className="w-4 h-4 mr-2" />
+                                         Load Season {nextNewerSeason}
+                                       </Button>
+                                     </div>
+                                   );
+                                 })()}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })
               ) : (
                 <div className="text-center py-8">
                   <Clock className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
