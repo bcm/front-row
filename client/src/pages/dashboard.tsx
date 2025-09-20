@@ -463,20 +463,23 @@ export default function Dashboard() {
                                 
                                 {/* Load Earlier Season Button */}
                                 {season === Math.min(...visibleSeasons) && 
-                                 showData.allSeasons.some(s => s < season) && (
-                                  <div className="flex justify-center pt-2">
-                                    <Button 
-                                      variant="outline" 
-                                      size="sm"
-                                      onClick={() => loadEarlierSeason(showId, visibleSeasons, showData.allSeasons)}
-                                      data-testid={`button-load-earlier-season-${showId}`}
-                                      className="text-muted-foreground hover:text-foreground"
-                                    >
-                                      <ChevronDown className="w-4 h-4 mr-2" />
-                                      Load Earlier Season
-                                    </Button>
-                                  </div>
-                                )}
+                                 showData.allSeasons.some(s => s < season) && (() => {
+                                   const nextOlderSeason = showData.allSeasons.find(s => s < season);
+                                   return (
+                                     <div className="flex justify-center pt-2">
+                                       <Button 
+                                         variant="outline" 
+                                         size="sm"
+                                         onClick={() => loadEarlierSeason(showId, visibleSeasons, showData.allSeasons)}
+                                         data-testid={`button-load-earlier-season-${showId}`}
+                                         className="text-muted-foreground hover:text-foreground"
+                                       >
+                                         <ChevronDown className="w-4 h-4 mr-2" />
+                                         Load Season {nextOlderSeason}
+                                       </Button>
+                                     </div>
+                                   );
+                                 })()}
                               </div>
                             );
                           })}
