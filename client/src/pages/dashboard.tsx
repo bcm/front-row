@@ -133,8 +133,8 @@ export default function Dashboard() {
       });
     },
     onSuccess: (data, variables, context) => {
-      // Invalidate queries to ensure we have the latest data from server
-      queryClient.invalidateQueries({ queryKey: ["/api/user/episodes"] });
+      // Skip query invalidation for faster processing - rely on optimistic updates
+      // Queries will be refreshed when user navigates or manually refreshes
       
       // Create informative toast message with show name and episode number
       let toastTitle = "Episode updated";
