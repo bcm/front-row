@@ -3,6 +3,157 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { insertShowSchema, insertUserShowSchema, insertEpisodeSchema, insertUserEpisodeSchema } from "@shared/schema";
 import { z } from "zod";
+import { syncJobManager } from "./sync-job-manager";
+
+// Async sync function with progress reporting
+async function performAsyncSync(jobId: string, showId: number): Promise<void> {
+  const reporter = syncJobManager.createReporter(jobId);
+  const userId = "demo-user"; // Mock user ID
+  
+  try {
+    syncJobManager.markJobRunning(jobId);
+    
+    // Phase 1: Sync show details
+    reporter.setPhase('fetch-show', 'Fetching show details...');
+    const syncedShow = await storage.syncShowFromTVMaze(showId);
+    
+    if (!syncedShow) {
+      throw new Error("Show not found or failed to sync");
+    }
+
+    // Phase 2: Fetch scrobble data
+    reporter.setPhase('fetch-scrobbles', 'Fetching watch history from TVMaze...');
+    let scrobbleData = [];
+    const apiKey = process.env.TVMAZE_API_KEY;
+    const username = process.env.TVMAZE_USERNAME;
+    
+    if (apiKey && username) {
+      try {
+        const credentials = Buffer.from(`${username}:${apiKey}`).toString('base64');
+        const scrobbleResponse = await fetch(`https://api.tvmaze.com/v1/scrobble/shows/${showId}`, {
+          headers: {
+            'Accept': 'application/json',
+            'Authorization': `Basic ${credentials}`
+          }
+        });
+
+        if (scrobbleResponse.ok) {
+          scrobbleData = await scrobbleResponse.json();
+        } else if (scrobbleResponse.status !== 404) {
+          reporter.addError(`Error fetching scrobbles: ${scrobbleResponse.status}`);
+        }
+      } catch (scrobbleError) {
+        reporter.addError(`Error fetching scrobble data: ${scrobbleError}`);
+      }
+    }
+
+    // Phase 3: Fetch episodes
+    reporter.setPhase('fetch-episodes', 'Fetching episode list...');
+    const response = await fetch(`https://api.tvmaze.com/shows/${showId}/episodes`);
+    
+    if (!response.ok) {
+      throw new Error(`TVMaze API error: ${response.status}`);
+    }
+
+    const episodes = await response.json();
+    
+    // Phase 4: Process episodes
+    reporter.setPhase('process-episodes', 'Processing episodes...');
+    reporter.setTotal(episodes.length);
+    
+    let episodesImported = 0;
+    let episodesUpdated = 0;
+    
+    for (const episode of episodes) {
+      // Check for cancellation
+      if (reporter.checkCanceled()) {
+        return;
+      }
+
+      try {
+        // Create episode
+        const episodeToStore = insertEpisodeSchema.parse({
+          id: episode.id,
+          showId: showId,
+          season: episode.season,
+          number: episode.number,
+          name: episode.name,
+          summary: episode.summary,
+          airdate: episode.airdate,
+          runtime: episode.runtime,
+          image: episode.image
+        });
+        
+        await storage.createEpisode(episodeToStore);
+
+        // Add user episode if user follows this show
+        const userShow = await storage.getUserShow(userId, showId);
+        if (userShow) {
+          // Check if there's scrobble data for this episode
+          const episodeScrobble = scrobbleData.find((scrobble: any) => 
+            scrobble.episode_id === episode.id
+          );
+
+          let initialStatus = "untriaged";
+          let watchedAt = null;
+
+          // If scrobble data exists, set status accordingly
+          if (episodeScrobble) {
+            // Mark type 0 = watched, Mark type 2 = skipped
+            if (episodeScrobble.type === 0) {
+              initialStatus = "watched";
+              // Use current time if marked_at is 0 (bulk operation)
+              watchedAt = episodeScrobble.marked_at && episodeScrobble.marked_at > 0 
+                ? new Date(episodeScrobble.marked_at) 
+                : new Date();
+            } else if (episodeScrobble.type === 2) {
+              initialStatus = "skipped";
+            }
+          }
+
+          const userEpisodeData = insertUserEpisodeSchema.parse({
+            userId,
+            episodeId: episode.id,
+            status: initialStatus,
+            addedAt: new Date(),
+            ...(watchedAt && { watchedAt })
+          });
+
+          const userEpisode = await storage.addUserEpisode(userEpisodeData);
+          
+          // If episode already existed and we have scrobble data, update its status
+          if (episodeScrobble && userEpisode.id) {
+            const existingUserEpisode = await storage.getUserEpisode(userId, episode.id);
+            if (existingUserEpisode && existingUserEpisode.status !== initialStatus) {
+              const updates: any = { status: initialStatus };
+              if (watchedAt) {
+                updates.watchedAt = watchedAt;
+              }
+              await storage.updateUserEpisode(userId, episode.id, updates);
+              episodesUpdated++;
+            }
+          }
+          
+          episodesImported++;
+        }
+        
+        reporter.incrementCompleted(`Processed episode: ${episode.name || `S${episode.season}E${episode.number}`}`);
+        
+      } catch (episodeError) {
+        reporter.addError(`Error importing episode ${episode.id}: ${episodeError}`);
+      }
+    }
+
+    // Phase 5: Finalize
+    reporter.setPhase('finalize', 'Finishing sync...');
+    
+    syncJobManager.markJobSuccess(jobId, episodesImported, episodesUpdated);
+    
+  } catch (error) {
+    console.error("Error in async sync:", error);
+    syncJobManager.markJobError(jobId, error instanceof Error ? error.message : 'Unknown error');
+  }
+}
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // TVMaze API proxy routes
@@ -220,6 +371,99 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.error("Error syncing show:", error);
       res.status(500).json({ error: "Failed to sync show" });
     }
+  });
+
+  // Async sync endpoints with progress tracking
+  app.post("/api/shows/:id/sync/start", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const showId = parseInt(id);
+      
+      // Create new sync job
+      const jobId = syncJobManager.createJob(showId);
+      
+      // Start async sync process
+      setImmediate(async () => {
+        await performAsyncSync(jobId, showId);
+      });
+      
+      res.json({ jobId });
+    } catch (error) {
+      console.error("Error starting async sync:", error);
+      res.status(500).json({ error: "Failed to start sync" });
+    }
+  });
+
+  app.get("/api/sync/:id/events", (req, res) => {
+    const { id } = req.params;
+    const job = syncJobManager.getJob(id);
+    
+    if (!job) {
+      return res.status(404).json({ error: "Job not found" });
+    }
+
+    // Set SSE headers
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Headers': 'Cache-Control'
+    });
+
+    // Send initial job state
+    res.write(`data: ${JSON.stringify({ 
+      type: 'init', 
+      data: {
+        status: job.status,
+        phase: job.phase,
+        percent: job.percent,
+        completedEpisodes: job.completedEpisodes,
+        totalEpisodes: job.totalEpisodes,
+        etaSeconds: job.etaSeconds,
+        message: job.lastMessage,
+        errors: job.errors
+      },
+      timestamp: Date.now()
+    })}\n\n`);
+
+    // Subscribe to job updates
+    const unsubscribe = syncJobManager.subscribe(id, (event) => {
+      res.write(event);
+    });
+
+    // Heartbeat to keep connection alive
+    const heartbeat = setInterval(() => {
+      res.write(`data: ${JSON.stringify({ type: 'heartbeat', timestamp: Date.now() })}\n\n`);
+    }, 15000);
+
+    // Cleanup on client disconnect
+    req.on('close', () => {
+      clearInterval(heartbeat);
+      unsubscribe();
+    });
+  });
+
+  app.get("/api/sync/:id/status", (req, res) => {
+    const { id } = req.params;
+    const job = syncJobManager.getJob(id);
+    
+    if (!job) {
+      return res.status(404).json({ error: "Job not found" });
+    }
+
+    res.json(job);
+  });
+
+  app.delete("/api/sync/:id", (req, res) => {
+    const { id } = req.params;
+    const canceled = syncJobManager.cancelJob(id);
+    
+    if (!canceled) {
+      return res.status(404).json({ error: "Job not found or not running" });
+    }
+
+    res.json({ message: "Job canceled successfully" });
   });
 
   app.get("/api/shows/:id/episodes", async (req, res) => {
