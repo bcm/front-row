@@ -34,7 +34,7 @@ export interface IStorage {
   searchUserEpisodes(userId: string, query: string): Promise<(Episode & { show: Show })[]>;
   
   // User episode methods
-  getUserEpisodes(userId: string, status?: string): Promise<(UserEpisode & { episode: Episode & { show: Show } })[]>;
+  getUserEpisodes(userId: string, status?: string, hideShared?: boolean): Promise<(UserEpisode & { episode: Episode & { show: Show } })[]>;
   addUserEpisode(userEpisode: InsertUserEpisode): Promise<UserEpisode>;
   updateUserEpisode(userId: string, episodeId: number, updates: Partial<UserEpisode>): Promise<UserEpisode | undefined>;
   getUserEpisode(userId: string, episodeId: number): Promise<UserEpisode | undefined>;
@@ -439,7 +439,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   // User episode methods
-  async getUserEpisodes(userId: string, status?: string): Promise<(UserEpisode & { episode: Episode & { show: Show } })[]> {
+  async getUserEpisodes(userId: string, status?: string, hideShared: boolean = false): Promise<(UserEpisode & { episode: Episode & { show: Show } })[]> {
     // Get today's date in YYYY-MM-DD format for comparison
     const today = new Date().toISOString().split('T')[0];
     
@@ -450,10 +450,22 @@ export class DatabaseStorage implements IStorage {
       lte(episodes.airdate, today)
     );
     
-    // Add status filter if provided
-    const whereClause = status 
-      ? and(baseConditions, eq(userEpisodes.status, status))
-      : baseConditions;
+    // Add shared filter for specific statuses if hideShared is true
+    // Only apply to 'next' and 'later' statuses, not 'untriaged' or 'watched'
+    const sharedFilter = hideShared && status && ['next', 'later'].includes(status)
+      ? eq(userShows.isShared, false)
+      : undefined;
+    
+    // Combine all conditions
+    const allConditions = [baseConditions];
+    if (status) {
+      allConditions.push(eq(userEpisodes.status, status));
+    }
+    if (sharedFilter) {
+      allConditions.push(sharedFilter);
+    }
+    
+    const whereClause = and(...allConditions);
 
     const results = await db
       .select({

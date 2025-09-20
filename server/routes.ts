@@ -587,6 +587,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Toggle show shared status
+  app.patch("/api/user/shows/:showId/shared", async (req, res) => {
+    try {
+      const userId = "demo-user"; // Mock user ID
+      const { showId } = req.params;
+      const { isShared } = req.body;
+
+      const updatedUserShow = await storage.updateUserShow(userId, parseInt(showId), { isShared });
+      if (!updatedUserShow) {
+        return res.status(404).json({ error: "Show not found in your collection" });
+      }
+
+      res.json(updatedUserShow);
+    } catch (error) {
+      console.error("Error updating show shared status:", error);
+      res.status(500).json({ error: "Failed to update show shared status" });
+    }
+  });
+
   // Import episodes for all followed shows
   app.post("/api/episodes/import", async (req, res) => {
     try {
@@ -685,10 +704,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get user episodes with filtering by status
   app.get("/api/user/episodes", async (req, res) => {
     try {
-      const { status } = req.query;
+      const { status, hideShared } = req.query;
       const userId = "demo-user"; // Mock user ID
       
-      const episodes = await storage.getUserEpisodes(userId, status as string);
+      const hideSharedFlag = hideShared === 'true';
+      const episodes = await storage.getUserEpisodes(userId, status as string, hideSharedFlag);
       res.json(episodes);
     } catch (error) {
       console.error("Error fetching user episodes:", error);
