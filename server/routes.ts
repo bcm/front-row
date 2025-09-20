@@ -94,6 +94,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
           if (scrobbleResponse.ok) {
             scrobbleData = await scrobbleResponse.json();
             console.log(`Found ${scrobbleData.length} scrobble entries for show ${showId}`);
+            
+            // Debug: Log first few scrobble entries to see structure
+            console.log("Sample scrobble entries:", JSON.stringify(scrobbleData.slice(0, 3), null, 2));
+            
+            // Debug: Count by type
+            const typeCounts = scrobbleData.reduce((acc: any, entry: any) => {
+              acc[entry.type] = (acc[entry.type] || 0) + 1;
+              return acc;
+            }, {});
+            console.log(`Scrobble type breakdown:`, typeCounts);
+            
+            // Debug: Count entries with marked_at = 0
+            const zeroMarkedAt = scrobbleData.filter((entry: any) => entry.marked_at === 0).length;
+            console.log(`Episodes with marked_at = 0: ${zeroMarkedAt}`);
+            
           } else if (scrobbleResponse.status !== 404) {
             console.error(`Error fetching scrobbles for show ${showId}: ${scrobbleResponse.status}`);
           }
@@ -141,12 +156,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
                 // If scrobble data exists, set status accordingly
                 if (episodeScrobble) {
+                  console.log(`Processing episode ${episode.id}: type=${episodeScrobble.type}, marked_at=${episodeScrobble.marked_at}`);
+                  
                   // Mark type 0 = watched, Mark type 2 = skipped
-                  if (episodeScrobble.marked_at && episodeScrobble.type === 0) {
+                  if (episodeScrobble.type === 0) {
                     initialStatus = "watched";
-                    watchedAt = new Date(episodeScrobble.marked_at);
-                  } else if (episodeScrobble.marked_at && episodeScrobble.type === 2) {
+                    // Use current time if marked_at is 0 (bulk operation)
+                    watchedAt = episodeScrobble.marked_at && episodeScrobble.marked_at > 0 
+                      ? new Date(episodeScrobble.marked_at) 
+                      : new Date();
+                    console.log(`Setting episode ${episode.id} as watched`);
+                  } else if (episodeScrobble.type === 2) {
                     initialStatus = "skipped";
+                    console.log(`Setting episode ${episode.id} as skipped`);
                   }
                 }
 
