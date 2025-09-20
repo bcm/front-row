@@ -37,6 +37,7 @@ export const userShows = pgTable("user_shows", {
   showId: integer("show_id").notNull(),
   addedAt: timestamp("added_at").defaultNow(),
   isRemoved: boolean("is_removed").notNull().default(false),
+  isShared: boolean("is_shared").notNull().default(false),
 });
 
 export const episodes = pgTable("episodes", {
