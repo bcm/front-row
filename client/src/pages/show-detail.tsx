@@ -5,10 +5,13 @@ import { Link } from "wouter";
 import Header from "@/components/header";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 import { Breadcrumb, BreadcrumbList, BreadcrumbItem, BreadcrumbLink, BreadcrumbPage, BreadcrumbSeparator } from "@/components/ui/breadcrumb";
 import { TVMazeShow } from "@/lib/tvmaze";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { UserShow } from "@shared/schema";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -76,6 +79,19 @@ export default function ShowDetail() {
     enabled: !!id,
   });
 
+  const { data: userShow } = useQuery<UserShow>({
+    queryKey: ['/api/user/shows', id],
+    queryFn: async () => {
+      const response = await fetch('/api/library');
+      if (!response.ok) {
+        throw new Error('Failed to fetch user shows');
+      }
+      const userShows = await response.json();
+      return userShows.find((us: any) => us.show.id === parseInt(id!));
+    },
+    enabled: !!id,
+  });
+
   // Remove show mutation
   const removeShowMutation = useMutation({
     mutationFn: async () => {
@@ -98,6 +114,29 @@ export default function ShowDetail() {
         variant: "destructive",
       });
       setIsRemoveDialogOpen(false);
+    },
+  });
+
+  // Update shared status mutation
+  const updateSharedStatusMutation = useMutation({
+    mutationFn: async (isShared: boolean) => {
+      return apiRequest("PATCH", `/api/user/shows/${id}/shared`, { isShared });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/library"] });
+      queryClient.invalidateQueries({ queryKey: ['/api/user/shows', id] });
+      queryClient.invalidateQueries({ queryKey: ['/api/user/episodes'] });
+      toast({
+        title: "Shared status updated",
+        description: `"${show?.name}" has been ${userShow?.isShared ? 'unmarked' : 'marked'} as shared.`,
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Update failed",
+        description: error.message || `Failed to update shared status for "${show?.name}"`,
+        variant: "destructive",
+      });
     },
   });
 
@@ -484,6 +523,21 @@ export default function ShowDetail() {
                     <div className="flex items-center space-x-1" data-testid={`text-show-rating-${show.id}`}>
                       <Star className="w-5 h-5 text-yellow-500" />
                       <span className="text-foreground font-medium">{formatRating(show.rating)}</span>
+                    </div>
+                  )}
+                  {userShow && (
+                    <div className="flex items-center space-x-2 bg-card border rounded-lg px-3 py-2">
+                      <Users className="w-4 h-4 text-muted-foreground" />
+                      <Label htmlFor="shared-toggle" className="text-sm font-medium cursor-pointer">
+                        Shared
+                      </Label>
+                      <Switch
+                        id="shared-toggle"
+                        checked={userShow.isShared || false}
+                        onCheckedChange={(checked) => updateSharedStatusMutation.mutate(checked)}
+                        disabled={updateSharedStatusMutation.isPending}
+                        data-testid={`toggle-shared-show-${id}`}
+                      />
                     </div>
                   )}
                   <AlertDialog open={isRemoveDialogOpen} onOpenChange={setIsRemoveDialogOpen}>

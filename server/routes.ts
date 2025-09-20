@@ -2,6 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { insertShowSchema, insertUserShowSchema, insertEpisodeSchema, insertUserEpisodeSchema } from "@shared/schema";
+import { z } from "zod";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // TVMaze API proxy routes
@@ -592,9 +593,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const userId = "demo-user"; // Mock user ID
       const { showId } = req.params;
-      const { isShared } = req.body;
+      
+      // Validate request body
+      const sharedStatusSchema = z.object({
+        isShared: z.boolean()
+      });
+      
+      const validatedData = sharedStatusSchema.parse(req.body);
 
-      const updatedUserShow = await storage.updateUserShow(userId, parseInt(showId), { isShared });
+      const updatedUserShow = await storage.updateUserShow(userId, parseInt(showId), { isShared: validatedData.isShared });
       if (!updatedUserShow) {
         return res.status(404).json({ error: "Show not found in your collection" });
       }
