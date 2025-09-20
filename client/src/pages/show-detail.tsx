@@ -1,12 +1,13 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useParams, useLocation } from "wouter";
-import { ArrowLeft, Star, Calendar, Clock, Globe, Tv, Users, Monitor, Play, Hash, ExternalLink, RefreshCw, Trash2 } from "lucide-react";
+import { ArrowLeft, Star, Calendar, Clock, Globe, Tv, Users, Monitor, Play, Hash, ExternalLink, RefreshCw, Trash2, X } from "lucide-react";
 import { Link } from "wouter";
 import Header from "@/components/header";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
+import { Progress } from "@/components/ui/progress";
 import { Breadcrumb, BreadcrumbList, BreadcrumbItem, BreadcrumbLink, BreadcrumbPage, BreadcrumbSeparator } from "@/components/ui/breadcrumb";
 import { TVMazeShow } from "@/lib/tvmaze";
 import { apiRequest } from "@/lib/queryClient";
@@ -23,12 +24,34 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { useState } from "react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { useState, useEffect, useRef } from "react";
 
 interface ShowStats {
   totalEpisodes: number;
   seasons: number;
   lastEpisode: any;
+}
+
+interface SyncProgress {
+  jobId: string | null;
+  isOpen: boolean;
+  status: 'queued' | 'running' | 'success' | 'error' | 'canceled';
+  phase: 'fetch-show' | 'fetch-scrobbles' | 'fetch-episodes' | 'process-episodes' | 'finalize';
+  percent: number;
+  completedEpisodes: number;
+  totalEpisodes: number;
+  etaSeconds: number | null;
+  message: string;
+  errors: string[];
+  episodesImported?: number;
+  episodesUpdated?: number;
 }
 
 export default function ShowDetail() {
@@ -37,6 +60,19 @@ export default function ShowDetail() {
   const queryClient = useQueryClient();
   const [, setLocation] = useLocation();
   const [isRemoveDialogOpen, setIsRemoveDialogOpen] = useState(false);
+  const [syncProgress, setSyncProgress] = useState<SyncProgress>({
+    jobId: null,
+    isOpen: false,
+    status: 'queued',
+    phase: 'fetch-show',
+    percent: 0,
+    completedEpisodes: 0,
+    totalEpisodes: 0,
+    etaSeconds: null,
+    message: '',
+    errors: []
+  });
+  const eventSourceRef = useRef<EventSource | null>(null);
   
   const { data: show, isLoading, error } = useQuery<TVMazeShow>({
     queryKey: ['/api/shows', id],
@@ -186,31 +222,215 @@ export default function ShowDetail() {
     removeShowMutation.mutate();
   };
 
-  const syncMutation = useMutation({
-    mutationFn: async () => {
-      return apiRequest("POST", `/api/shows/${id}/sync`, {});
-    },
-    onSuccess: (data: any) => {
-      // Invalidate and refetch show data and stats
-      queryClient.invalidateQueries({ queryKey: ['/api/shows', id] });
-      queryClient.invalidateQueries({ queryKey: ['/api/shows', id, 'stats'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/shows', id, 'episodes'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/shows', id, 'user-episodes'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/user/episodes'] });
+  // Cleanup EventSource on unmount or job completion
+  useEffect(() => {
+    return () => {
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+        eventSourceRef.current = null;
+      }
+    };
+  }, []);
+
+  const startSync = async () => {
+    try {
+      // Start async sync
+      const response = await fetch(`/api/shows/${id}/sync/start`, { method: 'POST' });
+      if (!response.ok) {
+        throw new Error('Failed to start sync');
+      }
       
-      toast({
-        title: "Sync Complete",
-        description: data.message || `Show synced successfully. ${data.episodesImported || 0} episodes imported.`,
-      });
-    },
-    onError: (error: any) => {
+      const { jobId } = await response.json();
+      
+      setSyncProgress(prev => ({
+        ...prev,
+        jobId,
+        isOpen: true,
+        status: 'running',
+        message: 'Starting sync...'
+      }));
+
+      // Connect to EventSource for real-time updates
+      const eventSource = new EventSource(`/api/sync/${jobId}/events`);
+      eventSourceRef.current = eventSource;
+
+      eventSource.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          
+          if (data.type === 'init' || data.type === 'progress') {
+            setSyncProgress(prev => ({
+              ...prev,
+              status: data.data.status || prev.status,
+              phase: data.data.phase || prev.phase,
+              percent: data.data.percent || prev.percent,
+              completedEpisodes: data.data.completedEpisodes || prev.completedEpisodes,
+              totalEpisodes: data.data.totalEpisodes || prev.totalEpisodes,
+              etaSeconds: data.data.etaSeconds,
+              message: data.data.message || prev.message,
+              errors: data.data.errors || prev.errors
+            }));
+          } else if (data.type === 'complete') {
+            setSyncProgress(prev => ({
+              ...prev,
+              status: 'success',
+              percent: 100,
+              message: data.data.message,
+              episodesImported: data.data.episodesImported,
+              episodesUpdated: data.data.episodesUpdated
+            }));
+
+            // Invalidate queries
+            queryClient.invalidateQueries({ queryKey: ['/api/shows', id] });
+            queryClient.invalidateQueries({ queryKey: ['/api/shows', id, 'stats'] });
+            queryClient.invalidateQueries({ queryKey: ['/api/shows', id, 'episodes'] });
+            queryClient.invalidateQueries({ queryKey: ['/api/shows', id, 'user-episodes'] });
+            queryClient.invalidateQueries({ queryKey: ['/api/user/episodes'] });
+
+            toast({
+              title: "Sync Complete",
+              description: data.data.message,
+            });
+
+            eventSource.close();
+            eventSourceRef.current = null;
+          } else if (data.type === 'error') {
+            if (data.data.fatal) {
+              setSyncProgress(prev => ({
+                ...prev,
+                status: 'error',
+                message: data.data.message || 'Sync failed'
+              }));
+              
+              toast({
+                title: "Sync Failed",
+                description: data.data.message || "Failed to sync show data from TVMaze",
+                variant: "destructive",
+              });
+
+              eventSource.close();
+              eventSourceRef.current = null;
+            } else {
+              // Non-fatal error, just add to errors list
+              setSyncProgress(prev => ({
+                ...prev,
+                errors: [...prev.errors, data.data.error]
+              }));
+            }
+          } else if (data.type === 'canceled') {
+            setSyncProgress(prev => ({
+              ...prev,
+              status: 'canceled',
+              message: 'Sync canceled'
+            }));
+
+            eventSource.close();
+            eventSourceRef.current = null;
+          }
+        } catch (parseError) {
+          console.error('Error parsing SSE message:', parseError);
+        }
+      };
+
+      eventSource.onerror = () => {
+        console.error('EventSource error, attempting to use polling fallback');
+        eventSource.close();
+        eventSourceRef.current = null;
+        
+        // Fallback to polling
+        const pollStatus = async () => {
+          try {
+            const statusResponse = await fetch(`/api/sync/${jobId}/status`);
+            if (statusResponse.ok) {
+              const job = await statusResponse.json();
+              setSyncProgress(prev => ({
+                ...prev,
+                status: job.status,
+                phase: job.phase,
+                percent: job.percent,
+                completedEpisodes: job.completedEpisodes,
+                totalEpisodes: job.totalEpisodes,
+                etaSeconds: job.etaSeconds,
+                message: job.lastMessage,
+                errors: job.errors
+              }));
+
+              if (['success', 'error', 'canceled'].includes(job.status)) {
+                if (job.status === 'success') {
+                  queryClient.invalidateQueries({ queryKey: ['/api/shows', id] });
+                  queryClient.invalidateQueries({ queryKey: ['/api/shows', id, 'stats'] });
+                  queryClient.invalidateQueries({ queryKey: ['/api/shows', id, 'episodes'] });
+                  queryClient.invalidateQueries({ queryKey: ['/api/shows', id, 'user-episodes'] });
+                  queryClient.invalidateQueries({ queryKey: ['/api/user/episodes'] });
+                  
+                  toast({
+                    title: "Sync Complete",
+                    description: job.lastMessage,
+                  });
+                } else if (job.status === 'error') {
+                  toast({
+                    title: "Sync Failed",
+                    description: job.lastMessage,
+                    variant: "destructive",
+                  });
+                }
+                return;
+              }
+
+              setTimeout(pollStatus, 1000);
+            }
+          } catch (pollError) {
+            console.error('Polling error:', pollError);
+          }
+        };
+        
+        setTimeout(pollStatus, 1000);
+      };
+
+    } catch (error: any) {
       toast({
         title: "Sync Failed",
-        description: error.message || "Failed to sync show data from TVMaze",
+        description: error.message || "Failed to start sync",
         variant: "destructive",
       });
-    },
-  });
+    }
+  };
+
+  const cancelSync = async () => {
+    if (syncProgress.jobId && eventSourceRef.current) {
+      try {
+        await fetch(`/api/sync/${syncProgress.jobId}`, { method: 'DELETE' });
+        eventSourceRef.current.close();
+        eventSourceRef.current = null;
+      } catch (error) {
+        console.error('Error canceling sync:', error);
+      }
+    }
+  };
+
+  const closeSyncModal = () => {
+    setSyncProgress(prev => ({ ...prev, isOpen: false }));
+    if (eventSourceRef.current) {
+      eventSourceRef.current.close();
+      eventSourceRef.current = null;
+    }
+  };
+
+  const formatETA = (seconds: number | null): string => {
+    if (!seconds || seconds <= 0) return '';
+    
+    if (seconds < 60) {
+      return `${Math.round(seconds)}s`;
+    } else if (seconds < 3600) {
+      const minutes = Math.floor(seconds / 60);
+      const remainingSeconds = Math.round(seconds % 60);
+      return remainingSeconds > 0 ? `${minutes}m ${remainingSeconds}s` : `${minutes}m`;
+    } else {
+      const hours = Math.floor(seconds / 3600);
+      const minutes = Math.floor((seconds % 3600) / 60);
+      return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`;
+    }
+  };
 
   // Episode update mutation with optimistic updates
   const updateEpisodeMutation = useMutation({
@@ -538,14 +758,99 @@ export default function ShowDetail() {
           <Button 
             variant="outline" 
             size="sm"
-            onClick={() => syncMutation.mutate()}
-            disabled={syncMutation.isPending}
+            onClick={startSync}
+            disabled={syncProgress.status === 'running'}
             data-testid="button-sync-show"
           >
-            <RefreshCw className={`w-4 h-4 mr-2 ${syncMutation.isPending ? 'animate-spin' : ''}`} />
-            {syncMutation.isPending ? 'Syncing...' : 'Sync from TVMaze'}
+            <RefreshCw className={`w-4 h-4 mr-2 ${syncProgress.status === 'running' ? 'animate-spin' : ''}`} />
+            {syncProgress.status === 'running' ? 'Syncing...' : 'Sync from TVMaze'}
           </Button>
         </div>
+
+        {/* Sync Progress Modal */}
+        <Dialog open={syncProgress.isOpen} onOpenChange={() => {}}>
+          <DialogContent className="sm:max-w-[425px]" data-testid="modal-sync-progress">
+            <DialogHeader>
+              <DialogTitle>Syncing "{show?.name}"</DialogTitle>
+              <DialogDescription>
+                Importing episodes and watch status from TVMaze
+              </DialogDescription>
+            </DialogHeader>
+            
+            <div className="space-y-4">
+              {/* Progress Bar */}
+              <div className="space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span>Progress</span>
+                  <span>{syncProgress.percent}%</span>
+                </div>
+                <Progress value={syncProgress.percent} className="w-full" data-testid="progress-sync" />
+                {syncProgress.totalEpisodes > 0 && (
+                  <div className="text-sm text-muted-foreground">
+                    {syncProgress.completedEpisodes} of {syncProgress.totalEpisodes} episodes
+                    {syncProgress.etaSeconds && (
+                      <span> • ETA: {formatETA(syncProgress.etaSeconds)}</span>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Current Phase */}
+              <div className="space-y-1">
+                <div className="text-sm font-medium capitalize">
+                  {syncProgress.phase.replace('-', ' ')}
+                </div>
+                <div className="text-sm text-muted-foreground" data-testid="text-sync-message">
+                  {syncProgress.message}
+                </div>
+              </div>
+
+              {/* Errors */}
+              {syncProgress.errors.length > 0 && (
+                <div className="space-y-1">
+                  <div className="text-sm font-medium text-destructive">
+                    {syncProgress.errors.length} Error{syncProgress.errors.length > 1 ? 's' : ''}
+                  </div>
+                  <div className="text-sm text-muted-foreground">
+                    {syncProgress.errors[syncProgress.errors.length - 1]}
+                  </div>
+                </div>
+              )}
+
+              {/* Action Buttons */}
+              <div className="flex justify-end space-x-2">
+                {syncProgress.status === 'running' && (
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={cancelSync}
+                    data-testid="button-cancel-sync"
+                  >
+                    Cancel
+                  </Button>
+                )}
+                
+                {['success', 'error', 'canceled'].includes(syncProgress.status) && (
+                  <Button 
+                    size="sm" 
+                    onClick={closeSyncModal}
+                    data-testid="button-close-sync"
+                  >
+                    Close
+                  </Button>
+                )}
+              </div>
+
+              {/* Success Summary */}
+              {syncProgress.status === 'success' && (
+                <div className="text-sm text-muted-foreground border-t pt-4">
+                  {syncProgress.episodesImported || 0} episodes imported
+                  {syncProgress.episodesUpdated ? `, ${syncProgress.episodesUpdated} updated` : ''}
+                </div>
+              )}
+            </div>
+          </DialogContent>
+        </Dialog>
 
         {/* Show Header */}
         <div className="flex flex-col lg:flex-row gap-8 mb-8">
