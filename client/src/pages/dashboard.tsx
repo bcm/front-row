@@ -15,7 +15,10 @@ import { Link } from "wouter";
 
 export default function Dashboard() {
   const [showAddDialog, setShowAddDialog] = useState(false);
-  const [showMode, setShowMode] = useState<"personal" | "shared">("personal");
+  const [showMode, setShowMode] = useState<"personal" | "shared">(() => {
+    const saved = localStorage.getItem('tv-curator-show-mode');
+    return (saved === 'personal' || saved === 'shared') ? saved : 'personal';
+  });
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -209,6 +212,7 @@ export default function Dashboard() {
     
     // Optimistically update the UI immediately
     setShowMode(validMode);
+    localStorage.setItem('tv-curator-show-mode', validMode);
     setIsToggling(true);
     
     // Prefetch data for the target mode in background
