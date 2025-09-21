@@ -28,6 +28,20 @@ export default function Header({ onSearch }: HeaderProps) {
   const [showDropdown, setShowDropdown] = useState(false);
   const debouncedSearch = useDebounce(searchQuery, 300);
 
+  // Get untriaged episodes count for badge
+  const { data: untriagedEpisodes } = useQuery({
+    queryKey: ["/api/user/episodes", "untriaged"],
+    queryFn: async () => {
+      const response = await fetch(`/api/user/episodes?status=untriaged`);
+      if (!response.ok) throw new Error("Failed to fetch untriaged episodes");
+      return response.json();
+    },
+  });
+
+  const untriagedCount = untriagedEpisodes ? untriagedEpisodes.filter(
+    (episode: any) => episode.episode.airdate // Only count episodes with air dates
+  ).length : 0;
+
   const { data: searchResults, isLoading } = useQuery({
     queryKey: ['/api/search', debouncedSearch],
     queryFn: async () => {
@@ -96,11 +110,13 @@ export default function Header({ onSearch }: HeaderProps) {
 
   const tabs = [
     { id: "dashboard", label: "Dashboard", href: "/" },
+    { id: "triage", label: "Triage", href: "/triage", showBadge: true },
     { id: "library", label: "Library", href: "/library" },
   ];
 
   const getActiveTab = () => {
     if (location === "/" || location === "/dashboard") return "dashboard";
+    if (location === "/triage") return "triage";
     if (location === "/library" || location.startsWith("/show/") || location.startsWith("/episode/")) return "library";
     return "dashboard";
   };
@@ -243,13 +259,18 @@ export default function Header({ onSearch }: HeaderProps) {
                 href={tab.href}
                 data-testid={`button-tab-${tab.id}`}
                 className={cn(
-                  "px-4 py-2 rounded-md text-sm font-medium transition-colors",
+                  "px-4 py-2 rounded-md text-sm font-medium transition-colors relative",
                   activeTab === tab.id
                     ? "bg-primary text-primary-foreground"
                     : "text-muted-foreground hover:text-foreground"
                 )}
               >
                 {tab.label}
+                {tab.showBadge && untriagedCount > 0 && (
+                  <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
+                    {untriagedCount}
+                  </span>
+                )}
               </Link>
             ))}
           </nav>
