@@ -36,6 +36,16 @@ export default function EpisodeCard({ userEpisode, onStatusChange, variant = "de
     return new Date(airdate).toLocaleDateString('en-US');
   };
 
+  const getNetworkName = () => {
+    if (show.webChannel?.name) {
+      return show.webChannel.name;
+    }
+    if (show.network?.name) {
+      return show.network.name;
+    }
+    return null;
+  };
+
   const getEpisodeTitle = () => {
     const seasonEpisode = getSeasonEpisodeFormat();
     if (episode.name) {
@@ -84,6 +94,11 @@ export default function EpisodeCard({ userEpisode, onStatusChange, variant = "de
             <Link href={`/show/${show.id}`}>
               <h2 className="font-bold text-lg text-primary hover:text-primary/80 truncate mb-1" data-testid={`text-show-name-${episode.id}`}>
                 {show.name}
+                {getNetworkName() && (
+                  <span className="ml-2 text-xs font-normal text-muted-foreground bg-muted px-2 py-0.5 rounded">
+                    {getNetworkName()}
+                  </span>
+                )}
               </h2>
             </Link>
             <Link href={`/episode/${episode.id}`}>
@@ -182,6 +197,11 @@ export default function EpisodeCard({ userEpisode, onStatusChange, variant = "de
             <Link href={`/show/${show.id}`}>
               <h3 className="font-semibold text-sm text-primary hover:text-primary/80 truncate mb-1" data-testid={`text-show-name-${episode.id}`}>
                 {show.name}
+                {getNetworkName() && (
+                  <span className="ml-2 text-xs font-normal text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
+                    {getNetworkName()}
+                  </span>
+                )}
               </h3>
             </Link>
             <Link href={`/episode/${episode.id}`}>
@@ -235,6 +255,11 @@ export default function EpisodeCard({ userEpisode, onStatusChange, variant = "de
             <Link href={`/show/${show.id}`}>
               <h2 className="font-bold text-base text-primary hover:text-primary/80 truncate mb-1" data-testid={`text-show-name-${episode.id}`}>
                 {show.name}
+                {getNetworkName() && (
+                  <span className="ml-2 text-xs font-normal text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
+                    {getNetworkName()}
+                  </span>
+                )}
               </h2>
             </Link>
             <Link href={`/episode/${episode.id}`}>
@@ -316,6 +341,11 @@ export default function EpisodeCard({ userEpisode, onStatusChange, variant = "de
           <Link href={`/show/${show.id}`}>
             <h2 className="font-bold text-lg text-primary hover:text-primary/80 truncate mb-1" data-testid={`text-show-name-${episode.id}`}>
               {show.name}
+              {getNetworkName() && (
+                <span className="ml-2 text-xs font-normal text-muted-foreground bg-muted px-2 py-0.5 rounded">
+                  {getNetworkName()}
+                </span>
+              )}
             </h2>
           </Link>
           <Link href={`/episode/${episode.id}`}>
