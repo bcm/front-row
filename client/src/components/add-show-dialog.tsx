@@ -6,8 +6,20 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Search, Plus } from "lucide-react";
+import { Progress } from "@/components/ui/progress";
+import { Search, Plus, X, CheckCircle, AlertCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+
+interface SyncProgress {
+  status: 'running' | 'success' | 'error';
+  phase: string;
+  percent: number;
+  completedEpisodes: number;
+  totalEpisodes: number;
+  etaSeconds?: number;
+  message: string;
+  errors: string[];
+}
 
 interface AddShowDialogProps {
   open: boolean;
@@ -16,6 +28,8 @@ interface AddShowDialogProps {
 
 export default function AddShowDialog({ open, onOpenChange }: AddShowDialogProps) {
   const [searchQuery, setSearchQuery] = useState("");
+  const [currentJobId, setCurrentJobId] = useState<string | null>(null);
+  const [syncProgress, setSyncProgress] = useState<SyncProgress | null>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -34,16 +48,27 @@ export default function AddShowDialog({ open, onOpenChange }: AddShowDialogProps
       });
     },
     onSuccess: (data: any) => {
-      // Invalidate multiple queries to refresh all sections
-      queryClient.invalidateQueries({ queryKey: ["/api/user/shows"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/user/episodes"] });
-      
-      toast({
-        title: "Show added",
-        description: data.message || "The show has been added to your collection with all episodes imported.",
-      });
-      onOpenChange(false);
-      setSearchQuery("");
+      // If we get a job ID, start progress tracking
+      if (data.jobId) {
+        setCurrentJobId(data.jobId);
+        startProgressTracking(data.jobId);
+        
+        toast({
+          title: "Show added",
+          description: data.message || "Episodes are being imported in the background...",
+        });
+      } else {
+        // Fallback for synchronous response
+        queryClient.invalidateQueries({ queryKey: ["/api/user/shows"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/user/episodes"] });
+        
+        toast({
+          title: "Show added",
+          description: data.message || "The show has been added to your collection.",
+        });
+        onOpenChange(false);
+        setSearchQuery("");
+      }
     },
     onError: (error: any) => {
       toast({
@@ -53,6 +78,99 @@ export default function AddShowDialog({ open, onOpenChange }: AddShowDialogProps
       });
     },
   });
+
+  // Progress tracking with Server-Sent Events
+  const startProgressTracking = (jobId: string) => {
+    const eventSource = new EventSource(`/api/sync/${jobId}/events`);
+    
+    eventSource.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        
+        if (data.type === 'progress' || data.type === 'init') {
+          const progressData = data.data;
+          setSyncProgress({
+            status: progressData.status,
+            phase: progressData.phase || '',
+            percent: progressData.percent || 0,
+            completedEpisodes: progressData.completedEpisodes || 0,
+            totalEpisodes: progressData.totalEpisodes || 0,
+            etaSeconds: progressData.etaSeconds,
+            message: progressData.message || '',
+            errors: progressData.errors || []
+          });
+          
+          // If job is complete
+          if (progressData.status === 'success') {
+            eventSource.close();
+            
+            // Invalidate queries to refresh data
+            queryClient.invalidateQueries({ queryKey: ["/api/user/shows"] });
+            queryClient.invalidateQueries({ queryKey: ["/api/user/episodes"] });
+            
+            toast({
+              title: "Import completed",
+              description: `Successfully imported ${progressData.episodesImported || progressData.completedEpisodes || 0} episodes${progressData.episodesUpdated && progressData.episodesUpdated > 0 ? ` with ${progressData.episodesUpdated} synced from your watch history` : ''}`,
+            });
+            
+            // Close dialog after a brief delay
+            setTimeout(() => {
+              onOpenChange(false);
+              setSearchQuery("");
+              setCurrentJobId(null);
+              setSyncProgress(null);
+            }, 2000);
+          } else if (progressData.status === 'error') {
+            eventSource.close();
+            setCurrentJobId(null);
+            setSyncProgress(null);
+            
+            toast({
+              title: "Import failed",
+              description: progressData.message || "Failed to import episodes",
+              variant: "destructive",
+            });
+          }
+        } else if (data.type === 'complete') {
+          // Handle completion event separately to get accurate counts
+          const completionData = data.data;
+          eventSource.close();
+          
+          // Invalidate queries to refresh data
+          queryClient.invalidateQueries({ queryKey: ["/api/user/shows"] });
+          queryClient.invalidateQueries({ queryKey: ["/api/user/episodes"] });
+          
+          toast({
+            title: "Import completed",
+            description: `Successfully imported ${completionData.episodesImported || 0} episodes${completionData.episodesUpdated && completionData.episodesUpdated > 0 ? ` with ${completionData.episodesUpdated} synced from your watch history` : ''}`,
+          });
+          
+          // Close dialog after a brief delay
+          setTimeout(() => {
+            onOpenChange(false);
+            setSearchQuery("");
+            setCurrentJobId(null);
+            setSyncProgress(null);
+          }, 2000);
+        }
+      } catch (error) {
+        console.error('Error parsing SSE data:', error);
+      }
+    };
+
+    eventSource.onerror = (error) => {
+      console.error('EventSource error:', error);
+      eventSource.close();
+      setCurrentJobId(null);
+      setSyncProgress(null);
+      
+      toast({
+        title: "Connection error",
+        description: "Lost connection to import progress",
+        variant: "destructive",
+      });
+    };
+  };
 
   const handleAddShow = (showId: number) => {
     addShowMutation.mutate(showId);
@@ -65,96 +183,157 @@ export default function AddShowDialog({ open, onOpenChange }: AddShowDialogProps
     return `https://via.placeholder.com/80x120/374151/9ca3af?text=${encodeURIComponent(result.show.name)}`;
   };
 
+  // Handle dialog close with progress check
+  const handleOpenChange = (open: boolean) => {
+    if (!open && currentJobId && syncProgress?.status === 'running') {
+      // Don't allow closing while sync is in progress
+      toast({
+        title: "Import in progress",
+        description: "Please wait for the episode import to complete",
+      });
+      return;
+    }
+    onOpenChange(open);
+  };
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="sm:max-w-[600px] max-h-[80vh] overflow-hidden flex flex-col">
         <DialogHeader>
-          <DialogTitle>Add TV Show</DialogTitle>
+          <DialogTitle>
+            {currentJobId ? "Importing Episodes" : "Add TV Show"}
+          </DialogTitle>
         </DialogHeader>
         
         <div className="space-y-4 flex-1 overflow-hidden flex flex-col">
-          {/* Search Input */}
-          <div className="relative">
-            <Input
-              placeholder="Search for TV shows..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              data-testid="input-search-shows-dialog"
-              className="pl-10"
-            />
-            <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-          </div>
+          {/* Progress Section */}
+          {syncProgress && (
+            <div className="space-y-4 p-4 bg-muted/50 rounded-lg">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-2">
+                  {syncProgress.status === 'running' && (
+                    <div className="animate-spin h-4 w-4 border-2 border-primary border-t-transparent rounded-full" />
+                  )}
+                  {syncProgress.status === 'success' && (
+                    <CheckCircle className="h-4 w-4 text-green-500" />
+                  )}
+                  {syncProgress.status === 'error' && (
+                    <AlertCircle className="h-4 w-4 text-red-500" />
+                  )}
+                  <span className="font-medium">{syncProgress.phase}</span>
+                </div>
+                {syncProgress.etaSeconds && syncProgress.etaSeconds > 0 && (
+                  <span className="text-sm text-muted-foreground">
+                    ~{Math.round(syncProgress.etaSeconds)}s remaining
+                  </span>
+                )}
+              </div>
+              
+              <Progress value={syncProgress.percent} className="h-2" />
+              
+              <div className="flex justify-between text-sm text-muted-foreground">
+                <span>{syncProgress.message}</span>
+                <span>
+                  {syncProgress.completedEpisodes} / {syncProgress.totalEpisodes} episodes
+                </span>
+              </div>
+              
+              {syncProgress.errors.length > 0 && (
+                <div className="space-y-1">
+                  {syncProgress.errors.slice(-3).map((error, index) => (
+                    <p key={index} className="text-sm text-red-500">{error}</p>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
 
-          {/* Search Results */}
-          <div className="flex-1 overflow-y-auto space-y-2">
-            {searchQuery.length <= 2 && (
-              <p className="text-muted-foreground text-center py-8">
-                Type at least 3 characters to search for shows
-              </p>
-            )}
-            
-            {isSearching && (
-              <p className="text-muted-foreground text-center py-8">
-                Searching for shows...
-              </p>
-            )}
-            
-            {searchResults && searchResults.length === 0 && searchQuery.length > 2 && (
-              <p className="text-muted-foreground text-center py-8">
-                No shows found for "{searchQuery}"
-              </p>
-            )}
-            
-            {searchResults?.map((result) => (
-              <div 
-                key={result.show.id} 
-                className="flex items-start space-x-3 p-3 bg-card rounded-lg hover:bg-card/80 transition-colors"
-                data-testid={`search-result-${result.show.id}`}
-              >
-                <img
-                  src={getImageUrl(result)}
-                  alt={`${result.show.name} poster`}
-                  className="w-12 h-16 object-cover rounded flex-shrink-0"
-                  onError={(e) => {
-                    const target = e.target as HTMLImageElement;
-                    target.src = `https://via.placeholder.com/80x120/374151/9ca3af?text=${encodeURIComponent(result.show.name)}`;
-                  }}
+          {/* Search Input */}
+          {!currentJobId && (
+            <>
+              <div className="relative">
+                <Input
+                  placeholder="Search for TV shows..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  data-testid="input-search-shows-dialog"
+                  className="pl-10"
                 />
-                <div className="flex-1 min-w-0">
-                  <h3 className="font-semibold truncate" data-testid={`text-search-result-title-${result.show.id}`}>
-                    {result.show.name}
-                  </h3>
-                  <div className="flex flex-wrap gap-1 mt-1">
-                    {result.show.genres?.slice(0, 3).map((genre) => (
-                      <Badge key={genre} variant="secondary" className="text-xs">
-                        {genre}
-                      </Badge>
-                    ))}
-                  </div>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    {result.show.network?.name || "Unknown Network"} • {result.show.premiered ? new Date(result.show.premiered).getFullYear() : "Unknown Year"}
+                <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+              </div>
+
+              {/* Search Results */}
+              <div className="flex-1 overflow-y-auto space-y-2">
+                {searchQuery.length <= 2 && (
+                  <p className="text-muted-foreground text-center py-8">
+                    Type at least 3 characters to search for shows
                   </p>
-                  {result.show.summary && (
-                    <p 
-                      className="text-xs text-muted-foreground mt-2 line-clamp-2"
-                      dangerouslySetInnerHTML={{ 
-                        __html: result.show.summary.replace(/<[^>]*>/g, '').substring(0, 100) + "..." 
+                )}
+                
+                {isSearching && (
+                  <p className="text-muted-foreground text-center py-8">
+                    Searching for shows...
+                  </p>
+                )}
+                
+                {searchResults && searchResults.length === 0 && searchQuery.length > 2 && (
+                  <p className="text-muted-foreground text-center py-8">
+                    No shows found for "{searchQuery}"
+                  </p>
+                )}
+                
+                {searchResults?.map((result) => (
+                  <div 
+                    key={result.show.id} 
+                    className="flex items-start space-x-3 p-3 bg-card rounded-lg hover:bg-card/80 transition-colors"
+                    data-testid={`search-result-${result.show.id}`}
+                  >
+                    <img
+                      src={getImageUrl(result)}
+                      alt={`${result.show.name} poster`}
+                      className="w-12 h-16 object-cover rounded flex-shrink-0"
+                      onError={(e) => {
+                        const target = e.target as HTMLImageElement;
+                        target.src = `https://via.placeholder.com/80x120/374151/9ca3af?text=${encodeURIComponent(result.show.name)}`;
                       }}
                     />
-                  )}
-                </div>
-                <Button
-                  size="sm"
-                  onClick={() => handleAddShow(result.show.id)}
-                  disabled={addShowMutation.isPending}
-                  data-testid={`button-add-show-${result.show.id}`}
-                  className="flex-shrink-0"
-                >
-                  <Plus className="w-4 h-4" />
-                </Button>
+                    <div className="flex-1 min-w-0">
+                      <h3 className="font-semibold truncate" data-testid={`text-search-result-title-${result.show.id}`}>
+                        {result.show.name}
+                      </h3>
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {result.show.genres?.slice(0, 3).map((genre) => (
+                          <Badge key={genre} variant="secondary" className="text-xs">
+                            {genre}
+                          </Badge>
+                        ))}
+                      </div>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        {result.show.network?.name || "Unknown Network"} • {result.show.premiered ? new Date(result.show.premiered).getFullYear() : "Unknown Year"}
+                      </p>
+                      {result.show.summary && (
+                        <p 
+                          className="text-xs text-muted-foreground mt-2 line-clamp-2"
+                          dangerouslySetInnerHTML={{ 
+                            __html: result.show.summary.replace(/<[^>]*>/g, '').substring(0, 100) + "..." 
+                          }}
+                        />
+                      )}
+                    </div>
+                    <Button
+                      size="sm"
+                      onClick={() => handleAddShow(result.show.id)}
+                      disabled={addShowMutation.isPending}
+                      data-testid={`button-add-show-${result.show.id}`}
+                      className="flex-shrink-0"
+                    >
+                      <Plus className="w-4 h-4" />
+                    </Button>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
+            </>
+          )}
         </div>
       </DialogContent>
     </Dialog>
