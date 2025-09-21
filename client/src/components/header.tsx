@@ -111,12 +111,14 @@ export default function Header({ onSearch }: HeaderProps) {
 
   const tabs = [
     { id: "dashboard", label: "Dashboard", href: "/" },
+    { id: "watch-later", label: "Watch Later", href: "/watch-later" },
     { id: "triage", label: "Triage", href: "/triage", showBadge: true },
     { id: "library", label: "Library", href: "/library" },
   ];
 
   const getActiveTab = () => {
     if (location === "/" || location === "/dashboard") return "dashboard";
+    if (location === "/watch-later") return "watch-later";
     if (location === "/triage") return "triage";
     if (location === "/library" || location.startsWith("/show/") || location.startsWith("/episode/")) return "library";
     return "dashboard";
