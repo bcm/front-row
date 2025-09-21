@@ -958,6 +958,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const userShow = await storage.addUserShow(validatedData);
       console.log(`[ADD_SHOW] Successfully added userShow: ${userShow.id}`);
 
+      // Follow the show on TVMaze if credentials are available
+      const apiKey = process.env.TVMAZE_API_KEY;
+      const username = process.env.TVMAZE_USERNAME;
+      
+      if (apiKey && username) {
+        try {
+          console.log(`[ADD_SHOW] Following show ${showId} on TVMaze...`);
+          const credentials = Buffer.from(`${username}:${apiKey}`).toString('base64');
+          const followResponse = await fetch(`https://api.tvmaze.com/v1/user/follows/shows/${showId}`, {
+            method: 'PUT',
+            headers: {
+              'Accept': 'application/json',
+              'Authorization': `Basic ${credentials}`
+            }
+          });
+
+          if (followResponse.ok) {
+            console.log(`[ADD_SHOW] Successfully followed show ${showId} on TVMaze`);
+          } else if (followResponse.status !== 409) { // 409 = already following
+            console.warn(`[ADD_SHOW] Failed to follow show ${showId} on TVMaze: ${followResponse.status}`);
+          } else {
+            console.log(`[ADD_SHOW] Show ${showId} already followed on TVMaze`);
+          }
+        } catch (followError) {
+          console.error(`[ADD_SHOW] Error following show ${showId} on TVMaze:`, followError);
+        }
+      }
+
       // Create async job for episode sync
       const jobId = syncJobManager.createJob(showId);
       console.log(`[ADD_SHOW] Created sync job: ${jobId}`);
