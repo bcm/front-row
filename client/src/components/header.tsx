@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from "react";
 import { Search, Tv, Film, Calendar, Users } from "lucide-react";
 import { Link, useLocation } from "wouter";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import { useDebounce } from "@/hooks/use-debounce";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -30,6 +30,7 @@ export default function Header({ onSearch }: HeaderProps) {
   const [showMode, setShowMode] = useState<"personal" | "shared">("personal");
   const [settingsLoaded, setSettingsLoaded] = useState(false);
   const debouncedSearch = useDebounce(searchQuery, 300);
+  const queryClient = useQueryClient();
 
   // Load show mode setting on mount
   useEffect(() => {
@@ -65,8 +66,20 @@ export default function Header({ onSearch }: HeaderProps) {
           },
           body: JSON.stringify({ showMode: newMode }),
         });
+        
+        // Sync React Query cache with the new showMode value
+        queryClient.setQueryData(['/api/user/settings'], (prev: any) => ({
+          ...prev,
+          showMode: newMode
+        }));
+        
+        // Invalidate episode queries to trigger refetch with new showMode
+        queryClient.invalidateQueries({ queryKey: ['/api/user/episodes'] });
+        
       } catch (error) {
         console.error('Failed to update show mode:', error);
+        // Revert local state on error
+        setShowMode(showMode);
       }
     }
   };

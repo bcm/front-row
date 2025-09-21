@@ -16,15 +16,32 @@ export default function Dashboard() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
+  // User settings query to get show mode
+  const { data: userSettings } = useQuery({
+    queryKey: ["/api/user/settings"],
+    queryFn: async () => {
+      const response = await fetch('/api/user/settings');
+      if (!response.ok) throw new Error('Failed to fetch user settings');
+      return response.json();
+    },
+  });
+
+  const showMode = userSettings?.showMode || 'personal';
 
   // Episode queries
   const { data: nextEpisodes, isLoading: nextLoading } = useQuery({
-    queryKey: ["/api/user/episodes", "next"],
+    queryKey: ["/api/user/episodes", "next", showMode],
     queryFn: async () => {
-      const response = await fetch(`/api/user/episodes?status=next`);
+      const params = new URLSearchParams();
+      params.set('status', 'next');
+      if (showMode) {
+        params.set('showMode', showMode);
+      }
+      const response = await fetch(`/api/user/episodes?${params.toString()}`);
       if (!response.ok) throw new Error("Failed to fetch next episodes");
       return response.json() as Promise<(UserEpisode & { episode: Episode & { show: Show } })[]>;
     },
+    enabled: !!userSettings, // Don't run until user settings are loaded
   });
 
 
@@ -71,7 +88,7 @@ export default function Dashboard() {
       await queryClient.cancelQueries({ queryKey: ["/api/user/episodes"] });
 
       // Snapshot the previous values for rollback
-      const previousData = queryClient.getQueryData(["/api/user/episodes", "next"]);
+      const previousData = queryClient.getQueryData(["/api/user/episodes", "next", showMode]);
 
       let updatedEpisodeInfo = null;
 
@@ -91,7 +108,7 @@ export default function Dashboard() {
           // Remove from next status cache if changing status away from "next"
           if (status !== "next") {
             const updatedData = (previousData as any[]).filter((_: any, index: number) => index !== episodeIndex);
-            queryClient.setQueryData(["/api/user/episodes", "next"], updatedData);
+            queryClient.setQueryData(["/api/user/episodes", "next", showMode], updatedData);
           }
         }
       }
@@ -102,7 +119,7 @@ export default function Dashboard() {
     onError: (error, variables, context) => {
       // Rollback changes
       if (context?.previousData) {
-        queryClient.setQueryData(["/api/user/episodes", "next"], context.previousData);
+        queryClient.setQueryData(["/api/user/episodes", "next", showMode], context.previousData);
       }
       
       toast({
@@ -112,8 +129,8 @@ export default function Dashboard() {
       });
     },
     onSuccess: (data, variables, context) => {
-      // Skip query invalidation for faster processing - rely on optimistic updates
-      // Queries will be refreshed when user navigates or manually refreshes
+      // Invalidate episode queries to keep all lists synchronized
+      queryClient.invalidateQueries({ queryKey: ["/api/user/episodes"] });
       
       // Create informative toast message with show name and episode number
       let toastTitle = "Episode updated";

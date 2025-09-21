@@ -14,14 +14,32 @@ export default function WatchLater() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
+  // User settings query to get show mode
+  const { data: userSettings } = useQuery({
+    queryKey: ["/api/user/settings"],
+    queryFn: async () => {
+      const response = await fetch('/api/user/settings');
+      if (!response.ok) throw new Error('Failed to fetch user settings');
+      return response.json();
+    },
+  });
+
+  const showMode = userSettings?.showMode || 'personal';
+
   // Fetch later episodes
   const { data: laterEpisodes, isLoading: laterLoading } = useQuery({
-    queryKey: ["/api/user/episodes", "later"],
+    queryKey: ["/api/user/episodes", "later", showMode],
     queryFn: async () => {
-      const response = await fetch(`/api/user/episodes?status=later`);
+      const params = new URLSearchParams();
+      params.set('status', 'later');
+      if (showMode) {
+        params.set('showMode', showMode);
+      }
+      const response = await fetch(`/api/user/episodes?${params.toString()}`);
       if (!response.ok) throw new Error("Failed to fetch later episodes");
       return response.json() as Promise<(UserEpisode & { episode: Episode & { show: Show } })[]>;
     },
+    enabled: !!userSettings, // Don't run until user settings are loaded
   });
 
   // Helper function to get the earliest episode per show
@@ -65,7 +83,7 @@ export default function WatchLater() {
       await queryClient.cancelQueries({ queryKey: ["/api/user/episodes"] });
 
       // Snapshot the previous values for rollback
-      const previousData = queryClient.getQueryData(["/api/user/episodes", "later"]);
+      const previousData = queryClient.getQueryData(["/api/user/episodes", "later", showMode]);
 
       let updatedEpisodeInfo = null;
 
@@ -85,7 +103,7 @@ export default function WatchLater() {
           // Remove from current cache if changing status away from "later"
           if (status !== "later") {
             const updatedData = (previousData as any[]).filter((_: any, index: number) => index !== episodeIndex);
-            queryClient.setQueryData(["/api/user/episodes", "later"], updatedData);
+            queryClient.setQueryData(["/api/user/episodes", "later", showMode], updatedData);
           }
         }
       }
@@ -96,7 +114,7 @@ export default function WatchLater() {
     onError: (error, variables, context) => {
       // Rollback changes
       if (context?.previousData) {
-        queryClient.setQueryData(["/api/user/episodes", "later"], context.previousData);
+        queryClient.setQueryData(["/api/user/episodes", "later", showMode], context.previousData);
       }
       
       toast({
