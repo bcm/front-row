@@ -768,6 +768,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const userId = "demo-user"; // Mock user ID
       const showData = req.body;
+      const apiKey = process.env.TVMAZE_API_KEY;
+      const username = process.env.TVMAZE_USERNAME;
 
       // Validate the request body
       const validatedData = insertUserShowSchema.parse({
@@ -775,38 +777,132 @@ export async function registerRoutes(app: Express): Promise<Server> {
         userId,
       });
 
+      const showId = validatedData.showId;
+
       // Check if show already exists in user's collection
-      const existingUserShow = await storage.getUserShow(userId, validatedData.showId);
+      const existingUserShow = await storage.getUserShow(userId, showId);
       if (existingUserShow) {
         return res.status(400).json({ error: "Show already in your collection" });
       }
 
-      // Fetch show details from TVMaze API and store locally
-      const showResponse = await fetch(`https://api.tvmaze.com/shows/${validatedData.showId}`);
-      if (showResponse.ok) {
-        const showDetails = await showResponse.json();
-        const showToStore = insertShowSchema.parse({
-          id: showDetails.id,
-          name: showDetails.name,
-          summary: showDetails.summary,
-          image: showDetails.image,
-          network: showDetails.network,
-          genres: showDetails.genres || [],
-          status: showDetails.status,
-          premiered: showDetails.premiered,
-          rating: showDetails.rating,
-          runtime: showDetails.runtime,
-          officialSite: showDetails.officialSite,
-          language: showDetails.language,
-          type: showDetails.type,
-          updated: showDetails.updated,
-        });
-        
-        await storage.createShow(showToStore);
+      // Sync show details from TVMaze using the same logic as sync endpoint
+      const syncedShow = await storage.syncShowFromTVMaze(showId);
+      
+      if (!syncedShow) {
+        return res.status(404).json({ error: "Show not found or failed to sync from TVMaze" });
       }
 
+      // Fetch user's marked state from scrobble API if credentials are available
+      let scrobbleData = [];
+      if (apiKey && username) {
+        try {
+          const credentials = Buffer.from(`${username}:${apiKey}`).toString('base64');
+          const scrobbleResponse = await fetch(`https://api.tvmaze.com/v1/scrobble/shows/${showId}`, {
+            headers: {
+              'Accept': 'application/json',
+              'Authorization': `Basic ${credentials}`
+            }
+          });
+
+          if (scrobbleResponse.ok) {
+            scrobbleData = await scrobbleResponse.json();
+            console.log(`Found ${scrobbleData.length} scrobble entries for show ${showId}`);
+          } else if (scrobbleResponse.status !== 404) {
+            console.error(`Error fetching scrobbles for show ${showId}: ${scrobbleResponse.status}`);
+          }
+        } catch (scrobbleError) {
+          console.error("Error fetching scrobble data:", scrobbleError);
+        }
+      }
+
+      // Add user show to collection
       const userShow = await storage.addUserShow(validatedData);
-      res.status(201).json(userShow);
+
+      // Sync episodes for this show with scrobble data
+      let episodesImported = 0;
+      let episodesUpdated = 0;
+      try {
+        const episodeResponse = await fetch(`https://api.tvmaze.com/shows/${showId}/episodes`);
+        
+        if (episodeResponse.ok) {
+          const episodes = await episodeResponse.json();
+          
+          for (const episode of episodes) {
+            try {
+              // Create episode
+              const episodeToStore = insertEpisodeSchema.parse({
+                id: episode.id,
+                showId: showId,
+                season: episode.season,
+                number: episode.number,
+                name: episode.name,
+                summary: episode.summary,
+                airdate: episode.airdate,
+                runtime: episode.runtime,
+                image: episode.image
+              });
+              
+              await storage.createEpisode(episodeToStore);
+
+              // Check if there's scrobble data for this episode
+              const episodeScrobble = scrobbleData.find((scrobble: any) => 
+                scrobble.episode_id === episode.id
+              );
+
+              let initialStatus = "untriaged";
+              let watchedAt = null;
+
+              // If scrobble data exists, set status accordingly
+              if (episodeScrobble) {
+                console.log(`Processing episode ${episode.id}: type=${episodeScrobble.type}, marked_at=${episodeScrobble.marked_at}`);
+                
+                // Mark type 0 = watched, Mark type 2 = skipped
+                if (episodeScrobble.type === 0) {
+                  initialStatus = "watched";
+                  // Use current time if marked_at is 0 (bulk operation)
+                  watchedAt = episodeScrobble.marked_at && episodeScrobble.marked_at > 0 
+                    ? new Date(episodeScrobble.marked_at) 
+                    : new Date();
+                  console.log(`Setting episode ${episode.id} as watched`);
+                  episodesUpdated++;
+                } else if (episodeScrobble.type === 2) {
+                  initialStatus = "skipped";
+                  console.log(`Setting episode ${episode.id} as skipped`);
+                  episodesUpdated++;
+                }
+              }
+
+              // Add user episode with determined status
+              const userEpisodeData = insertUserEpisodeSchema.parse({
+                userId: userId,
+                episodeId: episode.id,
+                status: initialStatus,
+                triagedAt: initialStatus !== "untriaged" ? new Date() : null,
+                watchedAt: watchedAt,
+              });
+              
+              await storage.addUserEpisode(userEpisodeData);
+              episodesImported++;
+              
+            } catch (episodeError) {
+              console.error(`Error creating episode ${episode.id}:`, episodeError);
+            }
+          }
+        }
+      } catch (episodeError) {
+        console.error("Error syncing episodes:", episodeError);
+      }
+
+      const message = episodesUpdated > 0 
+        ? `Show added successfully with ${episodesImported} episodes imported and ${episodesUpdated} episodes synced from your TVMaze watch history.`
+        : `Show added successfully with ${episodesImported} episodes imported.`;
+
+      res.status(201).json({ 
+        userShow, 
+        episodesImported,
+        episodesUpdated,
+        message 
+      });
     } catch (error) {
       console.error("Error adding show:", error);
       res.status(500).json({ error: "Failed to add show" });

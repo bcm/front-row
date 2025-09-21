@@ -33,11 +33,14 @@ export default function AddShowDialog({ open, onOpenChange }: AddShowDialogProps
         status: "new",
       });
     },
-    onSuccess: () => {
+    onSuccess: (data: any) => {
+      // Invalidate multiple queries to refresh all sections
       queryClient.invalidateQueries({ queryKey: ["/api/user/shows"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/user/episodes"] });
+      
       toast({
         title: "Show added",
-        description: "The show has been added to your collection.",
+        description: data.message || "The show has been added to your collection with all episodes imported.",
       });
       onOpenChange(false);
       setSearchQuery("");
