@@ -276,6 +276,7 @@ export default function FollowedShows() {
                 ) : (
                   <Download className="w-4 h-4" />
                 )}
+                <span className="ml-2 sm:hidden">Import</span>
                 <span className="ml-2 hidden lg:inline">Import from TVMaze</span>
               </ButtonWithTooltip>
               <ButtonWithTooltip 
@@ -285,7 +286,8 @@ export default function FollowedShows() {
                 data-testid="button-import-episodes"
                 tooltip="Import Episodes"
               >
-                <Download className="w-4 h-4" />
+                <RefreshCw className="w-4 h-4" />
+                <span className="ml-2 sm:hidden">Episodes</span>
                 <span className="ml-2 hidden lg:inline">{importEpisodesMutation.isPending ? "Importing..." : "Import Episodes"}</span>
               </ButtonWithTooltip>
               <ButtonWithTooltip 
@@ -297,6 +299,7 @@ export default function FollowedShows() {
                 tooltip="Sync Watched"
               >
                 <PlayCircle className="w-4 h-4" />
+                <span className="ml-2 sm:hidden">Sync</span>
                 <span className="ml-2 hidden lg:inline">{syncScrobblesMutation.isPending ? "Syncing..." : "Sync Watched"}</span>
               </ButtonWithTooltip>
             </div>
