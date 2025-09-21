@@ -257,8 +257,9 @@ async function performAsyncSync(jobId: string, showId: number): Promise<void> {
             if (episodeScrobble.type === 0) {
               initialStatus = "watched";
               // Use current time if marked_at is 0 (bulk operation)
+              // TVMaze timestamps are in seconds, need to multiply by 1000 for JS Date
               watchedAt = episodeScrobble.marked_at && episodeScrobble.marked_at > 0 
-                ? new Date(episodeScrobble.marked_at) 
+                ? new Date(episodeScrobble.marked_at * 1000) 
                 : new Date();
             } else if (episodeScrobble.type === 2) {
               initialStatus = "skipped";
@@ -467,8 +468,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   if (episodeScrobble.type === 0) {
                     initialStatus = "watched";
                     // Use current time if marked_at is 0 (bulk operation)
+                    // TVMaze timestamps are in seconds, need to multiply by 1000 for JS Date
                     watchedAt = episodeScrobble.marked_at && episodeScrobble.marked_at > 0 
-                      ? new Date(episodeScrobble.marked_at) 
+                      ? new Date(episodeScrobble.marked_at * 1000) 
                       : new Date();
                     console.log(`Setting episode ${episode.id} as watched`);
                   } else if (episodeScrobble.type === 2) {
@@ -1363,7 +1365,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
               // Mark type 0 = watched, Mark type 2 = skipped
               if (episodeScrobble.marked_at && episodeScrobble.type === 0) {
                 newStatus = "watched";
-                watchedAt = new Date(episodeScrobble.marked_at);
+                // TVMaze timestamps are in seconds, need to multiply by 1000 for JS Date
+                watchedAt = new Date(episodeScrobble.marked_at * 1000);
               } else if (episodeScrobble.marked_at && episodeScrobble.type === 2) {
                 newStatus = "skipped";
               }
