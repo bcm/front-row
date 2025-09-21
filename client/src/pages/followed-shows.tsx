@@ -229,7 +229,7 @@ export default function FollowedShows() {
             <div className="w-6 h-6 bg-primary rounded-full flex items-center justify-center">
               <BookOpen className="w-4 h-4 text-primary-foreground" />
             </div>
-            <h2 className="flex-1 min-w-0 text-xl sm:text-2xl font-bold truncate" data-testid="text-section-title-library">
+            <h2 className="flex-1 min-w-0 text-2xl sm:text-3xl font-bold truncate" data-testid="text-section-title-library">
               Library
             </h2>
             <div className="flex items-center space-x-2 shrink-0">
