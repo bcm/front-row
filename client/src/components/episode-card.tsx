@@ -82,12 +82,12 @@ export default function EpisodeCard({ userEpisode, onStatusChange, variant = "de
           {/* Content */}
           <div className="flex-1 min-w-0">
             <Link href={`/show/${show.id}`}>
-              <h2 className="font-medium text-sm text-primary hover:text-primary/80 truncate mb-1" data-testid={`text-show-name-${episode.id}`}>
+              <h2 className="font-bold text-lg text-primary hover:text-primary/80 truncate mb-1" data-testid={`text-show-name-${episode.id}`}>
                 {show.name}
               </h2>
             </Link>
             <Link href={`/episode/${episode.id}`}>
-              <h3 className="font-semibold text-lg truncate text-foreground mb-1 hover:text-primary transition-colors cursor-pointer" data-testid={`text-episode-title-${episode.id}`}>
+              <h3 className="font-medium text-sm truncate text-muted-foreground mb-1 hover:text-foreground transition-colors cursor-pointer" data-testid={`text-episode-title-${episode.id}`}>
                 {getEpisodeTitle()}
               </h3>
             </Link>
@@ -179,8 +179,13 @@ export default function EpisodeCard({ userEpisode, onStatusChange, variant = "de
             }}
           />
           <div className="flex-1 min-w-0">
+            <Link href={`/show/${show.id}`}>
+              <h3 className="font-semibold text-sm text-primary hover:text-primary/80 truncate mb-1" data-testid={`text-show-name-${episode.id}`}>
+                {show.name}
+              </h3>
+            </Link>
             <Link href={`/episode/${episode.id}`}>
-              <h4 className="font-medium text-xs truncate text-foreground hover:text-primary transition-colors cursor-pointer" data-testid={`text-episode-title-${episode.id}`}>
+              <h4 className="font-medium text-xs truncate text-muted-foreground hover:text-foreground transition-colors cursor-pointer" data-testid={`text-episode-title-${episode.id}`}>
                 {getEpisodeTitle()}
               </h4>
             </Link>
@@ -227,8 +232,13 @@ export default function EpisodeCard({ userEpisode, onStatusChange, variant = "de
             }}
           />
           <div className="flex-1 min-w-0">
+            <Link href={`/show/${show.id}`}>
+              <h2 className="font-bold text-base text-primary hover:text-primary/80 truncate mb-1" data-testid={`text-show-name-${episode.id}`}>
+                {show.name}
+              </h2>
+            </Link>
             <Link href={`/episode/${episode.id}`}>
-              <h3 className="font-semibold text-sm truncate text-foreground mb-1 hover:text-primary transition-colors cursor-pointer" data-testid={`text-episode-title-${episode.id}`}>
+              <h3 className="font-medium text-sm truncate text-muted-foreground mb-1 hover:text-foreground transition-colors cursor-pointer" data-testid={`text-episode-title-${episode.id}`}>
                 {getEpisodeTitle()}
               </h3>
             </Link>
@@ -303,8 +313,13 @@ export default function EpisodeCard({ userEpisode, onStatusChange, variant = "de
           }}
         />
         <div className="flex-1 min-w-0">
+          <Link href={`/show/${show.id}`}>
+            <h2 className="font-bold text-lg text-primary hover:text-primary/80 truncate mb-1" data-testid={`text-show-name-${episode.id}`}>
+              {show.name}
+            </h2>
+          </Link>
           <Link href={`/episode/${episode.id}`}>
-            <h3 className="font-semibold text-lg truncate text-foreground mb-1 hover:text-primary transition-colors cursor-pointer" data-testid={`text-episode-title-${episode.id}`}>
+            <h3 className="font-medium text-base truncate text-muted-foreground mb-1 hover:text-foreground transition-colors cursor-pointer" data-testid={`text-episode-title-${episode.id}`}>
               {getEpisodeTitle()}
             </h3>
           </Link>
