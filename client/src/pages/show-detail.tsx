@@ -882,18 +882,22 @@ export default function ShowDetail() {
           {/* Show Info */}
           <div className="flex-1 space-y-6">
             {/* Title and Status */}
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-foreground flex-1 min-w-0 mr-4 truncate" data-testid={`text-show-title-${show.id}`}>
+            <div className="space-y-4">
+              <div>
+                <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-foreground break-words" data-testid={`text-show-title-${show.id}`}>
                   {show.name}
                 </h1>
-                <div className="flex items-center space-x-3 flex-shrink-0">
-                  {show.rating?.average && (
-                    <div className="flex items-center space-x-1" data-testid={`text-show-rating-${show.id}`}>
-                      <Star className="w-5 h-5 text-yellow-500" />
-                      <span className="text-foreground font-medium">{formatRating(show.rating)}</span>
-                    </div>
-                  )}
+              </div>
+              
+              <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+                {show.rating?.average && (
+                  <div className="flex items-center space-x-1" data-testid={`text-show-rating-${show.id}`}>
+                    <Star className="w-5 h-5 text-yellow-500" />
+                    <span className="text-foreground font-medium">{formatRating(show.rating)}</span>
+                  </div>
+                )}
+                
+                <div className="flex flex-wrap gap-3">
                   {userShow && (
                     <div className="flex items-center space-x-2 bg-card border rounded-lg px-3 py-2">
                       <Users className="w-4 h-4 text-muted-foreground" />
@@ -918,7 +922,8 @@ export default function ShowDetail() {
                         data-testid={`button-remove-show-${show.id}`}
                       >
                         <Trash2 className="h-4 w-4 mr-2" />
-                        Remove Show
+                        <span className="hidden sm:inline">Remove Show</span>
+                        <span className="sm:hidden">Remove</span>
                       </Button>
                     </AlertDialogTrigger>
                     <AlertDialogContent>

@@ -224,7 +224,8 @@ export default function FollowedShows() {
     <div className="space-y-8">
       {/* Header Section */}
       <section>
-        <div className="flex items-center justify-between mb-6">
+        <div className="space-y-4 mb-6">
+          {/* Title Row */}
           <div className="flex items-center space-x-3">
             <div className="w-6 h-6 bg-primary rounded-full flex items-center justify-center">
               <BookOpen className="w-4 h-4 text-primary-foreground" />
@@ -243,24 +244,25 @@ export default function FollowedShows() {
               )}
             </div>
           </div>
-          <div className="flex items-center space-x-4">
-            <div className="flex items-center space-x-3">
-              <div className="flex items-center space-x-2">
-                <Switch
-                  id="hide-finished-shows"
-                  checked={!userSettings?.hideFinishedShows}
-                  onCheckedChange={(checked) => {
-                    updateSettingsMutation.mutate({ hideFinishedShows: !checked });
-                  }}
-                  disabled={updateSettingsMutation.isPending}
-                  data-testid="switch-hide-finished-shows"
-                />
-                <Label htmlFor="hide-finished-shows" className="text-sm text-muted-foreground cursor-pointer">
-                  Show finished shows
-                </Label>
-              </div>
+          
+          {/* Controls Row */}
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div className="flex items-center space-x-2">
+              <Switch
+                id="hide-finished-shows"
+                checked={!userSettings?.hideFinishedShows}
+                onCheckedChange={(checked) => {
+                  updateSettingsMutation.mutate({ hideFinishedShows: !checked });
+                }}
+                disabled={updateSettingsMutation.isPending}
+                data-testid="switch-hide-finished-shows"
+              />
+              <Label htmlFor="hide-finished-shows" className="text-sm text-muted-foreground cursor-pointer">
+                Show finished shows
+              </Label>
             </div>
-            <div className="flex space-x-2">
+            
+            <div className="flex flex-wrap gap-2">
               <ButtonWithTooltip 
                 onClick={() => importMutation.mutate()}
                 disabled={importMutation.isPending}
@@ -270,11 +272,11 @@ export default function FollowedShows() {
                 tooltip="Import from TVMaze"
               >
                 {importMutation.isPending ? (
-                  <Loader2 className="w-4 h-4 lg:mr-0 mr-2 animate-spin" />
+                  <Loader2 className="w-4 h-4 animate-spin" />
                 ) : (
-                  <Download className="w-4 h-4 lg:mr-0 mr-2" />
+                  <Download className="w-4 h-4" />
                 )}
-                <span className="lg:hidden">Import from TVMaze</span>
+                <span className="ml-2 hidden lg:inline">Import from TVMaze</span>
               </ButtonWithTooltip>
               <ButtonWithTooltip 
                 onClick={handleImportEpisodes}
@@ -283,8 +285,8 @@ export default function FollowedShows() {
                 data-testid="button-import-episodes"
                 tooltip="Import Episodes"
               >
-                <Download className="w-4 h-4 lg:mr-0 mr-2" />
-                <span className="lg:hidden">{importEpisodesMutation.isPending ? "Importing..." : "Import Episodes"}</span>
+                <Download className="w-4 h-4" />
+                <span className="ml-2 hidden lg:inline">{importEpisodesMutation.isPending ? "Importing..." : "Import Episodes"}</span>
               </ButtonWithTooltip>
               <ButtonWithTooltip 
                 onClick={handleSyncScrobbles}
@@ -294,8 +296,8 @@ export default function FollowedShows() {
                 data-testid="button-sync-scrobbles"
                 tooltip="Sync Watched"
               >
-                <PlayCircle className="w-4 h-4 lg:mr-0 mr-2" />
-                <span className="lg:hidden">{syncScrobblesMutation.isPending ? "Syncing..." : "Sync Watched"}</span>
+                <PlayCircle className="w-4 h-4" />
+                <span className="ml-2 hidden lg:inline">{syncScrobblesMutation.isPending ? "Syncing..." : "Sync Watched"}</span>
               </ButtonWithTooltip>
             </div>
           </div>
