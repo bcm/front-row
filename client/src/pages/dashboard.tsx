@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { UserEpisode, Episode, Show } from "@shared/schema";
@@ -15,12 +15,31 @@ import { Link } from "wouter";
 
 export default function Dashboard() {
   const [showAddDialog, setShowAddDialog] = useState(false);
-  const [showMode, setShowMode] = useState<"personal" | "shared">(() => {
-    const saved = localStorage.getItem('tv-curator-show-mode');
-    return (saved === 'personal' || saved === 'shared') ? saved : 'personal';
-  });
+  const [showMode, setShowMode] = useState<"personal" | "shared">("personal");
+  const [settingsLoaded, setSettingsLoaded] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
+
+  // Fetch user settings on mount
+  useEffect(() => {
+    const fetchSettings = async () => {
+      try {
+        const response = await fetch('/api/user/settings');
+        if (response.ok) {
+          const settings = await response.json();
+          if (settings.showMode === 'personal' || settings.showMode === 'shared') {
+            setShowMode(settings.showMode);
+          }
+        }
+      } catch (error) {
+        console.error('Failed to fetch user settings:', error);
+      } finally {
+        setSettingsLoaded(true);
+      }
+    };
+
+    fetchSettings();
+  }, []);
 
   // Episode queries
   const { data: nextEpisodes, isLoading: nextLoading } = useQuery({
@@ -30,6 +49,7 @@ export default function Dashboard() {
       if (!response.ok) throw new Error("Failed to fetch next episodes");
       return response.json() as Promise<(UserEpisode & { episode: Episode & { show: Show } })[]>;
     },
+    enabled: settingsLoaded,
   });
 
   const { data: laterEpisodes, isLoading: laterLoading } = useQuery({
@@ -39,6 +59,7 @@ export default function Dashboard() {
       if (!response.ok) throw new Error("Failed to fetch later episodes");
       return response.json() as Promise<(UserEpisode & { episode: Episode & { show: Show } })[]>;
     },
+    enabled: settingsLoaded,
   });
 
   const { data: watchedEpisodes, isLoading: watchedLoading } = useQuery({
@@ -48,6 +69,7 @@ export default function Dashboard() {
       if (!response.ok) throw new Error("Failed to fetch watched episodes");
       return response.json() as Promise<(UserEpisode & { episode: Episode & { show: Show } })[]>;
     },
+    enabled: settingsLoaded,
   });
 
   // Helper function to get the earliest episode per show
@@ -212,8 +234,29 @@ export default function Dashboard() {
     
     // Optimistically update the UI immediately
     setShowMode(validMode);
-    localStorage.setItem('tv-curator-show-mode', validMode);
     setIsToggling(true);
+    
+    // Update settings in database
+    try {
+      const response = await fetch('/api/user/settings', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ showMode: validMode }),
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to update settings');
+      }
+    } catch (error) {
+      console.error('Failed to save show mode setting:', error);
+      toast({
+        title: "Settings not saved",
+        description: "Your preference was applied but not saved to the database.",
+        variant: "destructive",
+      });
+    }
     
     // Prefetch data for the target mode in background
     try {

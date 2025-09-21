@@ -68,6 +68,7 @@ export const userSettings = pgTable("user_settings", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").notNull().unique(),
   hideFinishedShows: boolean("hide_finished_shows").notNull().default(true),
+  showMode: text("show_mode").notNull().default("personal"),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 

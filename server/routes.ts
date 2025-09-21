@@ -1435,6 +1435,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const defaultSettings = {
           userId,
           hideFinishedShows: true,
+          showMode: "personal",
         };
         settings = await storage.createUserSettings(defaultSettings);
       }
@@ -1457,6 +1458,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const defaultSettings = {
           userId,
           hideFinishedShows: true,
+          showMode: "personal",
         };
         settings = await storage.createUserSettings(defaultSettings);
       }
