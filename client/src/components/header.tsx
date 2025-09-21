@@ -195,7 +195,7 @@ export default function Header({ onSearch }: HeaderProps) {
           </Link>
           
           {/* Search Bar */}
-          <div className="hidden md:block flex-1 max-w-lg mx-8">
+          <div className="hidden md:block w-96 mx-8">
             <div className="relative">
               <input 
                 type="text" 
