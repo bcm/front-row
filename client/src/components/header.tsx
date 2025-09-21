@@ -1,9 +1,10 @@
-import { useState, useMemo } from "react";
-import { Search, Tv, Film, Calendar } from "lucide-react";
+import { useState, useMemo, useEffect } from "react";
+import { Search, Tv, Film, Calendar, Users } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import { useDebounce } from "@/hooks/use-debounce";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 interface SearchResult {
   resultType: 'show' | 'episode';
@@ -26,7 +27,49 @@ export default function Header({ onSearch }: HeaderProps) {
   const [location, setLocation] = useLocation();
   const [searchQuery, setSearchQuery] = useState("");
   const [showDropdown, setShowDropdown] = useState(false);
+  const [showMode, setShowMode] = useState<"personal" | "shared">("personal");
+  const [settingsLoaded, setSettingsLoaded] = useState(false);
   const debouncedSearch = useDebounce(searchQuery, 300);
+
+  // Load show mode setting on mount
+  useEffect(() => {
+    const fetchSettings = async () => {
+      try {
+        const response = await fetch('/api/user/settings');
+        if (response.ok) {
+          const settings = await response.json();
+          if (settings.showMode === 'personal' || settings.showMode === 'shared') {
+            setShowMode(settings.showMode);
+          }
+        }
+      } catch (error) {
+        console.error('Failed to fetch user settings:', error);
+      } finally {
+        setSettingsLoaded(true);
+      }
+    };
+
+    fetchSettings();
+  }, []);
+
+  // Handle show mode change
+  const handleShowModeChange = async (newMode: string) => {
+    if (newMode !== showMode && (newMode === 'personal' || newMode === 'shared')) {
+      setShowMode(newMode as 'personal' | 'shared');
+      
+      try {
+        await fetch('/api/user/settings', {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ showMode: newMode }),
+        });
+      } catch (error) {
+        console.error('Failed to update show mode:', error);
+      }
+    }
+  };
 
   // Get untriaged episodes count for badge
   const { data: untriagedEpisodes } = useQuery({
@@ -277,6 +320,22 @@ export default function Header({ onSearch }: HeaderProps) {
               </Link>
             ))}
           </nav>
+          
+          {/* Show Mode Selector */}
+          {settingsLoaded && (
+            <div className="flex items-center space-x-2 ml-4">
+              <Users className="w-4 h-4 text-muted-foreground" />
+              <Select value={showMode} onValueChange={handleShowModeChange} data-testid="select-show-mode">
+                <SelectTrigger className="w-28 h-8 text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="personal">Personal</SelectItem>
+                  <SelectItem value="shared">Shared</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          )}
         </div>
         
         {/* Mobile Search */}

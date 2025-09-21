@@ -34,7 +34,7 @@ export interface IStorage {
   searchUserEpisodes(userId: string, query: string): Promise<(Episode & { show: Show })[]>;
   
   // User episode methods
-  getUserEpisodes(userId: string, status?: string): Promise<(UserEpisode & { episode: Episode & { show: Show } })[]>;
+  getUserEpisodes(userId: string, status?: string, showMode?: string): Promise<(UserEpisode & { episode: Episode & { show: Show } })[]>;
   addUserEpisode(userEpisode: InsertUserEpisode): Promise<UserEpisode>;
   updateUserEpisode(userId: string, episodeId: number, updates: Partial<UserEpisode>): Promise<UserEpisode | undefined>;
   getUserEpisode(userId: string, episodeId: number): Promise<UserEpisode | undefined>;
@@ -439,7 +439,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   // User episode methods
-  async getUserEpisodes(userId: string, status?: string): Promise<(UserEpisode & { episode: Episode & { show: Show } })[]> {
+  async getUserEpisodes(userId: string, status?: string, showMode?: string): Promise<(UserEpisode & { episode: Episode & { show: Show } })[]> {
     // Get today's date in YYYY-MM-DD format for comparison
     const today = new Date().toISOString().split('T')[0];
     
@@ -450,10 +450,22 @@ export class DatabaseStorage implements IStorage {
       lte(episodes.airdate, today)
     );
     
+    // Add shared filter based on showMode
+    // "shared" = only shared shows, "personal" = only non-shared shows, "all" or undefined = no filter
+    let sharedFilter;
+    if (showMode === 'shared') {
+      sharedFilter = eq(userShows.isShared, true);
+    } else if (showMode === 'personal') {
+      sharedFilter = eq(userShows.isShared, false);
+    }
+    
     // Combine all conditions
     const allConditions = [baseConditions];
     if (status) {
       allConditions.push(eq(userEpisodes.status, status));
+    }
+    if (sharedFilter) {
+      allConditions.push(sharedFilter);
     }
     
     const whereClause = and(...allConditions);

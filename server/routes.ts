@@ -1212,10 +1212,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get user episodes with filtering by status
   app.get("/api/user/episodes", async (req, res) => {
     try {
-      const { status } = req.query;
+      const { status, showMode } = req.query;
       const userId = "demo-user"; // Mock user ID
       
-      const episodes = await storage.getUserEpisodes(userId, status as string);
+      // Validate showMode parameter
+      const validShowModes = ['personal', 'shared', 'all'];
+      const parsedShowMode = typeof showMode === 'string' && validShowModes.includes(showMode) 
+        ? showMode 
+        : undefined;
+      
+      const episodes = await storage.getUserEpisodes(userId, status as string, parsedShowMode);
       res.json(episodes);
     } catch (error) {
       console.error("Error fetching user episodes:", error);
@@ -1429,6 +1435,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const defaultSettings = {
           userId,
           hideFinishedShows: true,
+          showMode: "personal",
         };
         settings = await storage.createUserSettings(defaultSettings);
       }
@@ -1451,6 +1458,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const defaultSettings = {
           userId,
           hideFinishedShows: true,
+          showMode: "personal",
         };
         settings = await storage.createUserSettings(defaultSettings);
       }
