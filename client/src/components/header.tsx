@@ -367,6 +367,30 @@ export default function Header({ onSearch }: HeaderProps) {
                 </Link>
               ))}
             </nav>
+            
+            {/* Tab Navigation - Icons only on mobile screens */}
+            <nav className="flex sm:hidden space-x-1">
+              {tabs.map((tab) => (
+                <Link 
+                  key={tab.id}
+                  href={tab.href}
+                  data-testid={`button-tab-${tab.id}-mobile`}
+                  className={cn(
+                    "p-2 rounded-md transition-colors relative",
+                    activeTab === tab.id
+                      ? "bg-primary text-primary-foreground"
+                      : "text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  <tab.icon className="w-4 h-4" />
+                  {tab.showBadge && untriagedCount > 0 && (
+                    <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-3 h-3 flex items-center justify-center text-[10px]">
+                      {untriagedCount > 9 ? '9' : untriagedCount}
+                    </span>
+                  )}
+                </Link>
+              ))}
+            </nav>
           </TooltipProvider>
           
           {/* Show Mode Selector - Icon button with dropdown on large screens */}
@@ -441,6 +465,40 @@ export default function Header({ onSearch }: HeaderProps) {
               </DropdownMenu>
             ) : (
               <div className="w-20 h-8 bg-muted animate-pulse rounded" />
+            )}
+          </div>
+          
+          {/* Show Mode Selector - Icon button on mobile screens */}
+          <div className="block sm:hidden ml-2 flex-shrink-0">
+            {settingsLoaded ? (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    className="p-2 rounded-md transition-colors" 
+                    data-testid="button-show-mode-mobile"
+                  >
+                    <Users className="w-4 h-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent>
+                  <DropdownMenuItem 
+                    onClick={() => handleShowModeChange('personal')}
+                    className={showMode === 'personal' ? 'bg-accent' : ''}
+                  >
+                    Personal
+                  </DropdownMenuItem>
+                  <DropdownMenuItem 
+                    onClick={() => handleShowModeChange('shared')}
+                    className={showMode === 'shared' ? 'bg-accent' : ''}
+                  >
+                    Shared
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            ) : (
+              <div className="w-8 h-8 bg-muted animate-pulse rounded" />
             )}
           </div>
         </div>
