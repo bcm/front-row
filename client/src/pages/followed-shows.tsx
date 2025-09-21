@@ -283,6 +283,7 @@ export default function FollowedShows() {
                 onClick={handleImportEpisodes}
                 disabled={importEpisodesMutation.isPending}
                 size="sm"
+                variant="outline"
                 data-testid="button-import-episodes"
                 tooltip="Import Episodes"
               >
