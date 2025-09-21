@@ -323,11 +323,15 @@ export default function AddShowDialog({ open, onOpenChange }: AddShowDialogProps
                     <Button
                       size="sm"
                       onClick={() => handleAddShow(result.show.id)}
-                      disabled={addShowMutation.isPending}
+                      disabled={addShowMutation.isPending || currentJobId !== null}
                       data-testid={`button-add-show-${result.show.id}`}
                       className="flex-shrink-0"
                     >
-                      <Plus className="w-4 h-4" />
+                      {addShowMutation.isPending ? (
+                        <div className="animate-spin h-4 w-4 border-2 border-primary border-t-transparent rounded-full" />
+                      ) : (
+                        <Plus className="w-4 h-4" />
+                      )}
                     </Button>
                   </div>
                 ))}
