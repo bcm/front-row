@@ -939,9 +939,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Check if show already exists in user's collection
       const existingUserShow = await storage.getUserShow(userId, showId);
-      if (existingUserShow) {
-        console.log(`[ADD_SHOW] Show ${showId} already exists in collection`);
+      if (existingUserShow && !existingUserShow.isRemoved) {
+        console.log(`[ADD_SHOW] Show ${showId} already exists in active collection`);
         return res.status(400).json({ error: "Show already in your collection" });
+      }
+      
+      // Handle soft-deleted shows by "undeleting" them
+      if (existingUserShow && existingUserShow.isRemoved) {
+        console.log(`[ADD_SHOW] Show ${showId} exists but is soft-deleted, restoring it...`);
+        await storage.updateUserShow(userId, showId, { 
+          isRemoved: false,
+          addedAt: new Date() // Update the added date
+        });
+        console.log(`[ADD_SHOW] Successfully restored show ${showId}`);
       }
 
       // Sync show details from TVMaze first
@@ -955,10 +965,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       console.log(`[ADD_SHOW] Successfully synced show: ${syncedShow.name}`);
 
-      // Add user show to collection first
-      console.log(`[ADD_SHOW] Adding show ${showId} to user collection...`);
-      const userShow = await storage.addUserShow(validatedData);
-      console.log(`[ADD_SHOW] Successfully added userShow: ${userShow.id}`);
+      // Add user show to collection (or use existing restored one)
+      let userShow;
+      if (existingUserShow && existingUserShow.isRemoved) {
+        // Already restored above, fetch the updated record
+        userShow = await storage.getUserShow(userId, showId);
+        console.log(`[ADD_SHOW] Using restored userShow: ${userShow.id}`);
+      } else {
+        // Add new user show to collection
+        console.log(`[ADD_SHOW] Adding show ${showId} to user collection...`);
+        userShow = await storage.addUserShow(validatedData);
+        console.log(`[ADD_SHOW] Successfully added userShow: ${userShow.id}`);
+      }
 
       // Follow the show on TVMaze if credentials are available
       const apiKey = process.env.TVMAZE_API_KEY;
