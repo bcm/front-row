@@ -110,7 +110,7 @@ export default function Header({ onSearch }: HeaderProps) {
   }, [searchResults]);
 
   const tabs = [
-    { id: "dashboard", label: "Dashboard", href: "/" },
+    { id: "dashboard", label: "Next Up", href: "/" },
     { id: "watch-later", label: "Watch Later", href: "/watch-later" },
     { id: "triage", label: "Triage", href: "/triage", showBadge: true },
     { id: "library", label: "Library", href: "/library" },

@@ -148,7 +148,7 @@ export default function Dashboard() {
               <div className="w-6 h-6 bg-green-500 rounded-full flex items-center justify-center">
                 <PlayCircle className="w-4 h-4 text-white" />
               </div>
-              <h2 className="text-2xl font-bold" data-testid="text-section-title-next">Next to Watch</h2>
+              <h1 className="text-3xl font-bold" data-testid="text-page-title">Next Up</h1>
               <p className="text-muted-foreground text-base ml-4">Your priority viewing queue</p>
             </div>
             
