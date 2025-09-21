@@ -195,7 +195,7 @@ export default function Header({ onSearch }: HeaderProps) {
           </Link>
           
           {/* Search Bar */}
-          <div className="hidden md:block w-96 mx-8">
+          <div className="hidden md:block w-72 lg:w-96 mx-4 lg:mx-8">
             <div className="relative">
               <input 
                 type="text" 
@@ -335,9 +335,9 @@ export default function Header({ onSearch }: HeaderProps) {
           </nav>
           
           {/* Show Mode Selector */}
-          {settingsLoaded && (
-            <div className="flex items-center space-x-2 ml-4">
-              <Users className="w-4 h-4 text-muted-foreground" />
+          <div className="flex items-center space-x-2 ml-4 w-32 flex-shrink-0">
+            <Users className="w-4 h-4 text-muted-foreground" />
+            {settingsLoaded ? (
               <Select value={showMode} onValueChange={handleShowModeChange} data-testid="select-show-mode">
                 <SelectTrigger className="w-28 h-8 text-xs">
                   <SelectValue />
@@ -347,8 +347,10 @@ export default function Header({ onSearch }: HeaderProps) {
                   <SelectItem value="shared">Shared</SelectItem>
                 </SelectContent>
               </Select>
-            </div>
-          )}
+            ) : (
+              <div className="w-28 h-8 bg-muted animate-pulse rounded" />
+            )}
+          </div>
         </div>
         
         {/* Mobile Search */}
