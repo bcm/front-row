@@ -52,7 +52,8 @@ export default function Header({ onSearch }: HeaderProps) {
       return response.json();
     },
     enabled: debouncedSearch.length >= 2,
-    staleTime: 1000 * 60 * 5, // 5 minutes
+    staleTime: 1000 * 15, // 15 seconds for fresher results
+    refetchOnWindowFocus: true
   });
 
   const handleSearch = (e: React.ChangeEvent<HTMLInputElement>) => {

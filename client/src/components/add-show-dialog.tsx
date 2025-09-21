@@ -61,6 +61,7 @@ export default function AddShowDialog({ open, onOpenChange }: AddShowDialogProps
         // Fallback for synchronous response
         queryClient.invalidateQueries({ queryKey: ["/api/user/shows"] });
         queryClient.invalidateQueries({ queryKey: ["/api/user/episodes"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/search"], exact: false });
         
         toast({
           title: "Show added",
@@ -107,6 +108,7 @@ export default function AddShowDialog({ open, onOpenChange }: AddShowDialogProps
             // Invalidate queries to refresh data
             queryClient.invalidateQueries({ queryKey: ["/api/user/shows"] });
             queryClient.invalidateQueries({ queryKey: ["/api/user/episodes"] });
+            queryClient.invalidateQueries({ queryKey: ["/api/search"], exact: false });
             
             toast({
               title: "Import completed",
@@ -139,6 +141,7 @@ export default function AddShowDialog({ open, onOpenChange }: AddShowDialogProps
           // Invalidate queries to refresh data
           queryClient.invalidateQueries({ queryKey: ["/api/user/shows"] });
           queryClient.invalidateQueries({ queryKey: ["/api/user/episodes"] });
+          queryClient.invalidateQueries({ queryKey: ["/api/search"], exact: false });
           
           toast({
             title: "Import completed",

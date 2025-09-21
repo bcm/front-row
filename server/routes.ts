@@ -970,7 +970,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (existingUserShow && existingUserShow.isRemoved) {
         // Already restored above, fetch the updated record
         userShow = await storage.getUserShow(userId, showId);
-        console.log(`[ADD_SHOW] Using restored userShow: ${userShow.id}`);
+        console.log(`[ADD_SHOW] Using restored userShow: ${userShow!.id}`);
       } else {
         // Add new user show to collection
         console.log(`[ADD_SHOW] Adding show ${showId} to user collection...`);
