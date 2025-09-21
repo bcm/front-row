@@ -449,8 +449,8 @@ export default function Triage() {
               <div className="w-6 h-6 bg-yellow-500 rounded-full flex items-center justify-center">
                 <AlertTriangle className="w-4 h-4 text-white" />
               </div>
-              <h2 className="text-2xl font-bold" data-testid="text-section-title-new-feed">New in Feed</h2>
-              <p className="text-muted-foreground text-base ml-4">Episodes that need your attention</p>
+              <h2 className="flex-1 min-w-0 text-xl sm:text-2xl font-bold truncate" data-testid="text-section-title-new-feed">New in Feed</h2>
+              <p className="hidden sm:inline text-muted-foreground text-base ml-4 shrink-0">Episodes that need your attention</p>
             </div>
             
             <div className="space-y-4">

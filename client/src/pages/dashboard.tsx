@@ -165,8 +165,8 @@ export default function Dashboard() {
               <div className="w-6 h-6 bg-green-500 rounded-full flex items-center justify-center">
                 <PlayCircle className="w-4 h-4 text-white" />
               </div>
-              <h1 className="text-3xl font-bold" data-testid="text-page-title">Next Up</h1>
-              <p className="text-muted-foreground text-base ml-4">Your priority viewing queue</p>
+              <h1 className="flex-1 min-w-0 text-2xl sm:text-3xl font-bold truncate" data-testid="text-page-title">Next Up</h1>
+              <p className="hidden sm:inline text-muted-foreground text-base ml-4 shrink-0">Your priority viewing queue</p>
             </div>
             
             <div className="space-y-6">

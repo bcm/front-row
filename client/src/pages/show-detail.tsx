@@ -884,7 +884,7 @@ export default function ShowDetail() {
             {/* Title and Status */}
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <h1 className="text-4xl font-bold text-foreground flex-1 min-w-0 mr-4" data-testid={`text-show-title-${show.id}`}>
+                <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-foreground flex-1 min-w-0 mr-4 truncate" data-testid={`text-show-title-${show.id}`}>
                   {show.name}
                 </h1>
                 <div className="flex items-center space-x-3 flex-shrink-0">

@@ -229,17 +229,19 @@ export default function FollowedShows() {
             <div className="w-6 h-6 bg-primary rounded-full flex items-center justify-center">
               <BookOpen className="w-4 h-4 text-primary-foreground" />
             </div>
-            <h2 className="text-2xl font-bold" data-testid="text-section-title-library">
+            <h2 className="flex-1 min-w-0 text-xl sm:text-2xl font-bold truncate" data-testid="text-section-title-library">
               Library
             </h2>
-            <span className="bg-primary text-primary-foreground px-2 py-1 rounded-full text-xs font-bold" data-testid="text-library-count">
-              {filteredShows?.length || 0}
-            </span>
-            {libraryShows && filteredShows && libraryShows.length !== filteredShows.length && (
-              <span className="text-xs text-muted-foreground">
-                ({libraryShows.length - filteredShows.length} hidden)
+            <div className="flex items-center space-x-2 shrink-0">
+              <span className="bg-primary text-primary-foreground px-2 py-1 rounded-full text-xs font-bold" data-testid="text-library-count">
+                {filteredShows?.length || 0}
               </span>
-            )}
+              {libraryShows && filteredShows && libraryShows.length !== filteredShows.length && (
+                <span className="hidden sm:inline text-xs text-muted-foreground">
+                  ({libraryShows.length - filteredShows.length} hidden)
+                </span>
+              )}
+            </div>
           </div>
           <div className="flex items-center space-x-4">
             <div className="flex items-center space-x-3">

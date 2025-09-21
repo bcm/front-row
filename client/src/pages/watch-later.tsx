@@ -157,8 +157,8 @@ export default function WatchLater() {
               <div className="w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center">
                 <Clock className="w-4 h-4 text-white" />
               </div>
-              <h1 className="text-3xl font-bold" data-testid="text-page-title">Watch Later</h1>
-              <p className="text-muted-foreground text-base ml-4">Episodes saved for later</p>
+              <h1 className="flex-1 min-w-0 text-2xl sm:text-3xl font-bold truncate" data-testid="text-page-title">Watch Later</h1>
+              <p className="hidden sm:inline text-muted-foreground text-base ml-4 shrink-0">Episodes saved for later</p>
             </div>
             
             <div className="space-y-6">
