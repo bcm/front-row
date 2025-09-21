@@ -6,7 +6,7 @@ import Header from "@/components/header";
 import EpisodeCard from "@/components/episode-card";
 import FloatingAddButton from "@/components/floating-add-button";
 import AddShowDialog from "@/components/add-show-dialog";
-import { PlayCircle, Clock, Eye, Users } from "lucide-react";
+import { PlayCircle, Clock, Users } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Label } from "@/components/ui/label";
@@ -108,35 +108,6 @@ export default function Dashboard() {
     }).sort((a, b) => a.episode.show.name.localeCompare(b.episode.show.name));
   }, [laterEpisodes]);
 
-  const getWatchedEpisodesByShow = useMemo(() => {
-    if (!watchedEpisodes) return [];
-    
-    // Group episodes by show
-    const grouped = new Map<number, (UserEpisode & { episode: Episode & { show: Show } })[]>();
-    
-    watchedEpisodes.forEach(userEpisode => {
-      const showId = userEpisode.episode.show.id;
-      if (!grouped.has(showId)) {
-        grouped.set(showId, []);
-      }
-      grouped.get(showId)!.push(userEpisode);
-    });
-    
-    // For each show, find the latest watched episode (by season desc, then episode desc)
-    return Array.from(grouped.entries()).map(([showId, episodes]) => {
-      const latestEpisode = episodes.sort((a, b) => {
-        const seasonA = a.episode.season || 1;
-        const seasonB = b.episode.season || 1;
-        if (seasonA !== seasonB) return seasonB - seasonA; // Descending for latest
-        
-        const episodeA = a.episode.number || 0;
-        const episodeB = b.episode.number || 0;
-        return episodeB - episodeA; // Descending for latest
-      })[0];
-      
-      return latestEpisode;
-    }).sort((a, b) => a.episode.show.name.localeCompare(b.episode.show.name));
-  }, [watchedEpisodes]);
 
   // Episode update mutation with optimistic updates
   const updateEpisodeMutation = useMutation({
@@ -426,63 +397,6 @@ export default function Dashboard() {
                   <Clock className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
                   <h3 className="text-lg font-semibold text-muted-foreground mb-2">No episodes for later</h3>
                   <p className="text-muted-foreground">Episodes you mark as "Later" will appear here</p>
-                </div>
-              )}
-            </div>
-          </section>
-
-          {/* Watched Section */}
-          <section>
-            <div className="flex items-center space-x-3 mb-6">
-              <div className="w-6 h-6 bg-purple-500 rounded-full flex items-center justify-center">
-                <Eye className="w-4 h-4 text-white" />
-              </div>
-              <h2 className="text-2xl font-bold" data-testid="text-section-title-watched">Watched</h2>
-              <p className="text-muted-foreground text-base ml-4">Your recently completed episodes</p>
-            </div>
-            
-            <div className="space-y-6">
-              {watchedLoading ? (
-                <div className="space-y-4">
-                  {Array.from({ length: 6 }).map((_, i) => (
-                    <div key={i} className="bg-card rounded-lg p-4 animate-pulse">
-                      <div className="flex flex-col sm:flex-row sm:items-center gap-4">
-                        <div className="w-full sm:w-32 h-48 sm:h-24 bg-muted rounded-md flex-shrink-0"></div>
-                        <div className="flex-1 space-y-2">
-                          <div className="h-4 bg-muted rounded"></div>
-                          <div className="h-3 bg-muted rounded w-3/4"></div>
-                          <div className="h-3 bg-muted rounded w-1/2"></div>
-                        </div>
-                        <div className="flex flex-col sm:flex-row sm:items-center gap-4 flex-shrink-0">
-                          <div className="space-y-1">
-                            <div className="h-4 bg-muted rounded w-24"></div>
-                            <div className="h-4 bg-muted rounded w-20"></div>
-                          </div>
-                          <div className="flex gap-2">
-                            <div className="h-8 bg-muted rounded w-20"></div>
-                            <div className="h-8 bg-muted rounded w-16"></div>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : getWatchedEpisodesByShow.length > 0 ? (
-                <div className="space-y-4">
-                  {getWatchedEpisodesByShow.map((userEpisode) => (
-                    <EpisodeCard
-                      key={userEpisode.id}
-                      userEpisode={userEpisode}
-                      onStatusChange={handleEpisodeStatusChange}
-                      variant="wide"
-                    />
-                  ))}
-                </div>
-              ) : (
-                <div className="text-center py-8">
-                  <Eye className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
-                  <h3 className="text-lg font-semibold text-muted-foreground mb-2">No episodes watched</h3>
-                  <p className="text-muted-foreground">Episodes you mark as "Watched" will appear here</p>
                 </div>
               )}
             </div>
