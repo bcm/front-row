@@ -1,10 +1,11 @@
 import { useState, useMemo, useEffect } from "react";
-import { Search, Tv, Film, Calendar, Users } from "lucide-react";
+import { Search, Tv, Film, Calendar, Users, PlayCircle, Clock, Filter, Library } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import { useDebounce } from "@/hooks/use-debounce";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 interface SearchResult {
   resultType: 'show' | 'episode';
@@ -166,10 +167,10 @@ export default function Header({ onSearch }: HeaderProps) {
   }, [searchResults]);
 
   const tabs = [
-    { id: "dashboard", label: "Next Up", href: "/" },
-    { id: "watch-later", label: "Watch Later", href: "/watch-later" },
-    { id: "triage", label: "Triage", href: "/triage", showBadge: true },
-    { id: "library", label: "Library", href: "/library" },
+    { id: "dashboard", label: "Next Up", href: "/", icon: PlayCircle },
+    { id: "watch-later", label: "Watch Later", href: "/watch-later", icon: Clock },
+    { id: "triage", label: "Triage", href: "/triage", showBadge: true, icon: Filter },
+    { id: "library", label: "Library", href: "/library", icon: Library },
   ];
 
   const getActiveTab = () => {
@@ -310,29 +311,61 @@ export default function Header({ onSearch }: HeaderProps) {
             </div>
           </div>
           
-          {/* Tab Navigation */}
-          <nav className="hidden sm:flex space-x-1">
-            {tabs.map((tab) => (
-              <Link 
-                key={tab.id}
-                href={tab.href}
-                data-testid={`button-tab-${tab.id}`}
-                className={cn(
-                  "px-4 py-2 rounded-md text-sm font-medium transition-colors relative",
-                  activeTab === tab.id
-                    ? "bg-primary text-primary-foreground"
-                    : "text-muted-foreground hover:text-foreground"
-                )}
-              >
-                {tab.label}
-                {tab.showBadge && untriagedCount > 0 && (
-                  <span className="absolute -top-2 -right-0 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
-                    {untriagedCount}
-                  </span>
-                )}
-              </Link>
-            ))}
-          </nav>
+          {/* Tab Navigation - Icons with tooltips on larger screens */}
+          <TooltipProvider>
+            <nav className="hidden lg:flex space-x-1">
+              {tabs.map((tab) => (
+                <Tooltip key={tab.id} delayDuration={0}>
+                  <TooltipTrigger asChild>
+                    <Link 
+                      href={tab.href}
+                      data-testid={`button-tab-${tab.id}`}
+                      className={cn(
+                        "p-3 rounded-md transition-colors relative",
+                        activeTab === tab.id
+                          ? "bg-primary text-primary-foreground"
+                          : "text-muted-foreground hover:text-foreground"
+                      )}
+                    >
+                      <tab.icon className="w-5 h-5" />
+                      {tab.showBadge && untriagedCount > 0 && (
+                        <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-4 h-4 flex items-center justify-center">
+                          {untriagedCount > 9 ? '9+' : untriagedCount}
+                        </span>
+                      )}
+                    </Link>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>{tab.label}</p>
+                  </TooltipContent>
+                </Tooltip>
+              ))}
+            </nav>
+            
+            {/* Tab Navigation - Text labels on medium screens */}
+            <nav className="hidden sm:flex lg:hidden space-x-1">
+              {tabs.map((tab) => (
+                <Link 
+                  key={tab.id}
+                  href={tab.href}
+                  data-testid={`button-tab-${tab.id}-text`}
+                  className={cn(
+                    "px-3 py-2 rounded-md text-sm font-medium transition-colors relative",
+                    activeTab === tab.id
+                      ? "bg-primary text-primary-foreground"
+                      : "text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  {tab.label}
+                  {tab.showBadge && untriagedCount > 0 && (
+                    <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-4 h-4 flex items-center justify-center">
+                      {untriagedCount > 9 ? '9+' : untriagedCount}
+                    </span>
+                  )}
+                </Link>
+              ))}
+            </nav>
+          </TooltipProvider>
           
           {/* Show Mode Selector */}
           <div className="flex items-center space-x-2 ml-4 w-32 flex-shrink-0">
