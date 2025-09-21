@@ -6,6 +6,8 @@ import { cn } from "@/lib/utils";
 import { useDebounce } from "@/hooks/use-debounce";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Button } from "@/components/ui/button";
 
 interface SearchResult {
   resultType: 'show' | 'episode';
@@ -367,21 +369,78 @@ export default function Header({ onSearch }: HeaderProps) {
             </nav>
           </TooltipProvider>
           
-          {/* Show Mode Selector */}
-          <div className="flex items-center space-x-2 ml-4 w-32 flex-shrink-0">
-            <Users className="w-4 h-4 text-muted-foreground" />
+          {/* Show Mode Selector - Icon button with dropdown on large screens */}
+          <div className="hidden lg:block ml-4 flex-shrink-0">
             {settingsLoaded ? (
-              <Select value={showMode} onValueChange={handleShowModeChange} data-testid="select-show-mode">
-                <SelectTrigger className="w-28 h-8 text-xs">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="personal">Personal</SelectItem>
-                  <SelectItem value="shared">Shared</SelectItem>
-                </SelectContent>
-              </Select>
+              <Tooltip delayDuration={0}>
+                <DropdownMenu>
+                  <TooltipTrigger asChild>
+                    <DropdownMenuTrigger asChild>
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        className="p-3 rounded-md transition-colors" 
+                        data-testid="button-show-mode"
+                      >
+                        <Users className="w-5 h-5" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                  </TooltipTrigger>
+                  <DropdownMenuContent>
+                    <DropdownMenuItem 
+                      onClick={() => handleShowModeChange('personal')}
+                      className={showMode === 'personal' ? 'bg-accent' : ''}
+                    >
+                      Personal
+                    </DropdownMenuItem>
+                    <DropdownMenuItem 
+                      onClick={() => handleShowModeChange('shared')}
+                      className={showMode === 'shared' ? 'bg-accent' : ''}
+                    >
+                      Shared
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+                <TooltipContent>
+                  <p>Show Mode: {showMode === 'personal' ? 'Personal' : 'Shared'}</p>
+                </TooltipContent>
+              </Tooltip>
             ) : (
-              <div className="w-28 h-8 bg-muted animate-pulse rounded" />
+              <div className="w-11 h-11 bg-muted animate-pulse rounded" />
+            )}
+          </div>
+          
+          {/* Show Mode Selector - Text button with dropdown on medium screens */}
+          <div className="hidden sm:block lg:hidden ml-4 flex-shrink-0">
+            {settingsLoaded ? (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    className="px-3 py-2 text-sm font-medium transition-colors" 
+                    data-testid="button-show-mode-text"
+                  >
+                    {showMode === 'personal' ? 'Personal' : 'Shared'}
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent>
+                  <DropdownMenuItem 
+                    onClick={() => handleShowModeChange('personal')}
+                    className={showMode === 'personal' ? 'bg-accent' : ''}
+                  >
+                    Personal
+                  </DropdownMenuItem>
+                  <DropdownMenuItem 
+                    onClick={() => handleShowModeChange('shared')}
+                    className={showMode === 'shared' ? 'bg-accent' : ''}
+                  >
+                    Shared
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            ) : (
+              <div className="w-20 h-8 bg-muted animate-pulse rounded" />
             )}
           </div>
         </div>
