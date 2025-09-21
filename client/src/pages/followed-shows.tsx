@@ -214,7 +214,7 @@ export default function FollowedShows() {
           {children}
         </Button>
       </TooltipTrigger>
-      <TooltipContent className="hidden lg:block">
+      <TooltipContent className="hidden sm:block lg:hidden">
         <p>{tooltip}</p>
       </TooltipContent>
     </Tooltip>
@@ -270,6 +270,7 @@ export default function FollowedShows() {
                 variant="outline"
                 data-testid="button-import-shows"
                 tooltip="Import from TVMaze"
+                aria-label="Import from TVMaze"
               >
                 {importMutation.isPending ? (
                   <Loader2 className="w-4 h-4 animate-spin" />
@@ -286,6 +287,7 @@ export default function FollowedShows() {
                 variant="outline"
                 data-testid="button-import-episodes"
                 tooltip="Import Episodes"
+                aria-label="Import Episodes"
               >
                 <RefreshCw className="w-4 h-4" />
                 <span className="ml-2 sm:hidden">Episodes</span>
@@ -298,6 +300,7 @@ export default function FollowedShows() {
                 variant="outline"
                 data-testid="button-sync-scrobbles"
                 tooltip="Sync Watched"
+                aria-label="Sync Watched"
               >
                 <PlayCircle className="w-4 h-4" />
                 <span className="ml-2 sm:hidden">Sync</span>
