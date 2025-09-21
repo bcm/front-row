@@ -241,8 +241,8 @@ export default function Triage() {
       });
     },
     onSuccess: (data, variables, context) => {
-      // Skip query invalidation for faster processing - rely on optimistic updates
-      // Queries will be refreshed when user navigates or manually refreshes
+      // Invalidate queries to ensure all views refresh properly
+      queryClient.invalidateQueries({ queryKey: ["/api/user/episodes"], exact: false });
       
       // Create informative toast message with show name and episode number
       let toastTitle = "Episode updated";
@@ -365,6 +365,9 @@ export default function Triage() {
       };
     },
     onSuccess: (data, variables, context) => {
+      // Invalidate queries to ensure all views refresh properly (nav badge, triage page, etc.)
+      queryClient.invalidateQueries({ queryKey: ["/api/user/episodes"], exact: false });
+      
       if (context?.showName && context?.season) {
         toast({
           title: `${context.showName} Season ${context.season}`,
