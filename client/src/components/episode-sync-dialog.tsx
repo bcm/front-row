@@ -94,10 +94,63 @@ export default function EpisodeSyncDialog({ open, onOpenChange }: EpisodeSyncDia
     },
   });
 
+  // Fallback polling when SSE fails
+  const pollProgress = useCallback(async (jobId: string) => {
+    try {
+      const response = await fetch(`/api/episodes/import/progress/${jobId}`, {
+        headers: { 'Accept': 'application/json' }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        if (data.status) {
+          setSyncProgress({
+            status: data.status,
+            phase: data.phase || '',
+            percent: data.percent || 0,
+            completedEpisodes: data.completedEpisodes || 0,
+            totalEpisodes: data.totalEpisodes || 0,
+            etaSeconds: data.etaSeconds,
+            message: data.message || '',
+            errors: data.errors || [],
+            episodesImported: data.episodesImported,
+            episodesUpdated: data.episodesUpdated
+          });
+          
+          if (data.status === 'success') {
+            queryClient.invalidateQueries({ queryKey: ["/api/user/episodes"] });
+            queryClient.invalidateQueries({ queryKey: ["/api/library"] });
+            
+            setTimeout(() => {
+              toast({
+                title: "Episode sync completed",
+                description: `Successfully imported ${data.episodesImported || 0} episodes, updated ${data.episodesUpdated || 0} existing episodes.`,
+              });
+              onOpenChange(false);
+            }, 2000);
+            return 'complete';
+          } else if (data.status === 'error') {
+            setSyncProgress(prev => prev ? { 
+              ...prev, 
+              status: 'error',
+              errors: [...(prev.errors || []), data.message || 'Unknown error']
+            } : null);
+            return 'error';
+          }
+        }
+      }
+      return 'continue';
+    } catch (error) {
+      console.error('Poll progress error:', error);
+      return 'continue';
+    }
+  }, [queryClient, toast, onOpenChange]);
+
   // Set up Server-Sent Events for real-time progress
   const setupSSE = useCallback((jobId: string) => {
     const source = new EventSource(`/api/episodes/import/progress/${jobId}`);
     setEventSource(source);
+    
+    let pollingInterval: NodeJS.Timeout | null = null;
 
     source.onmessage = (event) => {
       try {
@@ -151,10 +204,34 @@ export default function EpisodeSyncDialog({ open, onOpenChange }: EpisodeSyncDia
       console.error('SSE error:', error);
       source.close();
       setEventSource(null);
+      
+      // Fall back to polling for progress
+      console.log('SSE failed, switching to polling mode');
+      setSyncProgress(prev => prev ? {
+        ...prev,
+        message: 'Connection lost - switching to polling mode...'
+      } : null);
+      
+      // Start polling every 2 seconds
+      pollingInterval = setInterval(async () => {
+        const result = await pollProgress(jobId);
+        if (result === 'complete' || result === 'error') {
+          if (pollingInterval) {
+            clearInterval(pollingInterval);
+            pollingInterval = null;
+          }
+        }
+      }, 2000);
     };
 
-    return source;
-  }, [queryClient, toast, onOpenChange]);
+    // Cleanup function to clear polling interval
+    return () => {
+      if (pollingInterval) {
+        clearInterval(pollingInterval);
+      }
+      source.close();
+    };
+  }, [queryClient, toast, onOpenChange, pollProgress]);
 
   // Start the episode sync process
   const handleStartSync = async () => {
