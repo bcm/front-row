@@ -58,6 +58,24 @@ export default function FollowedShows() {
     },
   });
 
+  // Check for active episode sync jobs
+  const { data: activeJobStatus } = useQuery({
+    queryKey: ["/api/episodes/import/status"],
+    queryFn: async () => {
+      try {
+        const response = await fetch("/api/episodes/import/status");
+        if (!response.ok) {
+          return { hasActiveJob: false };
+        }
+        return response.json();
+      } catch {
+        return { hasActiveJob: false };
+      }
+    },
+    refetchInterval: 3000, // Check every 3 seconds
+    enabled: true
+  });
+
   // Filter shows based on settings
   const filteredShows = useMemo(() => {
     if (!libraryShows || !userSettings) return libraryShows || [];
@@ -230,6 +248,21 @@ export default function FollowedShows() {
             </div>
             
             <div className="flex flex-wrap gap-2">
+              {activeJobStatus?.hasActiveJob && (
+                <ButtonWithTooltip 
+                  onClick={() => setShowEpisodeSyncDialog(true)}
+                  size="sm"
+                  variant="outline"
+                  className="bg-blue-500/20 border-blue-500/30 text-blue-400 hover:bg-blue-500/30"
+                  data-testid="button-active-sync"
+                  tooltip="Episode sync in progress - click to view details"
+                  aria-label="Episode sync in progress - click to view details"
+                >
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span className="ml-2 sm:hidden">Syncing ({activeJobStatus.percent}%)</span>
+                  <span className="ml-2 hidden lg:inline">Episode Sync Running ({activeJobStatus.percent}%)</span>
+                </ButtonWithTooltip>
+              )}
               <ButtonWithTooltip 
                 onClick={() => setShowImportDialog(true)}
                 size="sm"
