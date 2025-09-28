@@ -178,7 +178,7 @@ export default function EpisodeSyncDialog({ open, onOpenChange, existingJobId }:
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <RefreshCw className="w-5 h-5" />
