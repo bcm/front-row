@@ -261,26 +261,29 @@ export default function FollowedShows() {
                 ) : (
                   <RefreshCw className="w-4 h-4" />
                 )}
-                <span className="ml-2 sm:hidden">
-                  {activeJobStatus?.hasActiveJob ? `Syncing (${activeJobStatus.percent}%)` : "Update Episodes"}
-                </span>
-                <span className="ml-2 hidden sm:inline lg:hidden">
+                <span className="ml-2">
                   {activeJobStatus?.hasActiveJob ? `Syncing (${activeJobStatus.percent}%)` : "Update Episodes"}
                 </span>
               </Button>
-              <ButtonWithTooltip 
-                onClick={() => setShowImportDialog(true)}
-                size="sm"
-                variant="outline"
-                data-testid="button-import-shows"
-                tooltip="Import new shows from your TVMaze followed list"
-                aria-label="Import new shows from your TVMaze followed list"
-              >
-                <Download className="w-4 h-4" />
-                <span className="ml-2 sm:hidden">Import Shows</span>
-                <span className="ml-2 hidden sm:inline lg:hidden">Import New Shows</span>
-              </ButtonWithTooltip>
-              <Tooltip>
+              <Tooltip delayDuration={0}>
+                <TooltipTrigger asChild>
+                  <Button 
+                    onClick={() => setShowImportDialog(true)}
+                    size="sm"
+                    variant="outline"
+                    data-testid="button-import-shows"
+                    aria-label="Import new shows from your TVMaze followed list"
+                  >
+                    <Download className="w-4 h-4" />
+                    <span className="ml-2 sm:hidden">Import Shows</span>
+                    <span className="ml-2 hidden sm:inline lg:hidden">Import New Shows</span>
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent className="hidden lg:block">
+                  <p>Import New Shows</p>
+                </TooltipContent>
+              </Tooltip>
+              <Tooltip delayDuration={0}>
                 <TooltipTrigger asChild>
                   <Button 
                     onClick={handleSyncScrobbles}
@@ -296,7 +299,7 @@ export default function FollowedShows() {
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent className="hidden lg:block">
-                  <p>Sync your watch progress from TVMaze scrobbles</p>
+                  <p>Sync Watch Progress</p>
                 </TooltipContent>
               </Tooltip>
             </div>
