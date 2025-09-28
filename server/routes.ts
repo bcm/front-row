@@ -1412,82 +1412,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Episode import progress via Server-Sent Events
+  // Episode import progress via JSON polling (no more SSE)
   app.get("/api/episodes/import/progress/:id", (req, res) => {
     const { id } = req.params;
-    const acceptHeader = req.headers.accept || '';
     
-    console.log(`[SSE_DEBUG] Progress request for job ${id}, Accept: ${acceptHeader}`);
+    console.log(`[PROGRESS] Polling request for job ${id}`);
 
     // Get job status
     const job = syncJobManager.getJob(id);
     if (!job) {
-      console.log(`[SSE_DEBUG] Job ${id} not found`);
+      console.log(`[PROGRESS] Job ${id} not found`);
       return res.status(404).json({ error: 'Job not found' });
     }
     
-    console.log(`[SSE_DEBUG] Job ${id} found, status: ${job.status}`);
+    console.log(`[PROGRESS] Job ${id} status: ${job.status}, ${job.completedShows}/${job.totalShows} shows`);
     
-    // If requesting JSON, return JSON response for polling
-    if (acceptHeader.includes('application/json')) {
-      console.log(`[SSE_DEBUG] Returning JSON response for job ${id}`);
-      return res.json({
-        status: job.status,
-        phase: job.phase,
-        percent: job.percent,
-        completedShows: job.completedShows,
-        totalShows: job.totalShows,
-        etaSeconds: job.etaSeconds,
-        message: job.lastMessage,
-        errors: job.errors,
-        episodesImported: job.episodesImported,
-        episodesUpdated: job.episodesUpdated
-      });
-    }
-
-    // Set up SSE
-    console.log(`[SSE_DEBUG] Setting up SSE connection for job ${id}`);
-    res.writeHead(200, {
-      'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache',
-      'Connection': 'keep-alive',
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Headers': 'Cache-Control'
-    });
-
-    // Send initial job state
-    res.write(`data: ${JSON.stringify({ 
-      type: 'init', 
-      data: {
-        status: job.status,
-        phase: job.phase,
-        percent: job.percent,
-        completedShows: job.completedShows,
-        totalShows: job.totalShows,
-        etaSeconds: job.etaSeconds,
-        message: job.lastMessage,
-        errors: job.errors,
-        episodesImported: job.episodesImported,
-        episodesUpdated: job.episodesUpdated
-      },
-      timestamp: Date.now()
-    })}\n\n`);
-
-    // Subscribe to job updates
-    const unsubscribe = syncJobManager.subscribe(id, (event) => {
-      res.write(event);
-    });
-
-    // Heartbeat to keep connection alive
-    const heartbeat = setInterval(() => {
-      res.write(`data: ${JSON.stringify({ type: 'heartbeat', timestamp: Date.now() })}\n\n`);
-    }, 30000);
-
-    // Cleanup on disconnect
-    req.on('close', () => {
-      unsubscribe();
-      clearInterval(heartbeat);
-      res.end();
+    // Always return JSON response for polling
+    res.json({
+      status: job.status,
+      phase: job.phase,
+      percent: job.percent,
+      completedShows: job.completedShows,
+      totalShows: job.totalShows,
+      etaSeconds: job.etaSeconds,
+      message: job.lastMessage,
+      errors: job.errors,
+      episodesImported: job.episodesImported,
+      episodesUpdated: job.episodesUpdated
     });
   });
 
