@@ -35,7 +35,7 @@ export interface IStorage {
   
   // User episode methods
   getUserEpisodes(userId: string, status?: string, showMode?: string): Promise<(UserEpisode & { episode: Episode & { show: Show } })[]>;
-  addUserEpisode(userEpisode: InsertUserEpisode): Promise<UserEpisode>;
+  addUserEpisode(userEpisode: InsertUserEpisode): Promise<{ episode: UserEpisode; isNew: boolean }>;
   updateUserEpisode(userId: string, episodeId: number, updates: Partial<UserEpisode>): Promise<UserEpisode | undefined>;
   getUserEpisode(userId: string, episodeId: number): Promise<UserEpisode | undefined>;
   
