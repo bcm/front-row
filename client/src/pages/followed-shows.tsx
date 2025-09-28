@@ -248,21 +248,6 @@ export default function FollowedShows() {
             </div>
             
             <div className="flex flex-wrap gap-2">
-              {activeJobStatus?.hasActiveJob && (
-                <ButtonWithTooltip 
-                  onClick={() => setShowEpisodeSyncDialog(true)}
-                  size="sm"
-                  variant="outline"
-                  className="bg-blue-500/20 border-blue-500/30 text-blue-400 hover:bg-blue-500/30"
-                  data-testid="button-active-sync"
-                  tooltip="Episode sync in progress - click to view details"
-                  aria-label="Episode sync in progress - click to view details"
-                >
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  <span className="ml-2 sm:hidden">Syncing ({activeJobStatus.percent}%)</span>
-                  <span className="ml-2 hidden lg:inline">Episode Sync Running ({activeJobStatus.percent}%)</span>
-                </ButtonWithTooltip>
-              )}
               <ButtonWithTooltip 
                 onClick={() => setShowImportDialog(true)}
                 size="sm"
@@ -279,13 +264,22 @@ export default function FollowedShows() {
                 onClick={handleImportEpisodes}
                 size="sm"
                 variant="outline"
+                className={activeJobStatus?.hasActiveJob ? "bg-blue-500/20 border-blue-500/30 text-blue-400 hover:bg-blue-500/30" : ""}
                 data-testid="button-import-episodes"
-                tooltip="Update episode data for shows already in your library"
-                aria-label="Update episode data for shows already in your library"
+                tooltip={activeJobStatus?.hasActiveJob ? "Episode sync in progress - click to view details" : "Update episode data for shows already in your library"}
+                aria-label={activeJobStatus?.hasActiveJob ? "Episode sync in progress - click to view details" : "Update episode data for shows already in your library"}
               >
-                <RefreshCw className="w-4 h-4" />
-                <span className="ml-2 sm:hidden">Update Episodes</span>
-                <span className="ml-2 hidden lg:inline">Update Episodes</span>
+                {activeJobStatus?.hasActiveJob ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <RefreshCw className="w-4 h-4" />
+                )}
+                <span className="ml-2 sm:hidden">
+                  {activeJobStatus?.hasActiveJob ? `Syncing (${activeJobStatus.percent}%)` : "Update Episodes"}
+                </span>
+                <span className="ml-2 hidden lg:inline">
+                  {activeJobStatus?.hasActiveJob ? `Episode Sync Running (${activeJobStatus.percent}%)` : "Update Episodes"}
+                </span>
               </ButtonWithTooltip>
               <ButtonWithTooltip 
                 onClick={handleSyncScrobbles}
@@ -471,7 +465,8 @@ export default function FollowedShows() {
       
       <EpisodeSyncDialog 
         open={showEpisodeSyncDialog} 
-        onOpenChange={setShowEpisodeSyncDialog} 
+        onOpenChange={setShowEpisodeSyncDialog}
+        existingJobId={activeJobStatus?.hasActiveJob ? activeJobStatus.jobId : undefined}
       />
     </div>
   );

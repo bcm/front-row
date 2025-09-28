@@ -19,6 +19,7 @@ import { AlertCircle, CheckCircle, Clock, RefreshCw, Tv } from "lucide-react";
 interface EpisodeSyncDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  existingJobId?: string;
 }
 
 interface SyncProgress {
@@ -34,10 +35,20 @@ interface SyncProgress {
   episodesUpdated?: number;
 }
 
-export default function EpisodeSyncDialog({ open, onOpenChange }: EpisodeSyncDialogProps) {
+export default function EpisodeSyncDialog({ open, onOpenChange, existingJobId }: EpisodeSyncDialogProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [jobId, setJobId] = useState<string | null>(null);
+
+  // Set jobId when dialog opens with an existing job
+  useEffect(() => {
+    if (open && existingJobId) {
+      setJobId(existingJobId);
+    } else if (!open) {
+      // Reset jobId when dialog closes
+      setJobId(null);
+    }
+  }, [open, existingJobId]);
 
   // Import episodes mutation to start the sync process
   const syncEpisodesMutation = useMutation({
