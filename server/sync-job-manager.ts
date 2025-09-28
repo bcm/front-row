@@ -148,8 +148,8 @@ export class SyncJobManager {
             phase: job.phase,
             message: job.lastMessage,
             percent: job.percent,
-            completedEpisodes: job.completedEpisodes,
-            totalEpisodes: job.totalEpisodes,
+            completedShows: job.completedShows,
+            totalShows: job.totalShows,
             etaSeconds: job.etaSeconds
           });
         }

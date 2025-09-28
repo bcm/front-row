@@ -25,8 +25,8 @@ interface SyncProgress {
   status: 'running' | 'success' | 'error';
   phase: string;
   percent: number;
-  completedEpisodes: number;
-  totalEpisodes: number;
+  completedShows: number;
+  totalShows: number;
   etaSeconds?: number;
   message: string;
   errors: string[];
@@ -53,8 +53,8 @@ export default function EpisodeSyncDialog({ open, onOpenChange }: EpisodeSyncDia
           status: 'success',
           phase: 'complete',
           percent: 100,
-          completedEpisodes: data.imported || 0,
-          totalEpisodes: data.imported || 0,
+          completedShows: data.imported || 0,
+          totalShows: data.imported || 0,
           message: 'Episode sync completed!',
           errors: [],
           episodesImported: data.imported,
@@ -78,8 +78,8 @@ export default function EpisodeSyncDialog({ open, onOpenChange }: EpisodeSyncDia
         status: 'error',
         phase: 'error',
         percent: 0,
-        completedEpisodes: 0,
-        totalEpisodes: 0,
+        completedShows: 0,
+        totalShows: 0,
         message: 'Episode sync failed',
         errors: [error.message || 'Failed to start episode sync'],
         episodesImported: 0,
@@ -107,8 +107,8 @@ export default function EpisodeSyncDialog({ open, onOpenChange }: EpisodeSyncDia
             status: data.status,
             phase: data.phase || '',
             percent: data.percent || 0,
-            completedEpisodes: data.completedEpisodes || 0,
-            totalEpisodes: data.totalEpisodes || 0,
+            completedShows: data.completedEpisodes || 0,
+            totalShows: data.totalEpisodes || 0,
             etaSeconds: data.etaSeconds,
             message: data.message || '',
             errors: data.errors || [],
@@ -161,8 +161,8 @@ export default function EpisodeSyncDialog({ open, onOpenChange }: EpisodeSyncDia
             status: progressData.data.status,
             phase: progressData.data.phase || '',
             percent: progressData.data.percent || 0,
-            completedEpisodes: progressData.data.completedEpisodes || 0,
-            totalEpisodes: progressData.data.totalEpisodes || 0,
+            completedShows: progressData.data.completedEpisodes || 0,
+            totalShows: progressData.data.totalEpisodes || 0,
             etaSeconds: progressData.data.etaSeconds,
             message: progressData.data.message || '',
             errors: progressData.data.errors || [],
@@ -240,8 +240,8 @@ export default function EpisodeSyncDialog({ open, onOpenChange }: EpisodeSyncDia
         status: 'running',
         phase: 'starting',
         percent: 0,
-        completedEpisodes: 0,
-        totalEpisodes: 0,
+        completedShows: 0,
+        totalShows: 0,
         message: 'Starting episode sync...',
         errors: [],
       });
@@ -258,8 +258,8 @@ export default function EpisodeSyncDialog({ open, onOpenChange }: EpisodeSyncDia
           status: 'success',
           phase: 'complete',
           percent: 100,
-          completedEpisodes: data.imported || 0,
-          totalEpisodes: data.imported || 0,
+          completedShows: data.imported || 0,
+          totalShows: data.imported || 0,
           message: 'Episode sync completed!',
           errors: [],
           episodesImported: data.imported,
@@ -282,8 +282,8 @@ export default function EpisodeSyncDialog({ open, onOpenChange }: EpisodeSyncDia
         status: 'error',
         phase: 'error',
         percent: 0,
-        completedEpisodes: 0,
-        totalEpisodes: 0,
+        completedShows: 0,
+        totalShows: 0,
         message: 'Episode sync failed',
         errors: [error.message || 'Failed to start episode sync'],
         episodesImported: 0,
@@ -423,7 +423,7 @@ export default function EpisodeSyncDialog({ open, onOpenChange }: EpisodeSyncDia
                   <div className="flex justify-between text-sm text-muted-foreground">
                     <span>{syncProgress.message}</span>
                     <span>
-                      {syncProgress.completedEpisodes} / {syncProgress.totalEpisodes} episodes
+                      {syncProgress.completedShows} / {syncProgress.totalShows} shows processed
                     </span>
                   </div>
                 </div>
