@@ -110,7 +110,8 @@ export default function FollowedShows() {
   const syncShowMutation = useMutation({
     mutationFn: async ({ showId, showName }: { showId: number; showName: string }) => {
       setSyncingShowId(showId);
-      return { response: await apiRequest("POST", `/api/shows/${showId}/sync`, {}), showName };
+      const response = await apiRequest("POST", `/api/shows/${showId}/sync`, {});
+      return { response: await response.json(), showName };
     },
     onSuccess: (data: any, { showId }: { showId: number; showName: string }) => {
       setSyncingShowId(null);
@@ -139,7 +140,8 @@ export default function FollowedShows() {
 
   const importMutation = useMutation({
     mutationFn: async () => {
-      return apiRequest("POST", "/api/library/import", {});
+      const response = await apiRequest("POST", "/api/library/import", {});
+      return response.json();
     },
     onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/library"] });
@@ -160,7 +162,8 @@ export default function FollowedShows() {
   // Episode import mutation
   const importEpisodesMutation = useMutation({
     mutationFn: async () => {
-      return apiRequest("POST", "/api/episodes/import", {});
+      const response = await apiRequest("POST", "/api/episodes/import", {});
+      return response.json();
     },
     onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/user/episodes"] });
@@ -181,7 +184,8 @@ export default function FollowedShows() {
   // Sync scrobbles mutation
   const syncScrobblesMutation = useMutation({
     mutationFn: async () => {
-      return apiRequest("POST", "/api/episodes/sync-scrobbles", {});
+      const response = await apiRequest("POST", "/api/episodes/sync-scrobbles", {});
+      return response.json();
     },
     onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/user/episodes"] });
