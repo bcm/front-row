@@ -248,13 +248,12 @@ export default function FollowedShows() {
             </div>
             
             <div className="flex flex-wrap gap-2">
-              <ButtonWithTooltip 
+              <Button 
                 onClick={handleImportEpisodes}
                 size="sm"
                 variant="outline"
                 className={activeJobStatus?.hasActiveJob ? "bg-blue-500/20 border-blue-500/30 text-blue-400 hover:bg-blue-500/30" : ""}
                 data-testid="button-import-episodes"
-                tooltip={activeJobStatus?.hasActiveJob ? "Episode sync in progress - click to view details" : "Update episode data for shows already in your library"}
                 aria-label={activeJobStatus?.hasActiveJob ? "Episode sync in progress - click to view details" : "Update episode data for shows already in your library"}
               >
                 {activeJobStatus?.hasActiveJob ? (
@@ -268,7 +267,7 @@ export default function FollowedShows() {
                 <span className="ml-2 hidden sm:inline lg:hidden">
                   {activeJobStatus?.hasActiveJob ? `Syncing (${activeJobStatus.percent}%)` : "Update Episodes"}
                 </span>
-              </ButtonWithTooltip>
+              </Button>
               <ButtonWithTooltip 
                 onClick={() => setShowImportDialog(true)}
                 size="sm"
@@ -281,19 +280,25 @@ export default function FollowedShows() {
                 <span className="ml-2 sm:hidden">Import Shows</span>
                 <span className="ml-2 hidden sm:inline lg:hidden">Import New Shows</span>
               </ButtonWithTooltip>
-              <ButtonWithTooltip 
-                onClick={handleSyncScrobbles}
-                disabled={syncScrobblesMutation.isPending}
-                size="sm"
-                variant="outline"
-                data-testid="button-sync-scrobbles"
-                tooltip="Sync your watch progress from TVMaze scrobbles"
-                aria-label="Sync your watch progress from TVMaze scrobbles"
-              >
-                <PlayCircle className="w-4 h-4" />
-                <span className="ml-2 sm:hidden">Sync Progress</span>
-                <span className="ml-2 hidden sm:inline lg:hidden">{syncScrobblesMutation.isPending ? "Syncing..." : "Sync Watch Progress"}</span>
-              </ButtonWithTooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button 
+                    onClick={handleSyncScrobbles}
+                    disabled={syncScrobblesMutation.isPending}
+                    size="sm"
+                    variant="outline"
+                    data-testid="button-sync-scrobbles"
+                    aria-label="Sync your watch progress from TVMaze scrobbles"
+                  >
+                    <PlayCircle className="w-4 h-4" />
+                    <span className="ml-2 sm:hidden">Sync Progress</span>
+                    <span className="ml-2 hidden sm:inline lg:hidden">{syncScrobblesMutation.isPending ? "Syncing..." : "Sync Watch Progress"}</span>
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent className="hidden lg:block">
+                  <p>Sync your watch progress from TVMaze scrobbles</p>
+                </TooltipContent>
+              </Tooltip>
             </div>
           </div>
         </div>
