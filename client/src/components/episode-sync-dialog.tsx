@@ -249,7 +249,7 @@ export default function EpisodeSyncDialog({ open, onOpenChange, existingJobId }:
                   <div className="flex justify-between text-sm text-muted-foreground">
                     <span>{syncProgress.message}</span>
                     <span>
-                      {syncProgress.completedShows} / {syncProgress.totalShows} shows processed
+                      {syncProgress.completedShows} / {syncProgress.totalShows} shows ({syncProgress.percent}%)
                     </span>
                   </div>
                 </div>
