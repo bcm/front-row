@@ -254,12 +254,12 @@ export default function FollowedShows() {
                 size="sm"
                 variant="outline"
                 data-testid="button-import-shows"
-                tooltip="Import from TVMaze"
-                aria-label="Import from TVMaze"
+                tooltip="Import new shows from your TVMaze followed list"
+                aria-label="Import new shows from your TVMaze followed list"
               >
                 <Download className="w-4 h-4" />
-                <span className="ml-2 sm:hidden">Import</span>
-                <span className="ml-2 hidden lg:inline">Import from TVMaze</span>
+                <span className="ml-2 sm:hidden">Import Shows</span>
+                <span className="ml-2 hidden lg:inline">Import New Shows</span>
               </ButtonWithTooltip>
               <ButtonWithTooltip 
                 onClick={handleImportEpisodes}
@@ -267,12 +267,12 @@ export default function FollowedShows() {
                 size="sm"
                 variant="outline"
                 data-testid="button-import-episodes"
-                tooltip="Import Episodes"
-                aria-label="Import Episodes"
+                tooltip="Update episode data for shows already in your library"
+                aria-label="Update episode data for shows already in your library"
               >
                 <RefreshCw className="w-4 h-4" />
-                <span className="ml-2 sm:hidden">Episodes</span>
-                <span className="ml-2 hidden lg:inline">{importEpisodesMutation.isPending ? "Importing..." : "Import Episodes"}</span>
+                <span className="ml-2 sm:hidden">Update Episodes</span>
+                <span className="ml-2 hidden lg:inline">{importEpisodesMutation.isPending ? "Updating..." : "Update Episodes"}</span>
               </ButtonWithTooltip>
               <ButtonWithTooltip 
                 onClick={handleSyncScrobbles}
@@ -280,12 +280,12 @@ export default function FollowedShows() {
                 size="sm"
                 variant="outline"
                 data-testid="button-sync-scrobbles"
-                tooltip="Sync Watched"
-                aria-label="Sync Watched"
+                tooltip="Sync your watch progress from TVMaze scrobbles"
+                aria-label="Sync your watch progress from TVMaze scrobbles"
               >
                 <PlayCircle className="w-4 h-4" />
-                <span className="ml-2 sm:hidden">Sync</span>
-                <span className="ml-2 hidden lg:inline">{syncScrobblesMutation.isPending ? "Syncing..." : "Sync Watched"}</span>
+                <span className="ml-2 sm:hidden">Sync Progress</span>
+                <span className="ml-2 hidden lg:inline">{syncScrobblesMutation.isPending ? "Syncing..." : "Sync Watch Progress"}</span>
               </ButtonWithTooltip>
             </div>
           </div>
@@ -445,7 +445,7 @@ export default function FollowedShows() {
               data-testid="button-import-shows-empty"
             >
               <Download className="w-4 h-4 mr-2" />
-              Import from TVMaze
+              Import New Shows
             </Button>
           </div>
         )}
