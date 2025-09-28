@@ -438,26 +438,12 @@ async function performAsyncEpisodeImport(jobId: string): Promise<void> {
 
     let importedCount = 0;
     let skippedCount = 0;
-    let totalEpisodes = 0;
+    let totalShows = userShows.length;
+    let processedShows = 0;
 
-    // Phase 2: Count total episodes first
-    reporter.setPhase('fetch-episodes', 'Calculating total episodes...');
-    
-    for (const userShow of userShows) {
-      try {
-        const response = await fetch(`https://api.tvmaze.com/shows/${userShow.showId}/episodes`);
-        if (response.ok) {
-          const episodes = await response.json();
-          totalEpisodes += episodes.length;
-        }
-      } catch (error) {
-        console.error(`Error counting episodes for show ${userShow.showId}:`, error);
-      }
-    }
-
-    // Phase 3: Process episodes
-    reporter.setPhase('process-episodes', 'Processing episodes...');
-    reporter.setTotal(totalEpisodes);
+    // Start processing shows immediately (no upfront counting needed)
+    reporter.setPhase('process-episodes', 'Processing and updating episode information...');
+    reporter.setTotal(totalShows);
 
     for (const userShow of userShows) {
       try {
@@ -467,11 +453,16 @@ async function performAsyncEpisodeImport(jobId: string): Promise<void> {
         
         if (!response.ok) {
           console.error(`Failed to fetch episodes for show ${userShow.showId}: ${response.status}`);
+          processedShows++;
+          reporter.incrementCompleted(`Processed: ${userShow.show.name} (${processedShows}/${totalShows}) - Failed to fetch episodes`);
           continue;
         }
 
         const episodes = await response.json();
         console.log(`Found ${episodes.length} episodes for ${userShow.show.name}`);
+
+        let showImportedCount = 0;
+        let showSkippedCount = 0;
 
         for (const episode of episodes) {
           try {
@@ -499,10 +490,10 @@ async function performAsyncEpisodeImport(jobId: string): Promise<void> {
             const userEpisode = await storage.addUserEpisode(userEpisodeData);
             if (userEpisode.id) {
               importedCount++;
-              reporter.incrementCompleted(`Imported: ${userShow.show.name} S${episode.season}E${episode.number}`);
+              showImportedCount++;
             } else {
               skippedCount++;
-              reporter.incrementCompleted(`Skipped: ${userShow.show.name} S${episode.season}E${episode.number} (already exists)`);
+              showSkippedCount++;
             }
             
           } catch (error) {
@@ -510,10 +501,16 @@ async function performAsyncEpisodeImport(jobId: string): Promise<void> {
             reporter.addError(`Error importing ${userShow.show.name} S${episode.season}E${episode.number}: ${error}`);
           }
         }
+
+        // Count show as processed after successful processing
+        processedShows++;
+        reporter.incrementCompleted(`Processed: ${userShow.show.name} (${processedShows}/${totalShows}) - ${showImportedCount} new, ${showSkippedCount} existing`);
         
       } catch (error) {
+        processedShows++;
         console.error(`Error importing episodes for show ${userShow.showId}:`, error);
         reporter.addError(`Error importing episodes for ${userShow.show.name}: ${error}`);
+        reporter.incrementCompleted(`Processed: ${userShow.show.name} (${processedShows}/${totalShows}) - Error occurred`);
       }
     }
 

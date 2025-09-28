@@ -3,8 +3,8 @@ export interface SyncJob {
   showId: number;
   status: 'queued' | 'running' | 'success' | 'error' | 'canceled';
   phase: 'fetch-show' | 'fetch-scrobbles' | 'fetch-episodes' | 'process-episodes' | 'finalize';
-  totalEpisodes: number;
-  completedEpisodes: number;
+  totalShows: number;
+  completedShows: number;
   percent: number;
   etaSeconds: number | null;
   errors: string[];
@@ -37,8 +37,8 @@ export class SyncJobManager {
       showId,
       status: 'queued',
       phase: 'fetch-show',
-      totalEpisodes: 0,
-      completedEpisodes: 0,
+      totalShows: 0,
+      completedShows: 0,
       percent: 0,
       etaSeconds: null,
       errors: [],
@@ -92,8 +92,8 @@ export class SyncJobManager {
           phase,
           message,
           percent: job.percent,
-          completedEpisodes: job.completedEpisodes,
-          totalEpisodes: job.totalEpisodes,
+          completedShows: job.completedShows,
+          totalShows: job.totalShows,
           etaSeconds: job.etaSeconds
         });
       },
@@ -102,15 +102,15 @@ export class SyncJobManager {
         const job = this.jobs.get(jobId);
         if (!job) return;
 
-        job.totalEpisodes = total;
+        job.totalShows = total;
         job.updatedAt = new Date();
         
         this.emitEvent(jobId, 'progress', {
           phase: job.phase,
           message: job.lastMessage,
           percent: job.percent,
-          completedEpisodes: job.completedEpisodes,
-          totalEpisodes: total,
+          completedShows: job.completedShows,
+          totalShows: total,
           etaSeconds: job.etaSeconds
         });
       },
@@ -119,7 +119,7 @@ export class SyncJobManager {
         const job = this.jobs.get(jobId);
         if (!job) return;
 
-        job.completedEpisodes++;
+        job.completedShows++;
         job.updatedAt = new Date();
         
         if (message) {
@@ -127,20 +127,20 @@ export class SyncJobManager {
         }
 
         // Calculate percentage
-        if (job.totalEpisodes > 0) {
-          job.percent = Math.round((job.completedEpisodes / job.totalEpisodes) * 100);
+        if (job.totalShows > 0) {
+          job.percent = Math.round((job.completedShows / job.totalShows) * 100);
         }
 
-        // Calculate ETA after processing at least 10 episodes
-        if (processStartTime && job.completedEpisodes >= 10) {
+        // Calculate ETA after processing at least 3 shows
+        if (processStartTime && job.completedShows >= 3) {
           const elapsed = (Date.now() - processStartTime) / 1000; // seconds
-          const avgPerEpisode = elapsed / job.completedEpisodes;
-          const remaining = job.totalEpisodes - job.completedEpisodes;
-          job.etaSeconds = Math.round(remaining * avgPerEpisode);
+          const avgPerShow = elapsed / job.completedShows;
+          const remaining = job.totalShows - job.completedShows;
+          job.etaSeconds = Math.round(remaining * avgPerShow);
         }
 
-        // Throttle progress events (emit every 10 episodes or if it's been more than 1 second)
-        const shouldEmit = job.completedEpisodes % 10 === 0 || 
+        // Throttle progress events (emit every show or if it's been more than 1 second)
+        const shouldEmit = job.completedShows % 1 === 0 || 
                           (Date.now() - job.updatedAt.getTime()) > 1000;
 
         if (shouldEmit) {
