@@ -249,18 +249,6 @@ export default function FollowedShows() {
             
             <div className="flex flex-wrap gap-2">
               <ButtonWithTooltip 
-                onClick={() => setShowImportDialog(true)}
-                size="sm"
-                variant="outline"
-                data-testid="button-import-shows"
-                tooltip="Import new shows from your TVMaze followed list"
-                aria-label="Import new shows from your TVMaze followed list"
-              >
-                <Download className="w-4 h-4" />
-                <span className="ml-2 sm:hidden">Import Shows</span>
-                <span className="ml-2 hidden lg:inline">Import New Shows</span>
-              </ButtonWithTooltip>
-              <ButtonWithTooltip 
                 onClick={handleImportEpisodes}
                 size="sm"
                 variant="outline"
@@ -277,9 +265,21 @@ export default function FollowedShows() {
                 <span className="ml-2 sm:hidden">
                   {activeJobStatus?.hasActiveJob ? `Syncing (${activeJobStatus.percent}%)` : "Update Episodes"}
                 </span>
-                <span className="ml-2 hidden lg:inline">
-                  {activeJobStatus?.hasActiveJob ? `Episode Sync Running (${activeJobStatus.percent}%)` : "Update Episodes"}
+                <span className="ml-2 hidden sm:inline lg:hidden">
+                  {activeJobStatus?.hasActiveJob ? `Syncing (${activeJobStatus.percent}%)` : "Update Episodes"}
                 </span>
+              </ButtonWithTooltip>
+              <ButtonWithTooltip 
+                onClick={() => setShowImportDialog(true)}
+                size="sm"
+                variant="outline"
+                data-testid="button-import-shows"
+                tooltip="Import new shows from your TVMaze followed list"
+                aria-label="Import new shows from your TVMaze followed list"
+              >
+                <Download className="w-4 h-4" />
+                <span className="ml-2 sm:hidden">Import Shows</span>
+                <span className="ml-2 hidden sm:inline lg:hidden">Import New Shows</span>
               </ButtonWithTooltip>
               <ButtonWithTooltip 
                 onClick={handleSyncScrobbles}
@@ -292,7 +292,7 @@ export default function FollowedShows() {
               >
                 <PlayCircle className="w-4 h-4" />
                 <span className="ml-2 sm:hidden">Sync Progress</span>
-                <span className="ml-2 hidden lg:inline">{syncScrobblesMutation.isPending ? "Syncing..." : "Sync Watch Progress"}</span>
+                <span className="ml-2 hidden sm:inline lg:hidden">{syncScrobblesMutation.isPending ? "Syncing..." : "Sync Watch Progress"}</span>
               </ButtonWithTooltip>
             </div>
           </div>
