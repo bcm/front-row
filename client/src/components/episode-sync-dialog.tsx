@@ -116,14 +116,7 @@ export default function EpisodeSyncDialog({ open, onOpenChange }: EpisodeSyncDia
       } as SyncProgress;
     },
     enabled: !!jobId && open,
-    refetchInterval: (query) => {
-      // Stop polling when job is complete or failed
-      if (!query.data || query.data.status === 'success' || query.data.status === 'error') {
-        return false;
-      }
-      // Poll every 2.5 seconds, slower when near completion
-      return query.data.percent >= 90 ? 5000 : 2500;
-    },
+    refetchInterval: 2500, // Poll every 2.5 seconds
     refetchIntervalInBackground: false,
     retry: 3,
   });
