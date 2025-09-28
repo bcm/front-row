@@ -10,6 +10,7 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Link } from "wouter";
 import { useState, useMemo } from "react";
+import LibraryImportDialog from "@/components/library-import-dialog";
 
 type LibraryShow = UserShow & { show: Show };
 
@@ -17,6 +18,7 @@ export default function FollowedShows() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [syncingShowId, setSyncingShowId] = useState<number | null>(null);
+  const [showImportDialog, setShowImportDialog] = useState(false);
 
   const getStatusColor = (status?: string) => {
     switch (status) {
@@ -138,26 +140,6 @@ export default function FollowedShows() {
     },
   });
 
-  const importMutation = useMutation({
-    mutationFn: async () => {
-      const response = await apiRequest("POST", "/api/library/import", {});
-      return response.json();
-    },
-    onSuccess: (data: any) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/library"] });
-      toast({
-        title: "Import completed",
-        description: `Imported ${data.imported} shows, skipped ${data.skipped} existing shows.`,
-      });
-    },
-    onError: (error: any) => {
-      toast({
-        title: "Import failed",
-        description: error.message || "Failed to import shows from TVMaze",
-        variant: "destructive",
-      });
-    },
-  });
 
   // Episode import mutation
   const importEpisodesMutation = useMutation({
@@ -268,19 +250,14 @@ export default function FollowedShows() {
             
             <div className="flex flex-wrap gap-2">
               <ButtonWithTooltip 
-                onClick={() => importMutation.mutate()}
-                disabled={importMutation.isPending}
+                onClick={() => setShowImportDialog(true)}
                 size="sm"
                 variant="outline"
                 data-testid="button-import-shows"
                 tooltip="Import from TVMaze"
                 aria-label="Import from TVMaze"
               >
-                {importMutation.isPending ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  <Download className="w-4 h-4" />
-                )}
+                <Download className="w-4 h-4" />
                 <span className="ml-2 sm:hidden">Import</span>
                 <span className="ml-2 hidden lg:inline">Import from TVMaze</span>
               </ButtonWithTooltip>
@@ -464,20 +441,20 @@ export default function FollowedShows() {
               Your library is empty. Import shows from TVMaze or add shows manually to start building your collection.
             </p>
             <Button 
-              onClick={() => importMutation.mutate()}
-              disabled={importMutation.isPending}
+              onClick={() => setShowImportDialog(true)}
               data-testid="button-import-shows-empty"
             >
-              {importMutation.isPending ? (
-                <Loader2 className="w-4 h-4 animate-spin mr-2" />
-              ) : (
-                <Download className="w-4 h-4 mr-2" />
-              )}
+              <Download className="w-4 h-4 mr-2" />
               Import from TVMaze
             </Button>
           </div>
         )}
       </section>
+      
+      <LibraryImportDialog 
+        open={showImportDialog} 
+        onOpenChange={setShowImportDialog} 
+      />
     </div>
   );
 }

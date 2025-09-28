@@ -310,6 +310,114 @@ async function performAsyncSync(jobId: string, showId: number): Promise<void> {
   }
 }
 
+// Async library import function with progress reporting
+async function performAsyncLibraryImport(jobId: string): Promise<void> {
+  const reporter = syncJobManager.createReporter(jobId);
+  
+  try {
+    console.log(`[LIBRARY_IMPORT] Starting async library import, job ${jobId}`);
+    syncJobManager.markJobRunning(jobId);
+    
+    const apiKey = process.env.TVMAZE_API_KEY;
+    const username = process.env.TVMAZE_USERNAME;
+    const userId = "demo-user"; // Mock user ID
+    
+    if (!apiKey || !username) {
+      throw new Error("TVMaze API credentials not configured");
+    }
+
+    // Phase 1: Fetch followed shows
+    reporter.setPhase('fetch-show', 'Fetching your followed shows from TVMaze...');
+    
+    const credentials = Buffer.from(`${username}:${apiKey}`).toString('base64');
+    const response = await fetch(`https://api.tvmaze.com/v1/user/follows/shows?embed=show`, {
+      headers: {
+        'Accept': 'application/json',
+        'Authorization': `Basic ${credentials}`
+      }
+    });
+    
+    if (!response.ok) {
+      if (response.status === 401) {
+        throw new Error("Invalid TVMaze API credentials");
+      }
+      if (response.status === 404) {
+        throw new Error("TVMaze User API endpoint not found. This might mean the user doesn't have a premium account or the username is incorrect.");
+      }
+      throw new Error(`TVMaze User API error: ${response.status}`);
+    }
+
+    const followedShows = await response.json();
+    let importedCount = 0;
+    let skippedCount = 0;
+
+    // Phase 2: Process shows
+    reporter.setPhase('process-episodes', 'Importing shows to your library...'); // Reusing episodes phase
+    reporter.setTotal(followedShows.length);
+
+    // Process each followed show
+    for (const followedShow of followedShows) {
+      const show = followedShow._embedded.show;
+      
+      try {
+        // Check if show already exists in user's collection
+        const existingUserShow = await storage.getUserShow(userId, show.id);
+        if (existingUserShow) {
+          skippedCount++;
+          reporter.incrementCompleted(`Skipped: ${show.name} (already in library)`);
+          continue;
+        }
+
+        // Prepare show data for storage
+        const showToStore = insertShowSchema.parse({
+          id: show.id,
+          name: show.name,
+          summary: show.summary,
+          image: show.image,
+          network: show.network,
+          genres: show.genres || [],
+          status: show.status,
+          premiered: show.premiered,
+          rating: show.rating,
+          runtime: show.runtime,
+          officialSite: show.officialSite,
+          language: show.language,
+          type: show.type,
+          updated: show.updated,
+        });
+        
+        // Store show in database
+        await storage.createShow(showToStore);
+
+        // Add to user's collection with "later" status
+        const userShowData = insertUserShowSchema.parse({
+          userId,
+          showId: show.id,
+          status: "later"
+        });
+
+        await storage.addUserShow(userShowData);
+        importedCount++;
+        reporter.incrementCompleted(`Imported: ${show.name}`);
+        
+      } catch (error) {
+        console.error(`Error importing show ${show.name}:`, error);
+        reporter.addError(`Error importing ${show.name}: ${error}`);
+        // Continue with other shows even if one fails
+      }
+    }
+
+    // Phase 3: Finalize
+    reporter.setPhase('finalize', 'Import completed!');
+    
+    syncJobManager.markJobSuccess(jobId, importedCount, skippedCount);
+    
+  } catch (error) {
+    console.error("Error in library import:", error);
+    syncJobManager.markJobError(jobId, error instanceof Error ? error.message : 'Unknown error');
+  }
+}
+
 export async function registerRoutes(app: Express): Promise<Server> {
   // TVMaze API proxy routes
   app.get("/api/shows/search", async (req, res) => {
@@ -797,100 +905,75 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Import followed shows from TVMaze into local database
+  // Import followed shows from TVMaze into local database with progress tracking
   app.post("/api/library/import", async (req, res) => {
     try {
-      const apiKey = process.env.TVMAZE_API_KEY;
-      const username = process.env.TVMAZE_USERNAME;
-      const userId = "demo-user"; // Mock user ID
+      // Create new library import job
+      const jobId = syncJobManager.createJob(0);
       
-      if (!apiKey || !username) {
-        return res.status(500).json({ error: "TVMaze API credentials not configured" });
-      }
-
-      // Fetch followed shows from TVMaze API
-      const credentials = Buffer.from(`${username}:${apiKey}`).toString('base64');
-      const response = await fetch(`https://api.tvmaze.com/v1/user/follows/shows?embed=show`, {
-        headers: {
-          'Accept': 'application/json',
-          'Authorization': `Basic ${credentials}`
-        }
+      // Start async import process
+      setImmediate(async () => {
+        await performAsyncLibraryImport(jobId);
       });
       
-      if (!response.ok) {
-        if (response.status === 401) {
-          return res.status(401).json({ error: "Invalid TVMaze API credentials" });
-        }
-        if (response.status === 404) {
-          return res.status(404).json({ 
-            error: "TVMaze User API endpoint not found. This might mean the user doesn't have a premium account or the username is incorrect." 
-          });
-        }
-        throw new Error(`TVMaze User API error: ${response.status}`);
-      }
-
-      const followedShows = await response.json();
-      let importedCount = 0;
-      let skippedCount = 0;
-
-      // Process each followed show
-      for (const followedShow of followedShows) {
-        const show = followedShow._embedded.show;
-        
-        try {
-          // Check if show already exists in user's collection
-          const existingUserShow = await storage.getUserShow(userId, show.id);
-          if (existingUserShow) {
-            skippedCount++;
-            continue;
-          }
-
-          // Prepare show data for storage
-          const showToStore = insertShowSchema.parse({
-            id: show.id,
-            name: show.name,
-            summary: show.summary,
-            image: show.image,
-            network: show.network,
-            genres: show.genres || [],
-            status: show.status,
-            premiered: show.premiered,
-            rating: show.rating,
-            runtime: show.runtime,
-            officialSite: show.officialSite,
-            language: show.language,
-            type: show.type,
-            updated: show.updated,
-          });
-          
-          // Store show in database
-          await storage.createShow(showToStore);
-
-          // Add to user's collection with "later" status
-          const userShowData = insertUserShowSchema.parse({
-            userId,
-            showId: show.id,
-            status: "later"
-          });
-
-          await storage.addUserShow(userShowData);
-          importedCount++;
-        } catch (error) {
-          console.error(`Error importing show ${show.name}:`, error);
-          // Continue with other shows even if one fails
-        }
-      }
-
-      res.json({ 
-        message: "Import completed", 
-        imported: importedCount, 
-        skipped: skippedCount,
-        total: followedShows.length
-      });
+      res.json({ jobId, message: "Library import started" });
     } catch (error) {
-      console.error("Error importing followed shows:", error);
-      res.status(500).json({ error: "Failed to import followed shows" });
+      console.error("Error starting library import:", error);
+      res.status(500).json({ error: "Failed to start library import" });
     }
+  });
+
+  // SSE endpoint for library import progress
+  app.get("/api/library/import/:id/events", (req, res) => {
+    const { id } = req.params;
+    const job = syncJobManager.getJob(id);
+    
+    if (!job) {
+      return res.status(404).json({ error: "Job not found" });
+    }
+
+    // Set SSE headers
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Headers': 'Cache-Control'
+    });
+
+    // Send initial job state
+    res.write(`data: ${JSON.stringify({ 
+      type: 'init', 
+      data: {
+        status: job.status,
+        phase: job.phase,
+        percent: job.percent,
+        completedEpisodes: job.completedEpisodes,
+        totalEpisodes: job.totalEpisodes,
+        etaSeconds: job.etaSeconds,
+        message: job.lastMessage,
+        errors: job.errors,
+        episodesImported: job.episodesImported,
+        episodesUpdated: job.episodesUpdated
+      },
+      timestamp: Date.now()
+    })}\n\n`);
+
+    // Subscribe to job updates
+    const unsubscribe = syncJobManager.subscribe(id, (event) => {
+      res.write(event);
+    });
+
+    // Heartbeat to keep connection alive
+    const heartbeat = setInterval(() => {
+      res.write(`data: ${JSON.stringify({ type: 'heartbeat', timestamp: Date.now() })}\n\n`);
+    }, 15000);
+
+    // Cleanup on client disconnect
+    req.on('close', () => {
+      clearInterval(heartbeat);
+      unsubscribe();
+    });
   });
 
   // Get library from local database
