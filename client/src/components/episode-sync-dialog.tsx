@@ -177,10 +177,47 @@ export default function EpisodeSyncDialog({ open, onOpenChange }: EpisodeSyncDia
         setupSSE(data.jobId);
       } else {
         // Direct sync completed immediately
-        syncEpisodesMutation.onSuccess?.(data, {}, undefined);
+        setSyncProgress({
+          status: 'success',
+          phase: 'complete',
+          percent: 100,
+          completedEpisodes: data.imported || 0,
+          totalEpisodes: data.imported || 0,
+          message: 'Episode sync completed!',
+          errors: [],
+          episodesImported: data.imported,
+          episodesUpdated: data.skipped
+        });
+
+        queryClient.invalidateQueries({ queryKey: ["/api/user/episodes"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/library"] });
+        
+        setTimeout(() => {
+          toast({
+            title: "Episode sync completed",
+            description: `Successfully imported ${data.imported || 0} episodes, skipped ${data.skipped || 0} existing episodes.`,
+          });
+          onOpenChange(false);
+        }, 2000);
       }
     } catch (error: any) {
-      syncEpisodesMutation.onError?.(error, {}, undefined);
+      setSyncProgress({
+        status: 'error',
+        phase: 'error',
+        percent: 0,
+        completedEpisodes: 0,
+        totalEpisodes: 0,
+        message: 'Episode sync failed',
+        errors: [error.message || 'Failed to start episode sync'],
+        episodesImported: 0,
+        episodesUpdated: 0
+      });
+      
+      toast({
+        title: "Episode sync failed",
+        description: error.message || "Failed to start episode sync",
+        variant: "destructive",
+      });
     }
   };
 

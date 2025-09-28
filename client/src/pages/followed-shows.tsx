@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Link } from "wouter";
 import { useState, useMemo } from "react";
 import LibraryImportDialog from "@/components/library-import-dialog";
+import EpisodeSyncDialog from "@/components/episode-sync-dialog";
 
 type LibraryShow = UserShow & { show: Show };
 
@@ -19,6 +20,7 @@ export default function FollowedShows() {
   const queryClient = useQueryClient();
   const [syncingShowId, setSyncingShowId] = useState<number | null>(null);
   const [showImportDialog, setShowImportDialog] = useState(false);
+  const [showEpisodeSyncDialog, setShowEpisodeSyncDialog] = useState(false);
 
   const getStatusColor = (status?: string) => {
     switch (status) {
@@ -141,27 +143,6 @@ export default function FollowedShows() {
   });
 
 
-  // Episode import mutation
-  const importEpisodesMutation = useMutation({
-    mutationFn: async () => {
-      const response = await apiRequest("POST", "/api/episodes/import", {});
-      return response.json();
-    },
-    onSuccess: (data: any) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/user/episodes"] });
-      toast({
-        title: "Episodes imported",
-        description: `Successfully imported ${data.imported} episodes (${data.skipped} skipped)`,
-      });
-    },
-    onError: (error: any) => {
-      toast({
-        title: "Import failed",
-        description: error.message || "Failed to import episodes",
-        variant: "destructive",
-      });
-    },
-  });
 
   // Sync scrobbles mutation
   const syncScrobblesMutation = useMutation({
@@ -186,7 +167,7 @@ export default function FollowedShows() {
   });
 
   const handleImportEpisodes = () => {
-    importEpisodesMutation.mutate();
+    setShowEpisodeSyncDialog(true);
   };
 
   const handleSyncScrobbles = () => {
@@ -263,7 +244,6 @@ export default function FollowedShows() {
               </ButtonWithTooltip>
               <ButtonWithTooltip 
                 onClick={handleImportEpisodes}
-                disabled={importEpisodesMutation.isPending}
                 size="sm"
                 variant="outline"
                 data-testid="button-import-episodes"
@@ -272,7 +252,7 @@ export default function FollowedShows() {
               >
                 <RefreshCw className="w-4 h-4" />
                 <span className="ml-2 sm:hidden">Update Episodes</span>
-                <span className="ml-2 hidden lg:inline">{importEpisodesMutation.isPending ? "Updating..." : "Update Episodes"}</span>
+                <span className="ml-2 hidden lg:inline">Update Episodes</span>
               </ButtonWithTooltip>
               <ButtonWithTooltip 
                 onClick={handleSyncScrobbles}
@@ -454,6 +434,11 @@ export default function FollowedShows() {
       <LibraryImportDialog 
         open={showImportDialog} 
         onOpenChange={setShowImportDialog} 
+      />
+      
+      <EpisodeSyncDialog 
+        open={showEpisodeSyncDialog} 
+        onOpenChange={setShowEpisodeSyncDialog} 
       />
     </div>
   );
