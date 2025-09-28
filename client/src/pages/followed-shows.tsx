@@ -262,7 +262,7 @@ export default function FollowedShows() {
                   <RefreshCw className="w-4 h-4" />
                 )}
                 <span className="ml-2">
-                  {activeJobStatus?.hasActiveJob ? `Syncing (${activeJobStatus.percent}%)` : "Update Episodes"}
+                  {activeJobStatus?.hasActiveJob ? `Syncing (${activeJobStatus.percent}%)` : "Sync Episodes"}
                 </span>
               </Button>
               <Tooltip delayDuration={0}>
