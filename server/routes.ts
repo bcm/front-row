@@ -1442,6 +1442,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
     });
   });
 
+  // Check for active episode import jobs
+  app.get("/api/episodes/import/status", (req, res) => {
+    const activeJobs = syncJobManager.getActiveJobs();
+    const activeJob = activeJobs.length > 0 ? activeJobs[0] : null;
+    
+    if (activeJob) {
+      res.json({
+        hasActiveJob: true,
+        jobId: activeJob.id,
+        status: activeJob.status,
+        phase: activeJob.phase,
+        percent: activeJob.percent,
+        completedShows: activeJob.completedShows,
+        totalShows: activeJob.totalShows,
+        message: activeJob.lastMessage
+      });
+    } else {
+      res.json({
+        hasActiveJob: false
+      });
+    }
+  });
+
   // Get user episodes with filtering by status
   app.get("/api/user/episodes", async (req, res) => {
     try {

@@ -58,6 +58,16 @@ export class SyncJobManager {
     return this.jobs.get(id) || null;
   }
 
+  getActiveJobs(): SyncJob[] {
+    const activeJobs: SyncJob[] = [];
+    for (const job of this.jobs.values()) {
+      if (job.status === 'running') {
+        activeJobs.push(job);
+      }
+    }
+    return activeJobs;
+  }
+
   cancelJob(id: string): boolean {
     const job = this.jobs.get(id);
     if (job && job.status === 'running') {
