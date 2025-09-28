@@ -1,5 +1,5 @@
-import { useState, useCallback, useEffect } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useState, useEffect } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Dialog,
   DialogContent,
@@ -37,8 +37,7 @@ interface SyncProgress {
 export default function EpisodeSyncDialog({ open, onOpenChange }: EpisodeSyncDialogProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const [syncProgress, setSyncProgress] = useState<SyncProgress | null>(null);
-  const [eventSource, setEventSource] = useState<EventSource | null>(null);
+  const [jobId, setJobId] = useState<string | null>(null);
 
   // Import episodes mutation to start the sync process
   const syncEpisodesMutation = useMutation({
@@ -49,18 +48,6 @@ export default function EpisodeSyncDialog({ open, onOpenChange }: EpisodeSyncDia
     onSuccess: (data: any) => {
       // If sync completes immediately (no job created), show success
       if (!data.jobId) {
-        setSyncProgress({
-          status: 'success',
-          phase: 'complete',
-          percent: 100,
-          completedShows: data.imported || 0,
-          totalShows: data.imported || 0,
-          message: 'Episode sync completed!',
-          errors: [],
-          episodesImported: data.imported,
-          episodesUpdated: data.skipped
-        });
-
         queryClient.invalidateQueries({ queryKey: ["/api/user/episodes"] });
         queryClient.invalidateQueries({ queryKey: ["/api/library"] });
         
@@ -71,21 +58,12 @@ export default function EpisodeSyncDialog({ open, onOpenChange }: EpisodeSyncDia
           });
           onOpenChange(false);
         }, 2000);
+      } else {
+        // Store jobId to start polling
+        setJobId(data.jobId);
       }
     },
     onError: (error: any) => {
-      setSyncProgress({
-        status: 'error',
-        phase: 'error',
-        percent: 0,
-        completedShows: 0,
-        totalShows: 0,
-        message: 'Episode sync failed',
-        errors: [error.message || 'Failed to start episode sync'],
-        episodesImported: 0,
-        episodesUpdated: 0
-      });
-      
       toast({
         title: "Episode sync failed",
         description: error.message || "Failed to start episode sync",
@@ -94,229 +72,73 @@ export default function EpisodeSyncDialog({ open, onOpenChange }: EpisodeSyncDia
     },
   });
 
-  // Fallback polling when SSE fails
-  const pollProgress = useCallback(async (jobId: string) => {
-    try {
+  // Polling-based progress tracking using React Query
+  const { data: syncProgress, error: progressError } = useQuery({
+    queryKey: ['/api/episodes/import/progress', jobId],
+    queryFn: async () => {
+      if (!jobId) return null;
+      
       const response = await fetch(`/api/episodes/import/progress/${jobId}`, {
         headers: { 'Accept': 'application/json' }
       });
-      if (response.ok) {
-        const data = await response.json();
-        if (data.status) {
-          setSyncProgress({
-            status: data.status,
-            phase: data.phase || '',
-            percent: data.percent || 0,
-            completedShows: data.completedShows || 0,
-            totalShows: data.totalShows || 0,
-            etaSeconds: data.etaSeconds,
-            message: data.message || '',
-            errors: data.errors || [],
-            episodesImported: data.episodesImported,
-            episodesUpdated: data.episodesUpdated
-          });
-          
-          if (data.status === 'success') {
-            queryClient.invalidateQueries({ queryKey: ["/api/user/episodes"] });
-            queryClient.invalidateQueries({ queryKey: ["/api/library"] });
-            
-            setTimeout(() => {
-              toast({
-                title: "Episode sync completed",
-                description: `Successfully imported ${data.episodesImported || 0} episodes, updated ${data.episodesUpdated || 0} existing episodes.`,
-              });
-              onOpenChange(false);
-            }, 2000);
-            return 'complete';
-          } else if (data.status === 'error') {
-            setSyncProgress(prev => prev ? { 
-              ...prev, 
-              status: 'error',
-              errors: [...(prev.errors || []), data.message || 'Unknown error']
-            } : null);
-            return 'error';
-          }
-        }
-      }
-      return 'continue';
-    } catch (error) {
-      console.error('Poll progress error:', error);
-      return 'continue';
-    }
-  }, [queryClient, toast, onOpenChange]);
-
-  // Set up Server-Sent Events for real-time progress
-  const setupSSE = useCallback((jobId: string) => {
-    const source = new EventSource(`/api/episodes/import/progress/${jobId}`);
-    setEventSource(source);
-    
-    let pollingInterval: NodeJS.Timeout | null = null;
-
-    source.onmessage = (event) => {
-      try {
-        const progressData = JSON.parse(event.data);
-        
-        if (progressData.type === 'progress' || progressData.type === 'init') {
-          setSyncProgress({
-            status: progressData.data.status,
-            phase: progressData.data.phase || '',
-            percent: progressData.data.percent || 0,
-            completedShows: progressData.data.completedShows || 0,
-            totalShows: progressData.data.totalShows || 0,
-            etaSeconds: progressData.data.etaSeconds,
-            message: progressData.data.message || '',
-            errors: progressData.data.errors || [],
-            episodesImported: progressData.data.episodesImported,
-            episodesUpdated: progressData.data.episodesUpdated
-          });
-        }
-        
-        if (progressData.type === 'complete') {
-          setSyncProgress(prev => prev ? { ...prev, status: 'success' } : null);
-          
-          // Invalidate queries to refresh data
-          queryClient.invalidateQueries({ queryKey: ["/api/user/episodes"] });
-          queryClient.invalidateQueries({ queryKey: ["/api/library"] });
-          
-          setTimeout(() => {
-            const completionData = progressData.data || {};
-            toast({
-              title: "Episode sync completed",
-              description: `Successfully imported ${completionData.episodesImported || 0} episodes, updated ${completionData.episodesUpdated || 0} existing episodes.`,
-            });
-            onOpenChange(false);
-          }, 2000);
-        }
-
-        if (progressData.type === 'error') {
-          setSyncProgress(prev => prev ? { 
-            ...prev, 
-            status: 'error',
-            errors: [...(prev.errors || []), progressData.data.error || 'Unknown error']
-          } : null);
-        }
-      } catch (error) {
-        console.error('Error parsing SSE data:', error);
-      }
-    };
-
-    source.onerror = (error) => {
-      console.error('SSE error:', error);
-      source.close();
-      setEventSource(null);
       
-      // Fall back to polling for progress
-      console.log('SSE failed, switching to polling mode');
-      setSyncProgress(prev => prev ? {
-        ...prev,
-        message: 'Connection lost - switching to polling mode...'
-      } : null);
-      
-      // Start polling every 2 seconds
-      pollingInterval = setInterval(async () => {
-        const result = await pollProgress(jobId);
-        if (result === 'complete' || result === 'error') {
-          if (pollingInterval) {
-            clearInterval(pollingInterval);
-            pollingInterval = null;
-          }
-        }
-      }, 2000);
-    };
-
-    // Cleanup function to clear polling interval
-    return () => {
-      if (pollingInterval) {
-        clearInterval(pollingInterval);
+      if (!response.ok) {
+        throw new Error('Failed to fetch progress');
       }
-      source.close();
-    };
-  }, [queryClient, toast, onOpenChange, pollProgress]);
-
-  // Start the episode sync process
-  const handleStartSync = async () => {
-    try {
-      setSyncProgress({
-        status: 'running',
-        phase: 'starting',
-        percent: 0,
-        completedShows: 0,
-        totalShows: 0,
-        message: 'Starting episode sync...',
-        errors: [],
-      });
-
-      const response = await apiRequest("POST", "/api/episodes/import", {});
+      
       const data = await response.json();
       
-      if (data.jobId) {
-        // Job-based sync with progress tracking
-        setupSSE(data.jobId);
-      } else {
-        // Direct sync completed immediately
-        setSyncProgress({
-          status: 'success',
-          phase: 'complete',
-          percent: 100,
-          completedShows: data.imported || 0,
-          totalShows: data.imported || 0,
-          message: 'Episode sync completed!',
-          errors: [],
-          episodesImported: data.imported,
-          episodesUpdated: data.skipped
-        });
-
+      // Handle completion
+      if (data.status === 'success') {
         queryClient.invalidateQueries({ queryKey: ["/api/user/episodes"] });
         queryClient.invalidateQueries({ queryKey: ["/api/library"] });
         
         setTimeout(() => {
           toast({
             title: "Episode sync completed",
-            description: `Successfully imported ${data.imported || 0} episodes, skipped ${data.skipped || 0} existing episodes.`,
+            description: `Successfully imported ${data.episodesImported || 0} episodes, updated ${data.episodesUpdated || 0} existing episodes.`,
           });
           onOpenChange(false);
         }, 2000);
       }
-    } catch (error: any) {
-      setSyncProgress({
-        status: 'error',
-        phase: 'error',
-        percent: 0,
-        completedShows: 0,
-        totalShows: 0,
-        message: 'Episode sync failed',
-        errors: [error.message || 'Failed to start episode sync'],
-        episodesImported: 0,
-        episodesUpdated: 0
-      });
       
-      toast({
-        title: "Episode sync failed",
-        description: error.message || "Failed to start episode sync",
-        variant: "destructive",
-      });
-    }
+      return {
+        status: data.status,
+        phase: data.phase || '',
+        percent: data.percent || 0,
+        completedShows: data.completedShows || 0,
+        totalShows: data.totalShows || 0,
+        etaSeconds: data.etaSeconds,
+        message: data.message || '',
+        errors: data.errors || [],
+        episodesImported: data.episodesImported,
+        episodesUpdated: data.episodesUpdated
+      } as SyncProgress;
+    },
+    enabled: !!jobId && open,
+    refetchInterval: (query) => {
+      // Stop polling when job is complete or failed
+      if (!query.data || query.data.status === 'success' || query.data.status === 'error') {
+        return false;
+      }
+      // Poll every 2.5 seconds, slower when near completion
+      return query.data.percent >= 90 ? 5000 : 2500;
+    },
+    refetchIntervalInBackground: false,
+    retry: 3,
+  });
+
+  // Start the episode sync process
+  const handleStartSync = () => {
+    syncEpisodesMutation.mutate();
   };
 
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      if (eventSource) {
-        eventSource.close();
-      }
-    };
-  }, [eventSource]);
-
-  // Reset state when dialog opens/closes
+  // Reset job state when dialog closes
   useEffect(() => {
     if (!open) {
-      setSyncProgress(null);
-      if (eventSource) {
-        eventSource.close();
-        setEventSource(null);
-      }
+      setJobId(null);
     }
-  }, [open, eventSource]);
+  }, [open]);
 
   const getPhaseIcon = (phase: string) => {
     switch (phase) {
