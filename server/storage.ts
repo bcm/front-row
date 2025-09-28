@@ -546,7 +546,7 @@ export class DatabaseStorage implements IStorage {
     return userEpisode || undefined;
   }
 
-  async addUserEpisode(userEpisode: InsertUserEpisode): Promise<UserEpisode> {
+  async addUserEpisode(userEpisode: InsertUserEpisode): Promise<{ episode: UserEpisode; isNew: boolean }> {
     const [newUserEpisode] = await db
       .insert(userEpisodes)
       .values([userEpisode])
@@ -561,10 +561,10 @@ export class DatabaseStorage implements IStorage {
         .select()
         .from(userEpisodes)
         .where(and(eq(userEpisodes.userId, userEpisode.userId), eq(userEpisodes.episodeId, userEpisode.episodeId)));
-      return existingUserEpisode;
+      return { episode: existingUserEpisode, isNew: false };
     }
     
-    return newUserEpisode;
+    return { episode: newUserEpisode, isNew: true };
   }
 
   async updateUserEpisode(userId: string, episodeId: number, updates: Partial<UserEpisode>): Promise<UserEpisode | undefined> {

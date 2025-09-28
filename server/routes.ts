@@ -127,7 +127,7 @@ async function performAsyncAddShowSync(jobId: string, showId: number, userId: st
           status: initialStatus
         });
         
-        const userEpisode = await storage.addUserEpisode(userEpisodeData);
+        const { episode: userEpisode } = await storage.addUserEpisode(userEpisodeData);
         
         // Update timestamps if needed
         if (initialStatus !== "untriaged" && (watchedAt || initialStatus === "watched" || initialStatus === "skipped")) {
@@ -274,7 +274,7 @@ async function performAsyncSync(jobId: string, showId: number): Promise<void> {
             ...(watchedAt && { watchedAt })
           });
 
-          const userEpisode = await storage.addUserEpisode(userEpisodeData);
+          const { episode: userEpisode } = await storage.addUserEpisode(userEpisodeData);
           
           // If episode already existed and we have scrobble data, update its status
           if (episodeScrobble && userEpisode.id) {
@@ -487,8 +487,8 @@ async function performAsyncEpisodeImport(jobId: string): Promise<void> {
               addedAt: new Date()
             });
 
-            const userEpisode = await storage.addUserEpisode(userEpisodeData);
-            if (userEpisode.id) {
+            const result = await storage.addUserEpisode(userEpisodeData);
+            if (result.isNew) {
               importedCount++;
               showImportedCount++;
             } else {
@@ -702,7 +702,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   ...(watchedAt && { watchedAt })
                 });
 
-                const userEpisode = await storage.addUserEpisode(userEpisodeData);
+                const { episode: userEpisode } = await storage.addUserEpisode(userEpisodeData);
                 
                 // If episode already existed and we have scrobble data, update its status
                 if (episodeScrobble && userEpisode.id) {
@@ -1370,8 +1370,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   addedAt: new Date()
                 });
 
-                const userEpisode = await storage.addUserEpisode(userEpisodeData);
-                if (userEpisode.id) {
+                const { episode: userEpisode, isNew } = await storage.addUserEpisode(userEpisodeData);
+                if (isNew) {
                   importedCount++;
                 } else {
                   skippedCount++;
