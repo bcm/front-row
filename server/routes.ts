@@ -1415,14 +1415,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Episode import progress via Server-Sent Events
   app.get("/api/episodes/import/progress/:id", (req, res) => {
     const { id } = req.params;
+    const acceptHeader = req.headers.accept || '';
+    
+    console.log(`[SSE_DEBUG] Progress request for job ${id}, Accept: ${acceptHeader}`);
 
     // Get job status
     const job = syncJobManager.getJob(id);
     if (!job) {
+      console.log(`[SSE_DEBUG] Job ${id} not found`);
       return res.status(404).json({ error: 'Job not found' });
+    }
+    
+    console.log(`[SSE_DEBUG] Job ${id} found, status: ${job.status}`);
+    
+    // If requesting JSON, return JSON response for polling
+    if (acceptHeader.includes('application/json')) {
+      console.log(`[SSE_DEBUG] Returning JSON response for job ${id}`);
+      return res.json({
+        status: job.status,
+        phase: job.phase,
+        percent: job.percent,
+        completedShows: job.completedShows,
+        totalShows: job.totalShows,
+        etaSeconds: job.etaSeconds,
+        message: job.lastMessage,
+        errors: job.errors,
+        episodesImported: job.episodesImported,
+        episodesUpdated: job.episodesUpdated
+      });
     }
 
     // Set up SSE
+    console.log(`[SSE_DEBUG] Setting up SSE connection for job ${id}`);
     res.writeHead(200, {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',
