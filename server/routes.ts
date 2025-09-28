@@ -418,6 +418,116 @@ async function performAsyncLibraryImport(jobId: string): Promise<void> {
   }
 }
 
+// Async episode import function with progress reporting
+async function performAsyncEpisodeImport(jobId: string): Promise<void> {
+  const reporter = syncJobManager.createReporter(jobId);
+  
+  try {
+    console.log(`[EPISODE_IMPORT] Starting async episode import, job ${jobId}`);
+    syncJobManager.markJobRunning(jobId);
+    
+    const userId = "demo-user"; // Mock user ID
+    
+    // Phase 1: Fetch user shows
+    reporter.setPhase('fetch-episodes', 'Fetching your shows...');
+    
+    const userShows = await storage.getUserShows(userId);
+    if (userShows.length === 0) {
+      throw new Error("No followed shows found. Import shows first.");
+    }
+
+    let importedCount = 0;
+    let skippedCount = 0;
+    let totalEpisodes = 0;
+
+    // Phase 2: Count total episodes first
+    reporter.setPhase('fetch-episodes', 'Calculating total episodes...');
+    
+    for (const userShow of userShows) {
+      try {
+        const response = await fetch(`https://api.tvmaze.com/shows/${userShow.showId}/episodes`);
+        if (response.ok) {
+          const episodes = await response.json();
+          totalEpisodes += episodes.length;
+        }
+      } catch (error) {
+        console.error(`Error counting episodes for show ${userShow.showId}:`, error);
+      }
+    }
+
+    // Phase 3: Process episodes
+    reporter.setPhase('process-episodes', 'Processing episodes...');
+    reporter.setTotal(totalEpisodes);
+
+    for (const userShow of userShows) {
+      try {
+        console.log(`Importing episodes for show: ${userShow.show.name} (ID: ${userShow.showId})`);
+        
+        const response = await fetch(`https://api.tvmaze.com/shows/${userShow.showId}/episodes`);
+        
+        if (!response.ok) {
+          console.error(`Failed to fetch episodes for show ${userShow.showId}: ${response.status}`);
+          continue;
+        }
+
+        const episodes = await response.json();
+        console.log(`Found ${episodes.length} episodes for ${userShow.show.name}`);
+
+        for (const episode of episodes) {
+          try {
+            const episodeToStore = insertEpisodeSchema.parse({
+              id: episode.id,
+              showId: userShow.showId,
+              season: episode.season,
+              number: episode.number,
+              name: episode.name,
+              summary: episode.summary,
+              airdate: episode.airdate,
+              runtime: episode.runtime,
+              image: episode.image
+            });
+            
+            await storage.createEpisode(episodeToStore);
+
+            const userEpisodeData = insertUserEpisodeSchema.parse({
+              userId,
+              episodeId: episode.id,
+              status: "untriaged",
+              addedAt: new Date()
+            });
+
+            const userEpisode = await storage.addUserEpisode(userEpisodeData);
+            if (userEpisode.id) {
+              importedCount++;
+              reporter.incrementCompleted(`Imported: ${userShow.show.name} S${episode.season}E${episode.number}`);
+            } else {
+              skippedCount++;
+              reporter.incrementCompleted(`Skipped: ${userShow.show.name} S${episode.season}E${episode.number} (already exists)`);
+            }
+            
+          } catch (error) {
+            console.error(`Error importing episode ${episode.id}:`, error);
+            reporter.addError(`Error importing ${userShow.show.name} S${episode.season}E${episode.number}: ${error}`);
+          }
+        }
+        
+      } catch (error) {
+        console.error(`Error importing episodes for show ${userShow.showId}:`, error);
+        reporter.addError(`Error importing episodes for ${userShow.show.name}: ${error}`);
+      }
+    }
+
+    // Phase 4: Finalize
+    reporter.setPhase('finalize', 'Episode import completed!');
+    
+    syncJobManager.markJobSuccess(jobId, importedCount, skippedCount);
+    
+  } catch (error) {
+    console.error("Error in episode import:", error);
+    syncJobManager.markJobError(jobId, error instanceof Error ? error.message : 'Unknown error');
+  }
+}
+
 export async function registerRoutes(app: Express): Promise<Server> {
   // TVMaze API proxy routes
   app.get("/api/shows/search", async (req, res) => {
@@ -1213,83 +1323,143 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
-      let importedCount = 0;
-      let skippedCount = 0;
-      let totalProcessed = 0;
+      // For small collections (5 shows or less), do direct import for speed
+      if (userShows.length <= 5) {
+        let importedCount = 0;
+        let skippedCount = 0;
 
-      // Process each followed show
-      for (const userShow of userShows) {
-        try {
-          console.log(`Importing episodes for show: ${userShow.show.name} (ID: ${userShow.showId})`);
-          
-          // Fetch episodes from TVMaze API
-          const response = await fetch(`https://api.tvmaze.com/shows/${userShow.showId}/episodes`);
-          
-          if (!response.ok) {
-            console.error(`Failed to fetch episodes for show ${userShow.showId}: ${response.status}`);
-            continue;
-          }
-
-          const episodes = await response.json();
-          console.log(`Found ${episodes.length} episodes for ${userShow.show.name}`);
-
-          // Process each episode
-          for (const episode of episodes) {
-            try {
-              // Prepare episode data for storage
-              const episodeToStore = insertEpisodeSchema.parse({
-                id: episode.id,
-                showId: userShow.showId,
-                season: episode.season,
-                number: episode.number,
-                name: episode.name,
-                summary: episode.summary,
-                airdate: episode.airdate,
-                runtime: episode.runtime,
-                image: episode.image
-              });
-              
-              // Store episode in database (will skip if already exists due to onConflictDoUpdate)
-              await storage.createEpisode(episodeToStore);
-
-              // Create user episode with "untriaged" status (addUserEpisode handles duplicates)
-              const userEpisodeData = insertUserEpisodeSchema.parse({
-                userId,
-                episodeId: episode.id,
-                status: "untriaged",
-                addedAt: new Date()
-              });
-
-              const userEpisode = await storage.addUserEpisode(userEpisodeData);
-              if (userEpisode.id) {
-                importedCount++;
-              } else {
-                skippedCount++;
-              }
-              
-              totalProcessed++;
-            } catch (episodeError) {
-              console.error(`Error processing episode ${episode.id} for show ${userShow.show.name}:`, episodeError);
-              // Continue with other episodes
+        for (const userShow of userShows) {
+          try {
+            console.log(`Importing episodes for show: ${userShow.show.name} (ID: ${userShow.showId})`);
+            
+            const response = await fetch(`https://api.tvmaze.com/shows/${userShow.showId}/episodes`);
+            
+            if (!response.ok) {
+              console.error(`Failed to fetch episodes for show ${userShow.showId}: ${response.status}`);
+              continue;
             }
+
+            const episodes = await response.json();
+            console.log(`Found ${episodes.length} episodes for ${userShow.show.name}`);
+
+            for (const episode of episodes) {
+              try {
+                const episodeToStore = insertEpisodeSchema.parse({
+                  id: episode.id,
+                  showId: userShow.showId,
+                  season: episode.season,
+                  number: episode.number,
+                  name: episode.name,
+                  summary: episode.summary,
+                  airdate: episode.airdate,
+                  runtime: episode.runtime,
+                  image: episode.image
+                });
+                
+                await storage.createEpisode(episodeToStore);
+
+                const userEpisodeData = insertUserEpisodeSchema.parse({
+                  userId,
+                  episodeId: episode.id,
+                  status: "untriaged",
+                  addedAt: new Date()
+                });
+
+                const userEpisode = await storage.addUserEpisode(userEpisodeData);
+                if (userEpisode.id) {
+                  importedCount++;
+                } else {
+                  skippedCount++;
+                }
+                
+              } catch (episodeError) {
+                console.error(`Error processing episode ${episode.id} for show ${userShow.show.name}:`, episodeError);
+              }
+            }
+          } catch (showError) {
+            console.error(`Error processing show ${userShow.show.name}:`, showError);
           }
-        } catch (showError) {
-          console.error(`Error processing show ${userShow.show.name}:`, showError);
-          // Continue with other shows
         }
+
+        return res.json({ 
+          message: "Episode import completed", 
+          imported: importedCount,
+          skipped: skippedCount
+        });
       }
 
-      res.json({ 
-        message: "Episode import completed", 
-        imported: importedCount,
-        skipped: skippedCount,
-        totalProcessed,
-        showsProcessed: userShows.length
+      // For larger collections, use job-based async import with progress tracking
+      const jobId = syncJobManager.createJob(0);
+      
+      // Start async episode import
+      performAsyncEpisodeImport(jobId).catch(error => {
+        console.error("Async episode import failed:", error);
       });
+      
+      res.json({ 
+        jobId,
+        message: "Episode import started"
+      });
+      
     } catch (error) {
       console.error("Error importing episodes:", error);
       res.status(500).json({ error: "Failed to import episodes" });
     }
+  });
+
+  // Episode import progress via Server-Sent Events
+  app.get("/api/episodes/import/progress/:id", (req, res) => {
+    const { id } = req.params;
+
+    // Get job status
+    const job = syncJobManager.getJob(id);
+    if (!job) {
+      return res.status(404).json({ error: 'Job not found' });
+    }
+
+    // Set up SSE
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Headers': 'Cache-Control'
+    });
+
+    // Send initial job state
+    res.write(`data: ${JSON.stringify({ 
+      type: 'init', 
+      data: {
+        status: job.status,
+        phase: job.phase,
+        percent: job.percent,
+        completedEpisodes: job.completedEpisodes,
+        totalEpisodes: job.totalEpisodes,
+        etaSeconds: job.etaSeconds,
+        message: job.lastMessage,
+        errors: job.errors,
+        episodesImported: job.episodesImported,
+        episodesUpdated: job.episodesUpdated
+      },
+      timestamp: Date.now()
+    })}\n\n`);
+
+    // Subscribe to job updates
+    const unsubscribe = syncJobManager.subscribe(id, (event) => {
+      res.write(event);
+    });
+
+    // Heartbeat to keep connection alive
+    const heartbeat = setInterval(() => {
+      res.write(`data: ${JSON.stringify({ type: 'heartbeat', timestamp: Date.now() })}\n\n`);
+    }, 30000);
+
+    // Cleanup on disconnect
+    req.on('close', () => {
+      unsubscribe();
+      clearInterval(heartbeat);
+      res.end();
+    });
   });
 
   // Get user episodes with filtering by status
