@@ -1315,6 +1315,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Get all user shows (followed shows)
       const userShows = await storage.getUserShows(userId);
       
+      console.log(`[DEBUG] Episode import: Found ${userShows.length} user shows`);
+      
       if (userShows.length === 0) {
         return res.json({ 
           message: "No followed shows found. Import shows first.", 
@@ -1324,6 +1326,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // For small collections (5 shows or less), do direct import for speed
+      if (userShows.length <= 5) {
+        console.log(`[DEBUG] Using synchronous import for ${userShows.length} shows`);
+      } else {
+        console.log(`[DEBUG] Using async job-based import for ${userShows.length} shows`);
+      }
+      
       if (userShows.length <= 5) {
         let importedCount = 0;
         let skippedCount = 0;
