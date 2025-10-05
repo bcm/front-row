@@ -86,16 +86,17 @@ Currently implemented with basic session-based authentication structure, though 
 - **ESBuild**: Fast JavaScript bundler for production builds
 - **Replit Integration**: Development environment with runtime error overlay and cartographer plugins
 
-## Scheduled Deployments
+## Automated Episode Sync
 
 ### Daily Episode Sync
 
-The application includes an automated daily episode sync that updates episode data for all users. This runs independently from the main web application using Replit's Scheduled Deployments feature.
+The application includes an automated daily episode sync that updates episode data for all users. This runs automatically within the main application using node-cron.
 
 #### How It Works
 
-The `scripts/daily-episode-sync.ts` script:
-- Connects to the production database using the same `DATABASE_URL` environment variable
+The `server/episode-scheduler.ts` module:
+- Uses node-cron to schedule a daily job at 3:00 AM Eastern Time
+- Automatically starts when the application launches
 - Fetches all users from the database
 - For each user, syncs episodes for their active (non-ended) shows
 - Fetches latest episode data from TVMaze API
@@ -103,43 +104,30 @@ The `scripts/daily-episode-sync.ts` script:
 - Updates existing episodes with latest metadata
 - Logs comprehensive sync results including imported count, skipped count, and any errors
 
-#### Setup Instructions
+#### Configuration
 
-1. **Open Publishing Tool**: In your Replit workspace, go to the Publishing tool
-2. **Create Scheduled Deployment**: Select "Scheduled" option and click "Set up your published app"
-3. **Configure Schedule**:
-   - **Schedule Description**: "Every day at 3 AM" (or use cron: `0 3 * * *`)
-   - **Job Timeout**: 30 minutes (to handle multiple users and many shows)
-4. **Set Commands**:
-   - **Build Command**: (leave empty, no build needed for script)
-   - **Run Command**: `tsx scripts/daily-episode-sync.ts`
-5. **Add Secrets**: The script uses the same secrets as your main deployment:
-   - `DATABASE_URL` - Your PostgreSQL connection string
-   - `TVMAZE_API_KEY` - Your TVMaze API key (if using authenticated endpoints)
-   - `TVMAZE_USERNAME` - Your TVMaze username (if using authenticated endpoints)
+The scheduler is configured with a cron expression `0 3 * * *` which runs daily at 3:00 AM Eastern Time. To modify the schedule:
+
+1. Edit `server/episode-scheduler.ts`
+2. Change the cron expression in the `cron.schedule()` call
+3. Optionally change the timezone (default: "America/New_York")
+
+Common cron patterns:
+- `0 3 * * *` - Daily at 3:00 AM
+- `0 */6 * * *` - Every 6 hours
+- `0 0 * * 0` - Weekly on Sunday at midnight
 
 #### Monitoring
 
-- View sync logs in the Publishing tool's Schedule tab
-- Check run history to see success/failure status
-- Review detailed logs for each sync run to see:
-  - Number of users synced
-  - Episodes imported and skipped per user
-  - Any errors encountered during the sync
+- Check server logs for scheduler messages prefixed with `[SCHEDULER]`
+- At startup, you'll see: "Episode sync scheduler initialized - will run daily at 3:00 AM Eastern Time"
+- During sync, detailed logs show progress for each user and show
+- After completion, see summary with total imported/skipped episodes and error count
 
-#### Manual Execution
+#### Technical Details
 
-You can also run the sync script manually in development:
-
-```bash
-tsx scripts/daily-episode-sync.ts
-```
-
-This is useful for testing or running an ad-hoc sync outside the scheduled time.
-
-#### Cost Considerations
-
-- Scheduled Deployments charge based on compute units used
-- Replit Core members receive monthly credits that can offset these costs
-- The sync script runs once per day and typically completes in a few minutes
-- Cost scales with number of users and shows being synced
+- **Package**: node-cron for job scheduling
+- **Timezone Support**: Runs in Eastern Time zone by default
+- **Error Handling**: Continues processing other users/shows if individual items fail
+- **Database**: Uses the same database connection as the main application
+- **Performance**: Filters out ended shows to improve efficiency
