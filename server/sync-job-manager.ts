@@ -60,11 +60,11 @@ export class SyncJobManager {
 
   getActiveJobs(): SyncJob[] {
     const activeJobs: SyncJob[] = [];
-    for (const job of this.jobs.values()) {
+    Array.from(this.jobs.values()).forEach(job => {
       if (job.status === 'running') {
         activeJobs.push(job);
       }
-    }
+    });
     return activeJobs;
   }
 

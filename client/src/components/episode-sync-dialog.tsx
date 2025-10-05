@@ -83,6 +83,31 @@ export default function EpisodeSyncDialog({ open, onOpenChange, existingJobId }:
     },
   });
 
+  // Cancel sync mutation
+  const cancelSyncMutation = useMutation({
+    mutationFn: async () => {
+      if (!jobId) throw new Error("No job to cancel");
+      const response = await apiRequest("POST", `/api/episodes/import/cancel/${jobId}`, {});
+      return response.json();
+    },
+    onSuccess: () => {
+      toast({
+        title: "Episode sync canceled",
+        description: "The sync has been stopped.",
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/user/episodes"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/library"] });
+      onOpenChange(false);
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Failed to cancel",
+        description: error.message || "Could not cancel the sync",
+        variant: "destructive",
+      });
+    },
+  });
+
   // Polling-based progress tracking using React Query
   const { data: syncProgress, error: progressError } = useQuery({
     queryKey: ['/api/episodes/import/progress', jobId],
@@ -296,13 +321,23 @@ export default function EpisodeSyncDialog({ open, onOpenChange, existingJobId }:
                 Start Episode Sync
               </Button>
             </>
+          ) : syncProgress.status === 'running' ? (
+            <>
+              <Button 
+                variant="outline" 
+                onClick={() => cancelSyncMutation.mutate()}
+                disabled={cancelSyncMutation.isPending}
+                data-testid="button-cancel-episode-sync"
+              >
+                Cancel Sync
+              </Button>
+            </>
           ) : (
             <Button 
               onClick={() => onOpenChange(false)}
-              disabled={syncProgress.status === 'running'}
               data-testid="button-close-episode-sync"
             >
-              {syncProgress.status === 'running' ? 'Syncing...' : 'Close'}
+              Close
             </Button>
           )}
         </DialogFooter>

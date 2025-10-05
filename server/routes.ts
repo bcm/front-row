@@ -453,6 +453,12 @@ async function performAsyncEpisodeImport(jobId: string): Promise<void> {
     reporter.setTotal(totalShows);
 
     for (const userShow of userShows) {
+      // Check if job has been canceled
+      if (reporter.checkCanceled()) {
+        console.log(`[EPISODE_IMPORT] Job ${jobId} was canceled`);
+        break;
+      }
+
       try {
         console.log(`Importing episodes for show: ${userShow.show.name} (ID: ${userShow.showId})`);
         
@@ -522,9 +528,13 @@ async function performAsyncEpisodeImport(jobId: string): Promise<void> {
     }
 
     // Phase 4: Finalize
-    reporter.setPhase('finalize', 'Episode import completed!');
-    
-    syncJobManager.markJobSuccess(jobId, importedCount, skippedCount);
+    if (reporter.checkCanceled()) {
+      reporter.setPhase('finalize', 'Episode sync canceled');
+      syncJobManager.markJobError(jobId, 'Sync was canceled by user');
+    } else {
+      reporter.setPhase('finalize', 'Episode import completed!');
+      syncJobManager.markJobSuccess(jobId, importedCount, skippedCount);
+    }
     
   } catch (error) {
     console.error("Error in episode import:", error);
@@ -1447,6 +1457,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       episodesImported: job.episodesImported,
       episodesUpdated: job.episodesUpdated
     });
+  });
+
+  // Cancel episode import job
+  app.post("/api/episodes/import/cancel/:id", (req, res) => {
+    const { id } = req.params;
+    
+    const success = syncJobManager.cancelJob(id);
+    
+    if (success) {
+      res.json({ message: "Episode sync canceled successfully" });
+    } else {
+      res.status(404).json({ error: "Job not found or not running" });
+    }
   });
 
   // Check for active episode import jobs
