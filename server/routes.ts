@@ -431,9 +431,16 @@ async function performAsyncEpisodeImport(jobId: string): Promise<void> {
     // Phase 1: Fetch user shows
     reporter.setPhase('fetch-episodes', 'Fetching your shows...');
     
-    const userShows = await storage.getUserShows(userId);
-    if (userShows.length === 0) {
+    const allUserShows = await storage.getUserShows(userId);
+    if (allUserShows.length === 0) {
       throw new Error("No followed shows found. Import shows first.");
+    }
+
+    // Filter out finished shows (status "Ended")
+    const userShows = allUserShows.filter(userShow => userShow.show.status !== "Ended");
+    
+    if (userShows.length === 0) {
+      throw new Error("No active shows to sync. All your shows have ended.");
     }
 
     let importedCount = 0;
