@@ -142,8 +142,9 @@ export class DatabaseStorage implements IStorage {
 
       const tvmazeShow = await response.json();
       
-      // Update the show with complete data from TVMaze
+      // Prepare show data from TVMaze (use upsert to insert or update)
       const showData = {
+        id: showId,
         name: tvmazeShow.name,
         summary: tvmazeShow.summary,
         image: tvmazeShow.image as { medium?: string; original?: string } | null,
@@ -167,13 +168,17 @@ export class DatabaseStorage implements IStorage {
         updated: tvmazeShow.updated,
       };
 
-      const [updatedShow] = await db
-        .update(shows)
-        .set(showData)
-        .where(eq(shows.id, showId))
+      // Use INSERT ... ON CONFLICT to upsert the show
+      const [upsertedShow] = await db
+        .insert(shows)
+        .values(showData)
+        .onConflictDoUpdate({
+          target: shows.id,
+          set: showData
+        })
         .returning();
 
-      return updatedShow || undefined;
+      return upsertedShow || undefined;
     } catch (error) {
       console.error(`Error syncing show ${showId} from TVMaze:`, error);
       return undefined;
