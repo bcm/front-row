@@ -1,15 +1,17 @@
 import type { Recommendation } from "@shared/schema";
 
-const TMDB_API_KEY = process.env.TMDB_API_KEY;
+const TMDB_API_KEY = process.env['tmdb access token'] || process.env.TMDB_API_KEY;
 const TMDB_BASE_URL = "https://api.themoviedb.org/3";
 
 const isV4Token = TMDB_API_KEY?.startsWith('eyJ');
 const authMethod = isV4Token ? 'v4 bearer token' : 'v3 API key';
+const secretSource = process.env['tmdb access token'] ? '"tmdb access token"' : 'TMDB_API_KEY';
 
 if (!TMDB_API_KEY) {
-  console.error('[TMDB] WARNING: TMDB API key not found in environment variables');
+  console.error('[TMDB] WARNING: No TMDB credentials found');
+  console.error('[TMDB] Available TMDB env keys:', Object.keys(process.env).filter(k => k.toLowerCase().includes('tmdb')));
 } else {
-  console.log(`[TMDB] Authentication configured using ${authMethod}`);
+  console.log(`[TMDB] Authentication configured using ${authMethod} from ${secretSource} secret`);
 }
 
 interface TMDBSearchResult {
