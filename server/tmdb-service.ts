@@ -1,6 +1,6 @@
 import type { Recommendation } from "@shared/schema";
 
-const TMDB_API_KEY = process.env.TMDB_API_KEY;
+const TMDB_READ_ACCESS_TOKEN = process.env.TMDB_API_KEY;
 const TMDB_BASE_URL = "https://api.themoviedb.org/3";
 
 interface TMDBSearchResult {
@@ -26,11 +26,19 @@ interface TMDBGenre {
 
 let genreCache: Record<number, string> | null = null;
 
+function getAuthHeaders(): HeadersInit {
+  return {
+    'Authorization': `Bearer ${TMDB_READ_ACCESS_TOKEN}`,
+    'Accept': 'application/json',
+  };
+}
+
 async function fetchGenres(): Promise<Record<number, string>> {
   if (genreCache) return genreCache;
   
   const response = await fetch(
-    `${TMDB_BASE_URL}/genre/tv/list?api_key=${TMDB_API_KEY}`
+    `${TMDB_BASE_URL}/genre/tv/list`,
+    { headers: getAuthHeaders() }
   );
   
   if (!response.ok) {
@@ -48,7 +56,8 @@ async function fetchGenres(): Promise<Record<number, string>> {
 export async function searchTMDBShow(showName: string): Promise<number | null> {
   try {
     const response = await fetch(
-      `${TMDB_BASE_URL}/search/tv?api_key=${TMDB_API_KEY}&query=${encodeURIComponent(showName)}`
+      `${TMDB_BASE_URL}/search/tv?query=${encodeURIComponent(showName)}`,
+      { headers: getAuthHeaders() }
     );
     
     if (!response.ok) {
@@ -72,7 +81,8 @@ export async function searchTMDBShow(showName: string): Promise<number | null> {
 export async function getTMDBRecommendations(tmdbId: number): Promise<TMDBSearchResult[]> {
   try {
     const response = await fetch(
-      `${TMDB_BASE_URL}/tv/${tmdbId}/recommendations?api_key=${TMDB_API_KEY}`
+      `${TMDB_BASE_URL}/tv/${tmdbId}/recommendations`,
+      { headers: getAuthHeaders() }
     );
     
     if (!response.ok) {
