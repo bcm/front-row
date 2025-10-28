@@ -1,6 +1,6 @@
 import type { Recommendation } from "@shared/schema";
 
-const TMDB_READ_ACCESS_TOKEN = process.env.TMDB_API_KEY;
+const TMDB_READ_ACCESS_TOKEN = process.env['tmdb access token'];
 const TMDB_BASE_URL = "https://api.themoviedb.org/3";
 
 interface TMDBSearchResult {
