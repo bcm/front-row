@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
-import { Search, Tv, Film, Calendar, Users, PlayCircle, Clock, Filter, Library } from "lucide-react";
+import { Search, Tv, Film, Calendar, Users, PlayCircle, Clock, Filter, Library, Sparkles } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
@@ -173,6 +173,7 @@ export default function Header({ onSearch }: HeaderProps) {
     { id: "watch-later", label: "Watch Later", href: "/watch-later", icon: Clock },
     { id: "triage", label: "Triage", href: "/triage", showBadge: true, icon: Filter },
     { id: "library", label: "Library", href: "/library", icon: Library },
+    { id: "recommendations", label: "Recommendations", href: "/recommendations", icon: Sparkles },
   ];
 
   const getActiveTab = () => {
@@ -180,6 +181,7 @@ export default function Header({ onSearch }: HeaderProps) {
     if (location === "/watch-later") return "watch-later";
     if (location === "/triage") return "triage";
     if (location === "/library" || location.startsWith("/show/") || location.startsWith("/episode/")) return "library";
+    if (location === "/recommendations") return "recommendations";
     return "dashboard";
   };
 
