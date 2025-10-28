@@ -1,12 +1,15 @@
 import type { Recommendation } from "@shared/schema";
 
-const TMDB_READ_ACCESS_TOKEN = process.env.TMDB_API_KEY;
+const TMDB_API_KEY = process.env.TMDB_API_KEY;
 const TMDB_BASE_URL = "https://api.themoviedb.org/3";
 
-if (!TMDB_READ_ACCESS_TOKEN) {
-  console.error('[TMDB] WARNING: TMDB access token not found in environment variables');
+const isV4Token = TMDB_API_KEY?.startsWith('eyJ');
+const authMethod = isV4Token ? 'v4 bearer token' : 'v3 API key';
+
+if (!TMDB_API_KEY) {
+  console.error('[TMDB] WARNING: TMDB API key not found in environment variables');
 } else {
-  console.log('[TMDB] Access token loaded successfully');
+  console.log(`[TMDB] Authentication configured using ${authMethod}`);
 }
 
 interface TMDBSearchResult {
@@ -32,20 +35,35 @@ interface TMDBGenre {
 
 let genreCache: Record<number, string> | null = null;
 
-function getAuthHeaders(): HeadersInit {
-  return {
-    'Authorization': `Bearer ${TMDB_READ_ACCESS_TOKEN}`,
-    'Accept': 'application/json',
-  };
+function buildFetchOptions(url: string): { url: string; options: RequestInit } {
+  if (isV4Token) {
+    return {
+      url,
+      options: {
+        headers: {
+          'Authorization': `Bearer ${TMDB_API_KEY}`,
+          'Accept': 'application/json',
+        }
+      }
+    };
+  } else {
+    const separator = url.includes('?') ? '&' : '?';
+    return {
+      url: `${url}${separator}api_key=${TMDB_API_KEY}`,
+      options: {
+        headers: {
+          'Accept': 'application/json',
+        }
+      }
+    };
+  }
 }
 
 async function fetchGenres(): Promise<Record<number, string>> {
   if (genreCache) return genreCache;
   
-  const response = await fetch(
-    `${TMDB_BASE_URL}/genre/tv/list`,
-    { headers: getAuthHeaders() }
-  );
+  const { url, options } = buildFetchOptions(`${TMDB_BASE_URL}/genre/tv/list`);
+  const response = await fetch(url, options);
   
   if (!response.ok) {
     throw new Error(`TMDB API error: ${response.statusText}`);
@@ -61,13 +79,19 @@ async function fetchGenres(): Promise<Record<number, string>> {
 
 export async function searchTMDBShow(showName: string): Promise<number | null> {
   try {
-    const response = await fetch(
-      `${TMDB_BASE_URL}/search/tv?query=${encodeURIComponent(showName)}`,
-      { headers: getAuthHeaders() }
+    const { url, options } = buildFetchOptions(
+      `${TMDB_BASE_URL}/search/tv?query=${encodeURIComponent(showName)}`
     );
+    const response = await fetch(url, options);
     
     if (!response.ok) {
-      console.error(`TMDB search failed for "${showName}": ${response.statusText}`);
+      if (response.status === 401) {
+        const errorBody = await response.text();
+        console.error(`[TMDB] Authentication failed. Please check your TMDB API key/token.`);
+        console.error(`[TMDB] Error details:`, errorBody);
+      } else {
+        console.error(`TMDB search failed for "${showName}": ${response.statusText}`);
+      }
       return null;
     }
     
@@ -86,10 +110,10 @@ export async function searchTMDBShow(showName: string): Promise<number | null> {
 
 export async function getTMDBRecommendations(tmdbId: number): Promise<TMDBSearchResult[]> {
   try {
-    const response = await fetch(
-      `${TMDB_BASE_URL}/tv/${tmdbId}/recommendations`,
-      { headers: getAuthHeaders() }
+    const { url, options } = buildFetchOptions(
+      `${TMDB_BASE_URL}/tv/${tmdbId}/recommendations`
     );
+    const response = await fetch(url, options);
     
     if (!response.ok) {
       console.error(`TMDB recommendations failed for ID ${tmdbId}: ${response.statusText}`);
