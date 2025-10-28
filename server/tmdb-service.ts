@@ -1,7 +1,13 @@
 import type { Recommendation } from "@shared/schema";
 
-const TMDB_READ_ACCESS_TOKEN = process.env['tmdb access token'];
+const TMDB_READ_ACCESS_TOKEN = process.env.TMDB_API_KEY;
 const TMDB_BASE_URL = "https://api.themoviedb.org/3";
+
+if (!TMDB_READ_ACCESS_TOKEN) {
+  console.error('[TMDB] WARNING: TMDB access token not found in environment variables');
+} else {
+  console.log('[TMDB] Access token loaded successfully');
+}
 
 interface TMDBSearchResult {
   id: number;
