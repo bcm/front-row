@@ -1761,6 +1761,109 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Recommendation routes
+  app.get("/api/recommendations", async (req, res) => {
+    try {
+      const userId = "demo-user";
+      const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
+      const recommendations = await storage.getRecommendations(userId, limit);
+      res.json(recommendations);
+    } catch (error) {
+      console.error("Error fetching recommendations:", error);
+      res.status(500).json({ error: "Failed to fetch recommendations" });
+    }
+  });
+
+  app.post("/api/recommendations/refresh", async (req, res) => {
+    try {
+      const userId = "demo-user";
+      const { refreshRecommendationsForUser } = await import("./recommendation-service");
+      const result = await refreshRecommendationsForUser(userId);
+      res.json(result);
+    } catch (error) {
+      console.error("Error refreshing recommendations:", error);
+      res.status(500).json({ error: "Failed to refresh recommendations" });
+    }
+  });
+
+  app.post("/api/recommendations/dismiss", async (req, res) => {
+    try {
+      const userId = "demo-user";
+      const { tmdbId } = req.body;
+      
+      if (!tmdbId) {
+        return res.status(400).json({ error: "tmdbId is required" });
+      }
+      
+      await storage.dismissRecommendation(userId, tmdbId);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error dismissing recommendation:", error);
+      res.status(500).json({ error: "Failed to dismiss recommendation" });
+    }
+  });
+
+  app.post("/api/recommendations/accept", async (req, res) => {
+    try {
+      const userId = "demo-user";
+      const { tmdbId, tvmazeId } = req.body;
+      
+      if (!tvmazeId) {
+        return res.status(400).json({ error: "tvmazeId is required" });
+      }
+      
+      // Check if show exists, if not sync it
+      let show = await storage.getShow(tvmazeId);
+      if (!show) {
+        show = await storage.syncShowFromTVMaze(tvmazeId);
+        if (!show) {
+          return res.status(404).json({ error: "Show not found on TVMaze" });
+        }
+      }
+      
+      // Update TMDB ID if provided
+      if (tmdbId && !show.tmdbId) {
+        await storage.updateShowTmdbId(tvmazeId, tmdbId);
+      }
+      
+      // Check if user already has this show
+      const existingUserShow = await storage.getUserShow(userId, tvmazeId);
+      if (existingUserShow) {
+        // If it was removed, unremove it
+        if (existingUserShow.isRemoved) {
+          await storage.updateUserShow(userId, tvmazeId, { isRemoved: false });
+        }
+        return res.json({ userShow: existingUserShow, show });
+      }
+      
+      // Add show to user's library
+      const userShow = await storage.addUserShow({
+        userId,
+        showId: tvmazeId,
+        isRemoved: false,
+        isShared: false,
+      });
+      
+      // Remove from recommendations and dismiss it
+      if (tmdbId) {
+        await storage.dismissRecommendation(userId, tmdbId);
+      }
+      
+      // Start async episode sync
+      const jobId = syncJobManager.createJob(tvmazeId);
+      
+      // Fire and forget the async sync
+      performAsyncAddShowSync(jobId, tvmazeId, userId).catch(error => {
+        console.error(`[ADD_SHOW] Async sync failed for job ${jobId}:`, error);
+      });
+      
+      res.json({ userShow, show, syncJobId: jobId });
+    } catch (error) {
+      console.error("Error accepting recommendation:", error);
+      res.status(500).json({ error: "Failed to accept recommendation" });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }

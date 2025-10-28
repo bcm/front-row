@@ -1,5 +1,5 @@
-import { type User, type InsertUser, type Show, type InsertShow, type UserShow, type InsertUserShow, type Episode, type InsertEpisode, type UserEpisode, type InsertUserEpisode, type UserSettings, type InsertUserSettings } from "@shared/schema";
-import { users, shows, userShows, episodes, userEpisodes, userSettings } from "@shared/schema";
+import { type User, type InsertUser, type Show, type InsertShow, type UserShow, type InsertUserShow, type Episode, type InsertEpisode, type UserEpisode, type InsertUserEpisode, type UserSettings, type InsertUserSettings, type Recommendation, type InsertRecommendation, type DismissedRecommendation, type InsertDismissedRecommendation } from "@shared/schema";
+import { users, shows, userShows, episodes, userEpisodes, userSettings, recommendations, dismissedRecommendations } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, ilike, inArray, desc, asc, lte, sql } from "drizzle-orm";
 
@@ -43,6 +43,14 @@ export interface IStorage {
   getUserSettings(userId: string): Promise<UserSettings | undefined>;
   createUserSettings(userSettings: InsertUserSettings): Promise<UserSettings>;
   updateUserSettings(userId: string, settings: Partial<UserSettings>): Promise<UserSettings | undefined>;
+  
+  // Recommendation methods
+  getRecommendations(userId: string, limit?: number): Promise<Recommendation[]>;
+  createRecommendations(recs: InsertRecommendation[]): Promise<void>;
+  clearRecommendations(userId: string): Promise<void>;
+  dismissRecommendation(userId: string, tmdbId: number): Promise<void>;
+  getDismissedRecommendations(userId: string): Promise<DismissedRecommendation[]>;
+  updateShowTmdbId(showId: number, tmdbId: number): Promise<void>;
 }
 
 
@@ -222,6 +230,7 @@ export class DatabaseStorage implements IStorage {
         language: shows.language,
         type: shows.type,
         updated: shows.updated,
+        tmdbId: shows.tmdbId,
         createdAt: shows.createdAt
       })
       .from(userShows)
@@ -605,6 +614,73 @@ export class DatabaseStorage implements IStorage {
       .where(eq(userSettings.userId, userId))
       .returning();
     return updatedSettings || undefined;
+  }
+
+  // Recommendation methods
+  async getRecommendations(userId: string, limit?: number): Promise<Recommendation[]> {
+    let query = db
+      .select()
+      .from(recommendations)
+      .where(eq(recommendations.userId, userId))
+      .orderBy(desc(recommendations.score));
+    
+    if (limit) {
+      query = query.limit(limit) as any;
+    }
+    
+    return await query;
+  }
+
+  async createRecommendations(recs: InsertRecommendation[]): Promise<void> {
+    if (recs.length === 0) return;
+    
+    await db
+      .insert(recommendations)
+      .values(recs)
+      .onConflictDoUpdate({
+        target: [recommendations.userId, recommendations.tmdbId],
+        set: {
+          score: sql`EXCLUDED.score`,
+          sourceShowIds: sql`EXCLUDED.source_show_ids`,
+          refreshedAt: new Date()
+        }
+      });
+  }
+
+  async clearRecommendations(userId: string): Promise<void> {
+    await db
+      .delete(recommendations)
+      .where(eq(recommendations.userId, userId));
+  }
+
+  async dismissRecommendation(userId: string, tmdbId: number): Promise<void> {
+    await db.transaction(async (tx) => {
+      await tx
+        .insert(dismissedRecommendations)
+        .values({ userId, tmdbId })
+        .onConflictDoNothing();
+      
+      await tx
+        .delete(recommendations)
+        .where(and(
+          eq(recommendations.userId, userId),
+          eq(recommendations.tmdbId, tmdbId)
+        ));
+    });
+  }
+
+  async getDismissedRecommendations(userId: string): Promise<DismissedRecommendation[]> {
+    return await db
+      .select()
+      .from(dismissedRecommendations)
+      .where(eq(dismissedRecommendations.userId, userId));
+  }
+
+  async updateShowTmdbId(showId: number, tmdbId: number): Promise<void> {
+    await db
+      .update(shows)
+      .set({ tmdbId })
+      .where(eq(shows.id, showId));
   }
 }
 
