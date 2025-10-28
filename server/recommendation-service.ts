@@ -81,15 +81,3 @@ export async function refreshRecommendationsForUser(userId: string): Promise<{ i
   }
 }
 
-export async function refreshAllUsersRecommendations(): Promise<void> {
-  console.log('[RECOMMENDATIONS] Starting refresh for all users');
-  
-  // For single-user app, we can hardcode user ID or fetch all users
-  // For now, let's fetch all users
-  const users = await storage.getUserShows('1', false); // This will need updating for multi-user
-  
-  // Since this is single-user, we'll just refresh for user ID '1'
-  const result = await refreshRecommendationsForUser('1');
-  
-  console.log(`[RECOMMENDATIONS] Refresh complete: ${result.imported} recommendations imported, ${result.errors} errors`);
-}
