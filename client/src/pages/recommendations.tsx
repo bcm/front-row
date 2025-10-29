@@ -78,7 +78,10 @@ export default function Recommendations() {
 
   const acceptMutation = useMutation({
     mutationFn: async ({ tmdbId, showName }: { tmdbId: number; showName: string }) => {
+      // Optimistically remove from UI
+      setDismissedIds(prev => new Set(prev).add(tmdbId));
       setProcessingTmdbId(tmdbId);
+      
       const tvmazeResponse = await fetch(
         `https://api.tvmaze.com/search/shows?q=${encodeURIComponent(showName)}`
       );
@@ -102,8 +105,14 @@ export default function Recommendations() {
         description: "Show added successfully. Episodes are being synced in the background.",
       });
     },
-    onError: (error: Error) => {
+    onError: (error: Error, { tmdbId }: { tmdbId: number; showName: string }) => {
       setProcessingTmdbId(null);
+      // Revert optimistic update on error
+      setDismissedIds(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(tmdbId);
+        return newSet;
+      });
       toast({
         variant: "destructive",
         title: "Error",
