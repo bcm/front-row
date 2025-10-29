@@ -131,15 +131,24 @@ export async function getTMDBRecommendations(tmdbId: number): Promise<TMDBSearch
 export async function aggregateRecommendations(
   tmdbIds: number[],
   userGenres: string[],
-  engagedTmdbIds: number[] = []
+  highlyEngagedTmdbIds: number[] = [],
+  moderatelyEngagedTmdbIds: number[] = []
 ): Promise<Map<number, { show: TMDBSearchResult; score: number; sources: number[] }>> {
   const genreMap = await fetchGenres();
   const recommendationMap = new Map<number, { show: TMDBSearchResult; score: number; sources: number[] }>();
-  const engagedSet = new Set(engagedTmdbIds);
+  const highlyEngagedSet = new Set(highlyEngagedTmdbIds);
+  const moderatelyEngagedSet = new Set(moderatelyEngagedTmdbIds);
   
   for (const tmdbId of tmdbIds) {
     const recommendations = await getTMDBRecommendations(tmdbId);
-    const isEngagedShow = engagedSet.has(tmdbId);
+    
+    // Determine engagement multiplier for this show
+    let engagementMultiplier = 1.0;
+    if (highlyEngagedSet.has(tmdbId)) {
+      engagementMultiplier = 2.5; // Watched shows have highest weight
+    } else if (moderatelyEngagedSet.has(tmdbId)) {
+      engagementMultiplier = 1.5; // Next shows have moderate weight
+    }
     
     for (const rec of recommendations) {
       if (!recommendationMap.has(rec.id)) {
@@ -150,12 +159,8 @@ export async function aggregateRecommendations(
         const qualityScore = Math.round(rec.vote_average * 10);
         const genreScore = genreMatchScore * 20;
         
-        let totalScore = frequencyScore + qualityScore + genreScore;
-        
-        // Apply 2x multiplier if this recommendation comes from an engaged show
-        if (isEngagedShow) {
-          totalScore *= 2;
-        }
+        const baseScore = frequencyScore + qualityScore + genreScore;
+        const totalScore = Math.round(baseScore * engagementMultiplier);
         
         recommendationMap.set(rec.id, {
           show: rec,
@@ -166,14 +171,8 @@ export async function aggregateRecommendations(
         const existing = recommendationMap.get(rec.id)!;
         existing.sources.push(tmdbId);
         
-        // Add frequency bonus (1 point per additional source)
-        let bonusScore = 1;
-        
-        // If this additional source is engaged, apply 2x multiplier to the bonus
-        if (isEngagedShow) {
-          bonusScore *= 2;
-        }
-        
+        // Add frequency bonus with engagement multiplier
+        const bonusScore = Math.round(1 * engagementMultiplier);
         existing.score += bonusScore;
       }
     }
