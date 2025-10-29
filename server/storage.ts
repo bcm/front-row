@@ -643,7 +643,7 @@ export class DatabaseStorage implements IStorage {
             )
           : eq(recommendations.userId, userId)
       )
-      .orderBy(desc(recommendations.score));
+      .orderBy(desc(recommendations.score), asc(recommendations.tmdbId));
     
     if (limit) {
       query = query.limit(limit) as any;
