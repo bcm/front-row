@@ -1864,6 +1864,85 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.post("/api/recommendations/accept-watched", async (req, res) => {
+    try {
+      const userId = "demo-user";
+      const { tmdbId, tvmazeId } = req.body;
+      
+      if (!tvmazeId) {
+        return res.status(400).json({ error: "tvmazeId is required" });
+      }
+      
+      // Check if show exists, if not sync it
+      let show = await storage.getShow(tvmazeId);
+      if (!show) {
+        show = await storage.syncShowFromTVMaze(tvmazeId);
+        if (!show) {
+          return res.status(404).json({ error: "Show not found on TVMaze" });
+        }
+      }
+      
+      // Update TMDB ID if provided
+      if (tmdbId && !show.tmdbId) {
+        await storage.updateShowTmdbId(tvmazeId, tmdbId);
+      }
+      
+      // Check if user already has this show
+      const existingUserShow = await storage.getUserShow(userId, tvmazeId);
+      if (existingUserShow) {
+        // If it was removed, unremove it
+        if (existingUserShow.isRemoved) {
+          await storage.updateUserShow(userId, tvmazeId, { isRemoved: false });
+        }
+        return res.json({ userShow: existingUserShow, show });
+      }
+      
+      // Add show to user's library
+      const userShow = await storage.addUserShow({
+        userId,
+        showId: tvmazeId,
+        isRemoved: false,
+        isShared: false,
+      });
+      
+      // Remove from recommendations and dismiss it
+      if (tmdbId) {
+        await storage.dismissRecommendation(userId, tmdbId);
+      }
+      
+      // Sync episodes first
+      const jobId = syncJobManager.createJob(tvmazeId);
+      
+      // Sync episodes and mark all as watched
+      (async () => {
+        try {
+          // Perform the episode sync
+          await performAsyncAddShowSync(jobId, tvmazeId, userId);
+          
+          // Get all user episodes for this show
+          const userEpisodes = await storage.getUserEpisodesForShow(userId, tvmazeId);
+          
+          // Mark all episodes as watched
+          for (const userEpisode of userEpisodes) {
+            await storage.updateUserEpisode(userId, userEpisode.episodeId, {
+              status: "watched",
+              watchedAt: new Date()
+            });
+          }
+          
+          console.log(`[ACCEPT_WATCHED] Marked ${userEpisodes.length} episodes as watched for show ${tvmazeId}`);
+        } catch (error) {
+          console.error(`[ACCEPT_WATCHED] Failed for job ${jobId}:`, error);
+        }
+      })();
+      
+      res.json({ userShow, show, syncJobId: jobId });
+    } catch (error) {
+      console.error("Error accepting recommendation as watched:", error);
+      res.status(500).json({ error: "Failed to accept recommendation" });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }

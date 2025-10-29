@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, X, Plus, RefreshCw, Sparkles } from "lucide-react";
+import { Loader2, X, Plus, RefreshCw, Sparkles, CheckCheck } from "lucide-react";
 import { useState } from "react";
 import type { Recommendation } from "@shared/schema";
 
@@ -103,6 +103,51 @@ export default function Recommendations() {
       toast({
         title: "Added to library",
         description: "Show added successfully. Episodes are being synced in the background.",
+      });
+    },
+    onError: (error: Error, { tmdbId }: { tmdbId: number; showName: string }) => {
+      setProcessingTmdbId(null);
+      // Revert optimistic update on error
+      setDismissedIds(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(tmdbId);
+        return newSet;
+      });
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: error.message || "Failed to add show",
+      });
+    },
+  });
+
+  const acceptWatchedMutation = useMutation({
+    mutationFn: async ({ tmdbId, showName }: { tmdbId: number; showName: string }) => {
+      // Optimistically remove from UI
+      setDismissedIds(prev => new Set(prev).add(tmdbId));
+      setProcessingTmdbId(tmdbId);
+      
+      const tvmazeResponse = await fetch(
+        `https://api.tvmaze.com/search/shows?q=${encodeURIComponent(showName)}`
+      );
+      const tvmazeResults = await tvmazeResponse.json();
+
+      if (tvmazeResults.length === 0) {
+        throw new Error("Show not found on TVMaze");
+      }
+
+      const tvmazeId = tvmazeResults[0].show.id;
+
+      const response = await apiRequest("POST", "/api/recommendations/accept-watched", { tmdbId, tvmazeId });
+      return response.json();
+    },
+    onSuccess: () => {
+      setProcessingTmdbId(null);
+      queryClient.invalidateQueries({ queryKey: ["/api/recommendations"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/user/shows"] });
+      toast({
+        title: "Added as watched",
+        description: "Show added successfully. All episodes are being marked as watched.",
       });
     },
     onError: (error: Error, { tmdbId }: { tmdbId: number; showName: string }) => {
@@ -231,28 +276,44 @@ export default function Recommendations() {
                     </p>
                   )}
 
-                  <div className="flex gap-2 mt-auto">
+                  <div className="flex flex-col gap-2 mt-auto">
+                    <div className="flex gap-2">
+                      <Button
+                        onClick={() => acceptMutation.mutate({ tmdbId: rec.tmdbId, showName: rec.name })}
+                        disabled={processingTmdbId === rec.tmdbId}
+                        className="flex-1"
+                        data-testid={`button-accept-${rec.tmdbId}`}
+                      >
+                        {processingTmdbId === rec.tmdbId ? (
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        ) : (
+                          <Plus className="h-4 w-4 mr-2" />
+                        )}
+                        Add
+                      </Button>
+                      <Button
+                        onClick={() => dismissMutation.mutate(rec.tmdbId)}
+                        disabled={dismissMutation.isPending}
+                        variant="outline"
+                        size="icon"
+                        data-testid={`button-dismiss-${rec.tmdbId}`}
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
                     <Button
-                      onClick={() => acceptMutation.mutate({ tmdbId: rec.tmdbId, showName: rec.name })}
+                      onClick={() => acceptWatchedMutation.mutate({ tmdbId: rec.tmdbId, showName: rec.name })}
                       disabled={processingTmdbId === rec.tmdbId}
-                      className="flex-1"
-                      data-testid={`button-accept-${rec.tmdbId}`}
+                      variant="secondary"
+                      className="w-full"
+                      data-testid={`button-accept-watched-${rec.tmdbId}`}
                     >
                       {processingTmdbId === rec.tmdbId ? (
                         <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                       ) : (
-                        <Plus className="h-4 w-4 mr-2" />
+                        <CheckCheck className="h-4 w-4 mr-2" />
                       )}
-                      Add
-                    </Button>
-                    <Button
-                      onClick={() => dismissMutation.mutate(rec.tmdbId)}
-                      disabled={dismissMutation.isPending}
-                      variant="outline"
-                      size="icon"
-                      data-testid={`button-dismiss-${rec.tmdbId}`}
-                    >
-                      <X className="h-4 w-4" />
+                      Watched
                     </Button>
                   </div>
                 </div>
