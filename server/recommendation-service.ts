@@ -13,20 +13,24 @@ export async function refreshRecommendationsForUser(userId: string): Promise<{ i
       return { imported: 0, errors: 0 };
     }
 
-    // Identify engaged shows (shows with watched or next episodes)
+    // Identify engaged shows by type
     const userEpisodes = await storage.getUserEpisodes(userId);
-    const engagedShowIds = new Set<number>();
+    const highlyEngagedShowIds = new Set<number>(); // Shows with watched episodes
+    const moderatelyEngagedShowIds = new Set<number>(); // Shows with next episodes
     
     for (const userEpisode of userEpisodes) {
-      if (userEpisode.status === "watched" || userEpisode.status === "next") {
-        engagedShowIds.add(userEpisode.episode.showId);
+      if (userEpisode.status === "watched") {
+        highlyEngagedShowIds.add(userEpisode.episode.showId);
+      } else if (userEpisode.status === "next") {
+        moderatelyEngagedShowIds.add(userEpisode.episode.showId);
       }
     }
     
-    console.log(`[RECOMMENDATIONS] Found ${engagedShowIds.size} engaged shows out of ${userShows.length} total shows`);
+    console.log(`[RECOMMENDATIONS] Found ${highlyEngagedShowIds.size} highly engaged shows (watched) and ${moderatelyEngagedShowIds.size} moderately engaged shows (next) out of ${userShows.length} total shows`);
 
     const tmdbIds: number[] = [];
-    const engagedTmdbIds: number[] = [];
+    const highlyEngagedTmdbIds: number[] = [];
+    const moderatelyEngagedTmdbIds: number[] = [];
     const userGenres = new Set<string>();
     let mapErrors = 0;
 
@@ -52,9 +56,11 @@ export async function refreshRecommendationsForUser(userId: string): Promise<{ i
       
       tmdbIds.push(tmdbId);
       
-      // Track if this show is engaged
-      if (engagedShowIds.has(userShow.show.id)) {
-        engagedTmdbIds.push(tmdbId);
+      // Track engagement level for this show
+      if (highlyEngagedShowIds.has(userShow.show.id)) {
+        highlyEngagedTmdbIds.push(tmdbId);
+      } else if (moderatelyEngagedShowIds.has(userShow.show.id)) {
+        moderatelyEngagedTmdbIds.push(tmdbId);
       }
     }
 
@@ -63,8 +69,8 @@ export async function refreshRecommendationsForUser(userId: string): Promise<{ i
       return { imported: 0, errors: mapErrors };
     }
 
-    console.log(`[RECOMMENDATIONS] Aggregating recommendations from ${tmdbIds.length} shows (${engagedTmdbIds.length} engaged)`);
-    const aggregated = await aggregateRecommendations(tmdbIds, Array.from(userGenres), engagedTmdbIds);
+    console.log(`[RECOMMENDATIONS] Aggregating recommendations from ${tmdbIds.length} shows (${highlyEngagedTmdbIds.length} highly engaged, ${moderatelyEngagedTmdbIds.length} moderately engaged)`);
+    const aggregated = await aggregateRecommendations(tmdbIds, Array.from(userGenres), highlyEngagedTmdbIds, moderatelyEngagedTmdbIds);
     
     const dismissed = await storage.getDismissedRecommendations(userId);
     const dismissedIds = new Set(dismissed.map(d => d.tmdbId));
