@@ -15,11 +15,15 @@ export default function Recommendations() {
   const { toast } = useToast();
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [processingTmdbId, setProcessingTmdbId] = useState<number | null>(null);
+  const [dismissedIds, setDismissedIds] = useState<Set<number>>(new Set());
 
   const { data: recommendations = [], isLoading } = useQuery<Recommendation[]>({
     queryKey: ["/api/recommendations"],
     staleTime: 1000 * 60 * 5,
   });
+
+  // Filter out optimistically dismissed recommendations
+  const visibleRecommendations = recommendations.filter(rec => !dismissedIds.has(rec.tmdbId));
 
   const refreshMutation = useMutation({
     mutationFn: async () => {
@@ -44,6 +48,9 @@ export default function Recommendations() {
 
   const dismissMutation = useMutation({
     mutationFn: async (tmdbId: number) => {
+      // Optimistically remove from UI
+      setDismissedIds(prev => new Set(prev).add(tmdbId));
+      
       const response = await apiRequest("POST", "/api/recommendations/dismiss", { tmdbId });
       return response.json();
     },
@@ -52,6 +59,19 @@ export default function Recommendations() {
       toast({
         title: "Dismissed",
         description: "Show removed from recommendations",
+      });
+    },
+    onError: (error: Error, tmdbId: number) => {
+      // Revert optimistic update on error
+      setDismissedIds(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(tmdbId);
+        return newSet;
+      });
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Failed to dismiss recommendation",
       });
     },
   });
@@ -134,7 +154,7 @@ export default function Recommendations() {
           </Button>
         </div>
 
-        {recommendations.length === 0 ? (
+        {visibleRecommendations.length === 0 ? (
           <Card className="p-12 text-center">
             <Sparkles className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
             <h3 className="text-xl font-semibold mb-2" data-testid="text-no-recommendations">No recommendations yet</h3>
@@ -156,7 +176,7 @@ export default function Recommendations() {
           </Card>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {recommendations.map((rec) => (
+            {visibleRecommendations.map((rec) => (
               <Card
                 key={rec.id}
                 className="overflow-hidden flex flex-col"
