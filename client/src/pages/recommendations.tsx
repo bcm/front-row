@@ -1,8 +1,6 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import Header from "@/components/header";
-import FloatingAddButton from "@/components/floating-add-button";
-import AddShowDialog from "@/components/add-show-dialog";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -13,7 +11,6 @@ import type { Recommendation } from "@shared/schema";
 
 export default function Recommendations() {
   const { toast } = useToast();
-  const [showAddDialog, setShowAddDialog] = useState(false);
   const [processingTmdbId, setProcessingTmdbId] = useState<number | null>(null);
   const [dismissedIds, setDismissedIds] = useState<Set<number>>(new Set());
 
@@ -173,8 +170,6 @@ export default function Recommendations() {
         <div className="flex items-center justify-center h-screen">
           <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
         </div>
-        <FloatingAddButton onClick={() => setShowAddDialog(true)} />
-        <AddShowDialog open={showAddDialog} onOpenChange={setShowAddDialog} />
       </>
     );
   }
@@ -322,8 +317,6 @@ export default function Recommendations() {
           </div>
         )}
       </div>
-      <FloatingAddButton onClick={() => setShowAddDialog(true)} />
-      <AddShowDialog open={showAddDialog} onOpenChange={setShowAddDialog} />
     </>
   );
 }
