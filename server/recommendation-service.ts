@@ -13,7 +13,20 @@ export async function refreshRecommendationsForUser(userId: string): Promise<{ i
       return { imported: 0, errors: 0 };
     }
 
+    // Identify engaged shows (shows with watched or next episodes)
+    const userEpisodes = await storage.getUserEpisodes(userId);
+    const engagedShowIds = new Set<number>();
+    
+    for (const userEpisode of userEpisodes) {
+      if (userEpisode.status === "watched" || userEpisode.status === "next") {
+        engagedShowIds.add(userEpisode.episode.showId);
+      }
+    }
+    
+    console.log(`[RECOMMENDATIONS] Found ${engagedShowIds.size} engaged shows out of ${userShows.length} total shows`);
+
     const tmdbIds: number[] = [];
+    const engagedTmdbIds: number[] = [];
     const userGenres = new Set<string>();
     let mapErrors = 0;
 
@@ -38,6 +51,11 @@ export async function refreshRecommendationsForUser(userId: string): Promise<{ i
       }
       
       tmdbIds.push(tmdbId);
+      
+      // Track if this show is engaged
+      if (engagedShowIds.has(userShow.show.id)) {
+        engagedTmdbIds.push(tmdbId);
+      }
     }
 
     if (tmdbIds.length === 0) {
@@ -45,8 +63,8 @@ export async function refreshRecommendationsForUser(userId: string): Promise<{ i
       return { imported: 0, errors: mapErrors };
     }
 
-    console.log(`[RECOMMENDATIONS] Aggregating recommendations from ${tmdbIds.length} shows`);
-    const aggregated = await aggregateRecommendations(tmdbIds, Array.from(userGenres));
+    console.log(`[RECOMMENDATIONS] Aggregating recommendations from ${tmdbIds.length} shows (${engagedTmdbIds.length} engaged)`);
+    const aggregated = await aggregateRecommendations(tmdbIds, Array.from(userGenres), engagedTmdbIds);
     
     const dismissed = await storage.getDismissedRecommendations(userId);
     const dismissedIds = new Set(dismissed.map(d => d.tmdbId));
