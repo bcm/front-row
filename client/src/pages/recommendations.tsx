@@ -14,6 +14,7 @@ import type { Recommendation } from "@shared/schema";
 export default function Recommendations() {
   const { toast } = useToast();
   const [showAddDialog, setShowAddDialog] = useState(false);
+  const [processingTmdbId, setProcessingTmdbId] = useState<number | null>(null);
 
   const { data: recommendations = [], isLoading } = useQuery<Recommendation[]>({
     queryKey: ["/api/recommendations"],
@@ -57,6 +58,7 @@ export default function Recommendations() {
 
   const acceptMutation = useMutation({
     mutationFn: async ({ tmdbId, showName }: { tmdbId: number; showName: string }) => {
+      setProcessingTmdbId(tmdbId);
       const tvmazeResponse = await fetch(
         `https://api.tvmaze.com/search/shows?q=${encodeURIComponent(showName)}`
       );
@@ -72,6 +74,7 @@ export default function Recommendations() {
       return response.json();
     },
     onSuccess: () => {
+      setProcessingTmdbId(null);
       queryClient.invalidateQueries({ queryKey: ["/api/recommendations"] });
       queryClient.invalidateQueries({ queryKey: ["/api/user/shows"] });
       toast({
@@ -80,6 +83,7 @@ export default function Recommendations() {
       });
     },
     onError: (error: Error) => {
+      setProcessingTmdbId(null);
       toast({
         variant: "destructive",
         title: "Error",
@@ -201,11 +205,11 @@ export default function Recommendations() {
                   <div className="flex gap-2 mt-auto">
                     <Button
                       onClick={() => acceptMutation.mutate({ tmdbId: rec.tmdbId, showName: rec.name })}
-                      disabled={acceptMutation.isPending}
+                      disabled={processingTmdbId === rec.tmdbId}
                       className="flex-1"
                       data-testid={`button-accept-${rec.tmdbId}`}
                     >
-                      {acceptMutation.isPending ? (
+                      {processingTmdbId === rec.tmdbId ? (
                         <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                       ) : (
                         <Plus className="h-4 w-4 mr-2" />
