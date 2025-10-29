@@ -618,10 +618,31 @@ export class DatabaseStorage implements IStorage {
 
   // Recommendation methods
   async getRecommendations(userId: string, limit?: number): Promise<Recommendation[]> {
+    // Get all TMDB IDs from user's library to exclude them
+    const userLibraryShows = await db
+      .select({ tmdbId: shows.tmdbId })
+      .from(userShows)
+      .innerJoin(shows, eq(userShows.showId, shows.id))
+      .where(and(
+        eq(userShows.userId, userId),
+        eq(userShows.isRemoved, false)
+      ));
+    
+    const libraryTmdbIds = userLibraryShows
+      .map(s => s.tmdbId)
+      .filter((id): id is number => id !== null);
+    
     let query = db
       .select()
       .from(recommendations)
-      .where(eq(recommendations.userId, userId))
+      .where(
+        libraryTmdbIds.length > 0
+          ? and(
+              eq(recommendations.userId, userId),
+              sql`${recommendations.tmdbId} NOT IN ${libraryTmdbIds}`
+            )
+          : eq(recommendations.userId, userId)
+      )
       .orderBy(desc(recommendations.score));
     
     if (limit) {
