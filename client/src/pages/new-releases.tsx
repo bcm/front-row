@@ -241,9 +241,9 @@ export default function NewReleases() {
                 className="overflow-hidden flex flex-col"
                 data-testid={`card-new-release-${show.id}`}
               >
-                {show.image?.medium && (
+                {(show.image?.original || show.image?.medium) && (
                   <img
-                    src={show.image.medium}
+                    src={show.image.original || show.image.medium}
                     alt={show.name}
                     className="w-full aspect-[2/3] object-cover"
                     data-testid={`img-poster-${show.id}`}
