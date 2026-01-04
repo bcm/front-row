@@ -153,21 +153,22 @@ export default function AppShell({ children }: AppShellProps) {
           </Link>
         </nav>
 
-        <div className="flex-1 max-w-md relative ml-auto">
-          <input
-            type="text"
-            placeholder="Search shows and episodes..."
-            value={searchQuery}
-            onChange={(e) => {
-              setSearchQuery(e.target.value);
-              setShowDropdown(e.target.value.length >= 2);
-            }}
-            onBlur={() => setTimeout(() => setShowDropdown(false), 200)}
-            onFocus={() => searchQuery.length >= 2 && setShowDropdown(true)}
-            data-testid="input-search"
-            className="w-full bg-muted border border-border rounded-lg pl-10 pr-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-          />
-          <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+        <div className="flex items-center gap-2 flex-1 max-w-lg ml-auto">
+          <div className="flex-1 relative">
+            <input
+              type="text"
+              placeholder="Search shows and episodes..."
+              value={searchQuery}
+              onChange={(e) => {
+                setSearchQuery(e.target.value);
+                setShowDropdown(e.target.value.length >= 2);
+              }}
+              onBlur={() => setTimeout(() => setShowDropdown(false), 200)}
+              onFocus={() => searchQuery.length >= 2 && setShowDropdown(true)}
+              data-testid="input-search"
+              className="w-full bg-muted border border-border rounded-lg pl-10 pr-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+            />
+            <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
 
           {showDropdown && (groupedResults.shows.length > 0 || groupedResults.episodes.length > 0 || searchLoading) && (
             <div className="absolute top-full left-0 right-0 mt-1 bg-card border border-border rounded-lg shadow-lg z-50 max-h-80 overflow-y-auto">
@@ -226,7 +227,18 @@ export default function AppShell({ children }: AppShellProps) {
               )}
             </div>
           )}
+          </div>
+          <Button
+            onClick={() => setShowAddDialog(true)}
+            size="sm"
+            data-testid="button-add-show"
+          >
+            <Plus className="h-4 w-4 mr-1" />
+            Add
+          </Button>
         </div>
+
+        <div className="h-6 w-px bg-border mx-2" />
 
         <div className="flex items-center gap-1">
           <Tooltip>
@@ -255,15 +267,6 @@ export default function AppShell({ children }: AppShellProps) {
             </TooltipTrigger>
             <TooltipContent>Shared View</TooltipContent>
           </Tooltip>
-          <Button
-            onClick={() => setShowAddDialog(true)}
-            size="sm"
-            className="ml-2"
-            data-testid="button-add-show"
-          >
-            <Plus className="h-4 w-4 mr-1" />
-            Add
-          </Button>
         </div>
       </header>
 
