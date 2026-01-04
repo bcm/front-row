@@ -941,6 +941,10 @@ export default function Dashboard() {
             <PlayCircle className="h-4 w-4" />
             Queue
           </TabsTrigger>
+          <TabsTrigger value="triage" className="gap-2" data-testid="tab-triage">
+            <AlertTriangle className="h-4 w-4" />
+            Triage
+          </TabsTrigger>
           <TabsTrigger value="countdown" className="gap-2" data-testid="tab-countdown">
             <Timer className="h-4 w-4" />
             Countdown
@@ -1054,6 +1058,9 @@ export default function Dashboard() {
           </div>
         </section>
 
+        </TabsContent>
+
+        <TabsContent value="triage" className="space-y-8">
         {/* New in Feed Section (Triage) */}
         <section>
           <div className="flex items-center space-x-3 mb-6">
@@ -1268,6 +1275,9 @@ export default function Dashboard() {
           </div>
         </section>
 
+        </TabsContent>
+
+        <TabsContent value="queue" className="space-y-8">
         {/* New Releases Section */}
         <section>
           <div className="flex items-center space-x-3 mb-6">
