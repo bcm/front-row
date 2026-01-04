@@ -57,6 +57,22 @@ export default function Dashboard() {
     enabled: !!userSettings,
   });
 
+  // Watch Later episodes query
+  const { data: laterEpisodes, isLoading: laterLoading } = useQuery({
+    queryKey: ["/api/user/episodes", "later", showMode],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      params.set('status', 'later');
+      if (showMode) {
+        params.set('showMode', showMode);
+      }
+      const response = await fetch(`/api/user/episodes?${params.toString()}`);
+      if (!response.ok) throw new Error("Failed to fetch later episodes");
+      return response.json() as Promise<(UserEpisode & { episode: Episode & { show: Show } })[]>;
+    },
+    enabled: !!userSettings,
+  });
+
   // Untriaged episodes query
   const { data: untriagedEpisodes, isLoading: untriagedLoading } = useQuery({
     queryKey: ["/api/user/episodes", "untriaged"],
@@ -114,6 +130,35 @@ export default function Dashboard() {
       return earliestEpisode;
     }).sort((a, b) => a.episode.show.name.localeCompare(b.episode.show.name));
   }, [nextEpisodes]);
+
+  // Helper function to get the earliest episode per show for Watch Later
+  const getLaterEpisodesByShow = useMemo(() => {
+    if (!laterEpisodes) return [];
+    
+    const grouped = new Map<number, (UserEpisode & { episode: Episode & { show: Show } })[]>();
+    
+    laterEpisodes.forEach(userEpisode => {
+      const showId = userEpisode.episode.show.id;
+      if (!grouped.has(showId)) {
+        grouped.set(showId, []);
+      }
+      grouped.get(showId)!.push(userEpisode);
+    });
+    
+    return Array.from(grouped.entries()).map(([showId, episodes]) => {
+      const earliestEpisode = episodes.sort((a, b) => {
+        const seasonA = a.episode.season || 1;
+        const seasonB = b.episode.season || 1;
+        if (seasonA !== seasonB) return seasonA - seasonB;
+        
+        const episodeA = a.episode.number || 0;
+        const episodeB = b.episode.number || 0;
+        return episodeA - episodeB;
+      })[0];
+      
+      return earliestEpisode;
+    }).sort((a, b) => a.episode.show.name.localeCompare(b.episode.show.name));
+  }, [laterEpisodes]);
 
   // Group untriaged episodes by show and season
   const groupEpisodesByShowAndSeason = useMemo(() => {
@@ -511,6 +556,69 @@ export default function Dashboard() {
     updateNextEpisodeMutation.mutate({ episodeId, status });
   };
 
+  // Episode update mutation for Watch Later section
+  const updateLaterEpisodeMutation = useMutation({
+    mutationFn: async ({ episodeId, status }: { episodeId: number; status: string }) => {
+      return apiRequest("PATCH", `/api/user/episodes/${episodeId}`, { status });
+    },
+    onMutate: async ({ episodeId, status }) => {
+      await queryClient.cancelQueries({ queryKey: ["/api/user/episodes"] });
+
+      const previousData = queryClient.getQueryData(["/api/user/episodes", "later", showMode]);
+
+      let updatedEpisodeInfo = null;
+
+      if (previousData && Array.isArray(previousData)) {
+        const episodeIndex = (previousData as any[]).findIndex((ep: any) => ep.episode.id === episodeId);
+        if (episodeIndex !== -1) {
+          const episode = (previousData as any[])[episodeIndex];
+          
+          updatedEpisodeInfo = {
+            showName: episode.episode.show.name,
+            season: episode.episode.season,
+            number: episode.episode.number
+          };
+          
+          if (status !== "later") {
+            const updatedData = (previousData as any[]).filter((_: any, index: number) => index !== episodeIndex);
+            queryClient.setQueryData(["/api/user/episodes", "later", showMode], updatedData);
+          }
+        }
+      }
+
+      return { previousData, episodeInfo: updatedEpisodeInfo, episodeId };
+    },
+    onError: (error, variables, context) => {
+      if (context?.previousData) {
+        queryClient.setQueryData(["/api/user/episodes", "later", showMode], context.previousData);
+      }
+      
+      toast({
+        title: "Error",
+        description: "Failed to update episode. Please try again.",
+        variant: "destructive",
+      });
+    },
+    onSuccess: (data, variables, context) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/user/episodes"] });
+      
+      let toastTitle = "Episode updated";
+      if (context?.episodeInfo) {
+        const { showName, season, number } = context.episodeInfo;
+        toastTitle = `${showName} ${season}x${number}`;
+      }
+      
+      toast({
+        title: toastTitle,
+        description: "Episode status has been updated.",
+      });
+    },
+  });
+
+  const handleLaterEpisodeStatusChange = (episodeId: number, status: string) => {
+    updateLaterEpisodeMutation.mutate({ episodeId, status });
+  };
+
   const handleTriageEpisodeStatusChange = (episodeId: number, status: string) => {
     let showId = '';
     if (untriagedEpisodes) {
@@ -731,6 +839,57 @@ export default function Dashboard() {
                 <PlayCircle className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
                 <h3 className="text-lg font-semibold text-muted-foreground mb-2">No episodes queued</h3>
                 <p className="text-muted-foreground">Mark episodes as "Next" to build your viewing queue</p>
+              </div>
+            )}
+          </div>
+        </section>
+
+        {/* Watch Later Section */}
+        <section>
+          <div className="flex items-center space-x-3 mb-6">
+            <div className="w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center">
+              <Clock className="w-4 h-4 text-white" />
+            </div>
+            <h2 className="flex-1 min-w-0 text-2xl sm:text-3xl font-bold truncate" data-testid="text-section-title-watch-later">Watch Later</h2>
+            <p className="hidden sm:inline text-muted-foreground text-base ml-4 shrink-0">Episodes saved for later</p>
+          </div>
+          
+          <div className="space-y-4">
+            {laterLoading ? (
+              <div className="space-y-4">
+                {Array.from({ length: 3 }).map((_, i) => (
+                  <div key={i} className="bg-card rounded-lg p-4 animate-pulse">
+                    <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+                      <div className="w-full sm:w-32 h-48 sm:h-24 bg-muted rounded-md flex-shrink-0"></div>
+                      <div className="flex-1 space-y-2">
+                        <div className="h-4 bg-muted rounded"></div>
+                        <div className="h-3 bg-muted rounded w-3/4"></div>
+                        <div className="h-3 bg-muted rounded w-1/2"></div>
+                      </div>
+                      <div className="flex gap-2">
+                        <div className="h-8 bg-muted rounded w-20"></div>
+                        <div className="h-8 bg-muted rounded w-16"></div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : getLaterEpisodesByShow.length > 0 ? (
+              <div className="space-y-4">
+                {getLaterEpisodesByShow.map((userEpisode) => (
+                  <EpisodeCard
+                    key={userEpisode.id}
+                    userEpisode={userEpisode}
+                    onStatusChange={handleLaterEpisodeStatusChange}
+                    variant="wide"
+                  />
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-8">
+                <Clock className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
+                <h3 className="text-lg font-semibold text-muted-foreground mb-2" data-testid="text-no-watch-later">No episodes for later</h3>
+                <p className="text-muted-foreground">Episodes you mark as "Later" will appear here</p>
               </div>
             )}
           </div>

@@ -12,7 +12,6 @@ import {
   Search,
   Tv,
   PlayCircle,
-  Clock,
   Library,
   Sparkles,
   Settings,
@@ -46,7 +45,6 @@ const discoverNavItems = [
 ];
 
 const secondaryNavItems = [
-  { id: "watch-later", label: "Watch Later", href: "/watch-later", icon: Clock },
   { id: "settings", label: "Settings", href: "/settings", icon: Settings },
 ];
 
@@ -147,7 +145,6 @@ export default function AppShell({ children }: AppShellProps) {
 
   const getActiveTab = () => {
     if (location === "/" || location === "/dashboard") return "dashboard";
-    if (location === "/watch-later") return "watch-later";
     if (location === "/library" || location.startsWith("/show/") || location.startsWith("/episode/")) return "library";
     if (location === "/recommendations") return "recommendations";
     if (location === "/settings") return "settings";
