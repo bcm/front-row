@@ -1826,6 +1826,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         await storage.updateShowTmdbId(tvmazeId, tmdbId);
       }
       
+      // Always dismiss the recommendation when accepting
+      if (tmdbId) {
+        await storage.dismissRecommendation(userId, tmdbId);
+      }
+      
       // Check if user already has this show
       const existingUserShow = await storage.getUserShow(userId, tvmazeId);
       if (existingUserShow) {
@@ -1843,11 +1848,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         isRemoved: false,
         isShared: false,
       });
-      
-      // Remove from recommendations and dismiss it
-      if (tmdbId) {
-        await storage.dismissRecommendation(userId, tmdbId);
-      }
       
       // Start async episode sync
       const jobId = syncJobManager.createJob(tvmazeId);
@@ -1887,6 +1887,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         await storage.updateShowTmdbId(tvmazeId, tmdbId);
       }
       
+      // Always dismiss the recommendation when accepting
+      if (tmdbId) {
+        await storage.dismissRecommendation(userId, tmdbId);
+      }
+      
       // Check if user already has this show
       const existingUserShow = await storage.getUserShow(userId, tvmazeId);
       if (existingUserShow) {
@@ -1904,11 +1909,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         isRemoved: false,
         isShared: false,
       });
-      
-      // Remove from recommendations and dismiss it
-      if (tmdbId) {
-        await storage.dismissRecommendation(userId, tmdbId);
-      }
       
       // Sync episodes first
       const jobId = syncJobManager.createJob(tvmazeId);
