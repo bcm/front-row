@@ -944,6 +944,11 @@ export default function Dashboard() {
           <TabsTrigger value="triage" className="gap-2" data-testid="tab-triage">
             <AlertTriangle className="h-4 w-4" />
             Triage
+            {untriagedEpisodes && untriagedEpisodes.filter((ep: any) => ep.episode.airdate && !hiddenEpisodes.has(ep.episode.id)).length > 0 && (
+              <Badge variant="secondary" className="ml-1 text-xs px-1.5 py-0">
+                {untriagedEpisodes.filter((ep: any) => ep.episode.airdate && !hiddenEpisodes.has(ep.episode.id)).length}
+              </Badge>
+            )}
           </TabsTrigger>
           <TabsTrigger value="countdown" className="gap-2" data-testid="tab-countdown">
             <Timer className="h-4 w-4" />
