@@ -6,6 +6,7 @@ import { useDebounce } from "@/hooks/use-debounce";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Badge } from "@/components/ui/badge";
+import AddShowDialog from "@/components/add-show-dialog";
 import {
   Search,
   Tv,
@@ -13,6 +14,7 @@ import {
   Library,
   Users,
   User,
+  Plus,
 } from "lucide-react";
 
 interface SearchResult {
@@ -34,6 +36,7 @@ export default function AppShell({ children }: AppShellProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [showDropdown, setShowDropdown] = useState(false);
   const [showMode, setShowMode] = useState<"personal" | "shared">("personal");
+  const [showAddDialog, setShowAddDialog] = useState(false);
   const debouncedSearch = useDebounce(searchQuery, 300);
   const queryClient = useQueryClient();
 
@@ -252,8 +255,22 @@ export default function AppShell({ children }: AppShellProps) {
             </TooltipTrigger>
             <TooltipContent>Shared View</TooltipContent>
           </Tooltip>
+          <Button
+            onClick={() => setShowAddDialog(true)}
+            size="sm"
+            className="ml-2"
+            data-testid="button-add-show"
+          >
+            <Plus className="h-4 w-4 mr-1" />
+            Add
+          </Button>
         </div>
       </header>
+
+      <AddShowDialog 
+        open={showAddDialog} 
+        onOpenChange={setShowAddDialog} 
+      />
 
       <main className="flex-1 overflow-auto">
         {children}

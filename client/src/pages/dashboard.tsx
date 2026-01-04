@@ -3,8 +3,6 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { UserEpisode, Episode, Show, NewReleaseShow, Recommendation } from "@shared/schema";
 import EpisodeCard from "@/components/episode-card";
-import FloatingAddButton from "@/components/floating-add-button";
-import AddShowDialog from "@/components/add-show-dialog";
 import { PlayCircle, AlertTriangle, ChevronDown, Play, Clock, Eye, SkipForward, Share, User, Calendar, Loader2, X, Plus, RefreshCw, CheckCheck, Sparkles, Timer } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
@@ -22,7 +20,6 @@ interface NewReleasesResponse {
 }
 
 export default function Dashboard() {
-  const [showAddDialog, setShowAddDialog] = useState(false);
   const [hiddenEpisodes, setHiddenEpisodes] = useState<Set<number>>(new Set());
   const [expandedSeasons, setExpandedSeasons] = useState<Record<string, Set<number>>>({});
   const [newReleaseProcessingId, setNewReleaseProcessingId] = useState<number | null>(null);
@@ -1573,13 +1570,6 @@ export default function Dashboard() {
 
         </TabsContent>
       </Tabs>
-
-      <FloatingAddButton onClick={() => setShowAddDialog(true)} />
-      
-      <AddShowDialog 
-        open={showAddDialog} 
-        onOpenChange={setShowAddDialog} 
-      />
     </div>
   );
 }
