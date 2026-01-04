@@ -141,6 +141,41 @@ export const insertDismissedRecommendationSchema = createInsertSchema(dismissedR
   dismissedAt: true,
 });
 
+// New Releases feature tables
+export const newReleasesState = pgTable("new_releases_state", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  lastCheckedUnix: integer("last_checked_unix").notNull().default(0),
+  cachedResults: jsonb("cached_results").$type<NewReleaseShow[]>(),
+  cachedAt: timestamp("cached_at"),
+});
+
+export const dismissedNewReleases = pgTable("dismissed_new_releases", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull(),
+  tvmazeId: integer("tvmaze_id").notNull(),
+  dismissedAt: timestamp("dismissed_at").defaultNow(),
+}, (table) => ({
+  uniqueUserDismissedNewRelease: unique().on(table.userId, table.tvmazeId),
+}));
+
+export const insertDismissedNewReleaseSchema = createInsertSchema(dismissedNewReleases).omit({
+  id: true,
+  dismissedAt: true,
+});
+
+// Type for cached new release shows
+export type NewReleaseShow = {
+  id: number;
+  name: string;
+  summary: string | null;
+  image: { medium?: string; original?: string } | null;
+  premiered: string | null;
+  genres: string[];
+  network: string | null;
+  webChannel: string | null;
+  status: string | null;
+};
+
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
 export type Show = typeof shows.$inferSelect;
@@ -157,3 +192,6 @@ export type Recommendation = typeof recommendations.$inferSelect;
 export type InsertRecommendation = z.infer<typeof insertRecommendationSchema>;
 export type DismissedRecommendation = typeof dismissedRecommendations.$inferSelect;
 export type InsertDismissedRecommendation = z.infer<typeof insertDismissedRecommendationSchema>;
+export type NewReleasesState = typeof newReleasesState.$inferSelect;
+export type DismissedNewRelease = typeof dismissedNewReleases.$inferSelect;
+export type InsertDismissedNewRelease = z.infer<typeof insertDismissedNewReleaseSchema>;
