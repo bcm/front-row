@@ -39,7 +39,7 @@ export default function NewReleases() {
       queryClient.invalidateQueries({ queryKey: ["/api/new-releases"] });
       toast({
         title: "New releases refreshed",
-        description: `Found ${result.shows.length} new releases`,
+        description: `Showing ${result.shows.length} new releases`,
       });
     },
     onError: () => {
@@ -213,7 +213,15 @@ export default function NewReleases() {
           </Button>
         </div>
 
-        {visibleShows.length === 0 ? (
+        {refreshMutation.isPending ? (
+          <Card className="p-12 text-center">
+            <Loader2 className="h-12 w-12 mx-auto mb-4 text-muted-foreground animate-spin" />
+            <h3 className="text-xl font-semibold mb-2">Fetching new releases...</h3>
+            <p className="text-muted-foreground">
+              Checking TV schedules for new show premieres.
+            </p>
+          </Card>
+        ) : visibleShows.length === 0 ? (
           <Card className="p-12 text-center">
             <Calendar className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
             <h3 className="text-xl font-semibold mb-2" data-testid="text-no-new-releases">No new releases</h3>
