@@ -2,7 +2,6 @@ import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { UserEpisode, Episode, Show } from "@shared/schema";
-import Header from "@/components/header";
 import EpisodeCard from "@/components/episode-card";
 import FloatingAddButton from "@/components/floating-add-button";
 import AddShowDialog from "@/components/add-show-dialog";
@@ -146,11 +145,8 @@ export default function WatchLater() {
   };
 
   return (
-    <div className="min-h-screen bg-background">
-      <Header />
-      
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="space-y-8">
+    <div className="p-6 max-w-7xl mx-auto">
+      <div className="space-y-8">
           {/* Watch Later Section */}
           <section>
             <div className="flex items-center space-x-3 mb-6">
@@ -208,7 +204,6 @@ export default function WatchLater() {
             </div>
           </section>
         </div>
-      </main>
 
       <FloatingAddButton onClick={() => setShowAddDialog(true)} />
       

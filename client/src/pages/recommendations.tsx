@@ -1,6 +1,5 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import Header from "@/components/header";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -166,19 +165,14 @@ export default function Recommendations() {
 
   if (isLoading) {
     return (
-      <>
-        <Header />
-        <div className="flex items-center justify-center h-screen">
-          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-        </div>
-      </>
+      <div className="p-6 max-w-7xl mx-auto flex items-center justify-center h-screen">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
     );
   }
 
   return (
-    <>
-      <Header />
-      <div className="container mx-auto px-4 py-6 max-w-7xl">
+    <div className="p-6 max-w-7xl mx-auto">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
           <div>
             <h1 className="text-3xl font-bold flex items-center gap-2" data-testid="heading-recommendations">
@@ -330,7 +324,6 @@ export default function Recommendations() {
             ))}
           </div>
         )}
-      </div>
-    </>
+    </div>
   );
 }

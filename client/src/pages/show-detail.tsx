@@ -2,7 +2,6 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useParams, useLocation } from "wouter";
 import { ArrowLeft, Star, Calendar, Clock, Globe, Tv, Users, Monitor, Play, Hash, ExternalLink, RefreshCw, Trash2, X } from "lucide-react";
 import { Link } from "wouter";
-import Header from "@/components/header";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
@@ -519,33 +518,27 @@ export default function ShowDetail() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-background">
-        <Header />
-        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          <div className="flex items-center justify-center min-h-[400px]">
-            <div className="text-muted-foreground">Loading show details...</div>
-          </div>
-        </main>
+      <div className="p-6 max-w-7xl mx-auto">
+        <div className="flex items-center justify-center min-h-[400px]">
+          <div className="text-muted-foreground">Loading show details...</div>
+        </div>
       </div>
     );
   }
 
   if (error || !show) {
     return (
-      <div className="min-h-screen bg-background">
-        <Header />
-        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          <div className="flex flex-col items-center justify-center min-h-[400px] space-y-4">
-            <h1 className="text-2xl font-bold text-foreground">Show Not Found</h1>
-            <p className="text-muted-foreground">The show you're looking for doesn't exist or couldn't be loaded.</p>
-            <Link href="/library">
-              <Button variant="outline">
-                <ArrowLeft className="w-4 h-4 mr-2" />
-                Back to Library
-              </Button>
-            </Link>
-          </div>
-        </main>
+      <div className="p-6 max-w-7xl mx-auto">
+        <div className="flex flex-col items-center justify-center min-h-[400px] space-y-4">
+          <h1 className="text-2xl font-bold text-foreground">Show Not Found</h1>
+          <p className="text-muted-foreground">The show you're looking for doesn't exist or couldn't be loaded.</p>
+          <Link href="/library">
+            <Button variant="outline">
+              <ArrowLeft className="w-4 h-4 mr-2" />
+              Back to Library
+            </Button>
+          </Link>
+        </div>
       </div>
     );
   }
@@ -743,11 +736,8 @@ export default function ShowDetail() {
   };
 
   return (
-    <div className="min-h-screen bg-background">
-      <Header />
-      
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Breadcrumb Navigation and Actions */}
+    <div className="p-6 max-w-7xl mx-auto">
+      {/* Breadcrumb Navigation and Actions */}
         <div className="mb-6 flex items-center justify-between">
           <Breadcrumb>
             <BreadcrumbList>
@@ -1147,7 +1137,6 @@ export default function ShowDetail() {
             )}
           </div>
         </div>
-      </main>
     </div>
   );
 }

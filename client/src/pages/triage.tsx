@@ -2,7 +2,6 @@ import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { UserEpisode, Episode, Show } from "@shared/schema";
-import Header from "@/components/header";
 import EpisodeCard from "@/components/episode-card";
 import { AlertTriangle, PlayCircle, Clock, Eye, Users, ChevronDown, Play, RotateCcw, SkipForward, ArrowDown, Share, User } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
@@ -437,11 +436,8 @@ export default function Triage() {
   };
 
   return (
-    <div className="min-h-screen bg-background">
-      <Header />
-      
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="space-y-8">
+    <div className="p-6 max-w-7xl mx-auto">
+      <div className="space-y-8">
 
           {/* New in Feed Section */}
           <section>
@@ -666,7 +662,6 @@ export default function Triage() {
           </section>
 
         </div>
-      </main>
     </div>
   );
 }

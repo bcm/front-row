@@ -2,7 +2,6 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useParams } from "wouter";
 import { ArrowLeft, Calendar, Clock, Globe, Tv, ExternalLink, Star, Play } from "lucide-react";
 import { Link } from "wouter";
-import Header from "@/components/header";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
@@ -251,33 +250,27 @@ export default function EpisodeDetail() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-background">
-        <Header />
-        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          <div className="flex items-center justify-center min-h-[400px]">
-            <div className="text-muted-foreground">Loading episode details...</div>
-          </div>
-        </main>
+      <div className="p-6 max-w-7xl mx-auto">
+        <div className="flex items-center justify-center min-h-[400px]">
+          <div className="text-muted-foreground">Loading episode details...</div>
+        </div>
       </div>
     );
   }
 
   if (error || !episodeData) {
     return (
-      <div className="min-h-screen bg-background">
-        <Header />
-        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          <div className="flex flex-col items-center justify-center min-h-[400px] space-y-4">
-            <h1 className="text-2xl font-bold text-foreground">Episode Not Found</h1>
-            <p className="text-muted-foreground">The episode you're looking for doesn't exist or couldn't be loaded.</p>
-            <Link href="/library">
-              <Button variant="outline" data-testid="button-back-library">
-                <ArrowLeft className="w-4 h-4 mr-2" />
-                Back to Library
-              </Button>
-            </Link>
-          </div>
-        </main>
+      <div className="p-6 max-w-7xl mx-auto">
+        <div className="flex flex-col items-center justify-center min-h-[400px] space-y-4">
+          <h1 className="text-2xl font-bold text-foreground">Episode Not Found</h1>
+          <p className="text-muted-foreground">The episode you're looking for doesn't exist or couldn't be loaded.</p>
+          <Link href="/library">
+            <Button variant="outline" data-testid="button-back-library">
+              <ArrowLeft className="w-4 h-4 mr-2" />
+              Back to Library
+            </Button>
+          </Link>
+        </div>
       </div>
     );
   }
@@ -285,10 +278,8 @@ export default function EpisodeDetail() {
   const { show } = episodeData;
 
   return (
-    <div className="min-h-screen bg-background">
-      <Header />
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Breadcrumb Navigation */}
+    <div className="p-6 max-w-7xl mx-auto">
+      {/* Breadcrumb Navigation */}
         <div className="mb-6">
           <Breadcrumb>
             <BreadcrumbList>
@@ -469,7 +460,6 @@ export default function EpisodeDetail() {
             </div>
           </CardContent>
         </Card>
-      </main>
     </div>
   );
 }
