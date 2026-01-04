@@ -254,11 +254,16 @@ export default function Recommendations() {
                     </div>
                   )}
 
-                  {rec.voteAverage && (
-                    <div className="flex items-center gap-2 mb-2 text-sm text-muted-foreground">
-                      <span className="font-medium" data-testid={`text-rating-${rec.tmdbId}`}>
-                        ⭐ {(rec.voteAverage / 10).toFixed(1)}
-                      </span>
+                  {(rec.voteAverage || rec.network || rec.firstAirDate) && (
+                    <div className="flex items-center gap-2 mb-2 text-sm text-muted-foreground flex-wrap">
+                      {rec.voteAverage && (
+                        <span className="font-medium" data-testid={`text-rating-${rec.tmdbId}`}>
+                          ⭐ {(rec.voteAverage / 10).toFixed(1)}
+                        </span>
+                      )}
+                      {rec.network && (
+                        <span data-testid={`text-network-${rec.tmdbId}`}>📺 {rec.network}</span>
+                      )}
                       {rec.firstAirDate && (
                         <span>• {new Date(rec.firstAirDate).getFullYear()}</span>
                       )}

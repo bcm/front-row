@@ -113,6 +113,7 @@ export const recommendations = pgTable("recommendations", {
   voteCount: integer("vote_count"),
   genres: text("genres").array(),
   firstAirDate: text("first_air_date"),
+  network: text("network"), // primary network/platform
   score: integer("score").notNull(), // aggregated score for ranking
   sourceShowIds: text("source_show_ids").array(), // TMDB IDs of shows that recommended this
   createdAt: timestamp("created_at").defaultNow(),

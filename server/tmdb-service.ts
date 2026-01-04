@@ -30,6 +30,13 @@ interface TMDBRecommendationResult {
   results: TMDBSearchResult[];
 }
 
+interface TMDBShowDetails {
+  id: number;
+  networks: { id: number; name: string }[];
+}
+
+const MIN_RECOMMENDATION_SCORE = 50; // Minimum score threshold for recommendations
+
 interface TMDBGenre {
   id: number;
   name: string;
@@ -130,6 +137,27 @@ export async function getTMDBRecommendations(tmdbId: number): Promise<TMDBSearch
   }
 }
 
+export async function getTMDBShowDetails(tmdbId: number): Promise<TMDBShowDetails | null> {
+  try {
+    const { url, options } = buildFetchOptions(
+      `${TMDB_BASE_URL}/tv/${tmdbId}`
+    );
+    const response = await fetch(url, options);
+    
+    if (!response.ok) {
+      return null;
+    }
+    
+    return await response.json();
+  } catch {
+    return null;
+  }
+}
+
+export function getMinRecommendationScore(): number {
+  return MIN_RECOMMENDATION_SCORE;
+}
+
 export async function aggregateRecommendations(
   tmdbIds: number[],
   userGenres: string[],
@@ -201,6 +229,13 @@ export async function convertTMDBResultToRecommendation(
   const genreMap = await fetchGenres();
   const genres = result.genre_ids.map(id => genreMap[id] || "Unknown");
   
+  // Fetch network info
+  let network: string | null = null;
+  const details = await getTMDBShowDetails(tmdbId);
+  if (details?.networks && details.networks.length > 0) {
+    network = details.networks[0].name;
+  }
+  
   return {
     userId,
     tmdbId,
@@ -212,6 +247,7 @@ export async function convertTMDBResultToRecommendation(
     voteCount: result.vote_count || null,
     genres,
     firstAirDate: result.first_air_date || null,
+    network,
     score,
     sourceShowIds: sources.map(String),
   };

@@ -1,5 +1,5 @@
 import { storage } from "./storage";
-import { searchTMDBShow, aggregateRecommendations, convertTMDBResultToRecommendation } from "./tmdb-service";
+import { searchTMDBShow, aggregateRecommendations, convertTMDBResultToRecommendation, getMinRecommendationScore } from "./tmdb-service";
 import type { InsertRecommendation } from "@shared/schema";
 
 export async function refreshRecommendationsForUser(userId: string): Promise<{ imported: number; errors: number }> {
@@ -79,9 +79,12 @@ export async function refreshRecommendationsForUser(userId: string): Promise<{ i
     
     const recommendationsToInsert: InsertRecommendation[] = [];
     
+    const minScore = getMinRecommendationScore();
+    
     for (const [tmdbId, data] of Array.from(aggregated.entries())) {
       if (dismissedIds.has(tmdbId)) continue;
       if (existingShowIds.has(tmdbId)) continue;
+      if (data.score < minScore) continue; // Filter by minimum score threshold
       
       const rec = await convertTMDBResultToRecommendation(
         userId,
