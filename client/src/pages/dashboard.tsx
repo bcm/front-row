@@ -941,6 +941,10 @@ export default function Dashboard() {
             <PlayCircle className="h-4 w-4" />
             Queue
           </TabsTrigger>
+          <TabsTrigger value="countdown" className="gap-2" data-testid="tab-countdown">
+            <Timer className="h-4 w-4" />
+            Countdown
+          </TabsTrigger>
           <TabsTrigger value="triage" className="gap-2" data-testid="tab-triage">
             <AlertTriangle className="h-4 w-4" />
             Triage
@@ -949,10 +953,6 @@ export default function Dashboard() {
                 {untriagedEpisodes.filter((ep: any) => ep.episode.airdate && !hiddenEpisodes.has(ep.episode.id)).length}
               </Badge>
             )}
-          </TabsTrigger>
-          <TabsTrigger value="countdown" className="gap-2" data-testid="tab-countdown">
-            <Timer className="h-4 w-4" />
-            Countdown
           </TabsTrigger>
           <TabsTrigger value="discover" className="gap-2" data-testid="tab-discover">
             <Sparkles className="h-4 w-4" />
@@ -1352,7 +1352,7 @@ export default function Dashboard() {
                           <h3 className="font-semibold text-lg mb-1" data-testid={`text-show-name-${show.id}`}>
                             {show.name}
                           </h3>
-                          <div className="flex items-center gap-2 text-sm text-muted-foreground mb-2">
+                          <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
                             <span data-testid={`text-premiere-${show.id}`}>
                               📅 {formatPremiereDate(show.premiered)}
                             </span>
@@ -1360,6 +1360,11 @@ export default function Dashboard() {
                               <span>• {show.network || show.webChannel}</span>
                             )}
                           </div>
+                          {show.summary && (
+                            <p className="text-sm text-muted-foreground line-clamp-2 mb-2">
+                              {stripHtml(show.summary)}
+                            </p>
+                          )}
                           {show.genres && show.genres.length > 0 && (
                             <div className="flex flex-wrap gap-1">
                               {show.genres.slice(0, 3).map((genre) => (
@@ -1490,7 +1495,7 @@ export default function Dashboard() {
                           <h3 className="font-semibold text-lg mb-1" data-testid={`text-rec-show-name-${rec.tmdbId}`}>
                             {rec.name}
                           </h3>
-                          <div className="flex items-center gap-2 text-sm text-muted-foreground mb-2 flex-wrap">
+                          <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1 flex-wrap">
                             {rec.voteAverage && (
                               <span data-testid={`text-rec-rating-${rec.tmdbId}`}>
                                 ⭐ {(rec.voteAverage / 10).toFixed(1)}
@@ -1503,6 +1508,11 @@ export default function Dashboard() {
                               <span>• {new Date(rec.firstAirDate).getFullYear()}</span>
                             )}
                           </div>
+                          {rec.overview && (
+                            <p className="text-sm text-muted-foreground line-clamp-2 mb-2">
+                              {rec.overview}
+                            </p>
+                          )}
                           {rec.genres && rec.genres.length > 0 && (
                             <div className="flex flex-wrap gap-1">
                               {rec.genres.slice(0, 3).map((genre) => (
