@@ -945,6 +945,10 @@ export default function Dashboard() {
             <AlertTriangle className="h-4 w-4" />
             Triage
           </TabsTrigger>
+          <TabsTrigger value="discover" className="gap-2" data-testid="tab-discover">
+            <Sparkles className="h-4 w-4" />
+            Discover
+          </TabsTrigger>
           <TabsTrigger value="countdown" className="gap-2" data-testid="tab-countdown">
             <Timer className="h-4 w-4" />
             Countdown
@@ -1277,7 +1281,7 @@ export default function Dashboard() {
 
         </TabsContent>
 
-        <TabsContent value="queue" className="space-y-8">
+        <TabsContent value="discover" className="space-y-8">
         {/* New Releases Section */}
         <section>
           <div className="flex items-center space-x-3 mb-6">
