@@ -1288,7 +1288,7 @@ export default function Dashboard() {
             <div className="w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center">
               <Calendar className="w-4 h-4 text-white" />
             </div>
-            <h2 className="flex-1 min-w-0 text-2xl sm:text-3xl font-bold truncate" data-testid="text-section-title-new-releases">New Releases</h2>
+            <h2 className="flex-1 min-w-0 text-2xl sm:text-3xl font-bold truncate" data-testid="text-section-title-new-releases">New Shows</h2>
             <Button
               onClick={() => newReleaseRefreshMutation.mutate()}
               disabled={newReleaseRefreshMutation.isPending}
@@ -1317,7 +1317,7 @@ export default function Dashboard() {
             ) : visibleNewReleases.length === 0 ? (
               <div className="text-center py-8">
                 <Calendar className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
-                <h3 className="text-lg font-semibold text-muted-foreground mb-2" data-testid="text-no-new-releases">No new releases</h3>
+                <h3 className="text-lg font-semibold text-muted-foreground mb-2" data-testid="text-no-new-releases">No new shows</h3>
                 <p className="text-muted-foreground">Check back later for newly premiered shows</p>
               </div>
             ) : (
