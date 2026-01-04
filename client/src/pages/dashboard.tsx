@@ -952,6 +952,11 @@ export default function Dashboard() {
           <TabsTrigger value="discover" className="gap-2" data-testid="tab-discover">
             <Sparkles className="h-4 w-4" />
             Discover
+            {visibleNewReleases.length > 0 && (
+              <Badge variant="secondary" className="ml-1 text-xs px-1.5 py-0">
+                {visibleNewReleases.length}
+              </Badge>
+            )}
           </TabsTrigger>
         </TabsList>
 
