@@ -1,5 +1,5 @@
-import { type User, type InsertUser, type Show, type InsertShow, type UserShow, type InsertUserShow, type Episode, type InsertEpisode, type UserEpisode, type InsertUserEpisode, type UserSettings, type InsertUserSettings, type Recommendation, type InsertRecommendation, type DismissedRecommendation, type InsertDismissedRecommendation } from "@shared/schema";
-import { users, shows, userShows, episodes, userEpisodes, userSettings, recommendations, dismissedRecommendations } from "@shared/schema";
+import { type User, type InsertUser, type Show, type InsertShow, type UserShow, type InsertUserShow, type Episode, type InsertEpisode, type UserEpisode, type InsertUserEpisode, type UserSettings, type InsertUserSettings, type Recommendation, type InsertRecommendation, type DismissedRecommendation, type InsertDismissedRecommendation, type NewReleasesState, type NewReleaseShow, type DismissedNewRelease, type InsertDismissedNewRelease } from "@shared/schema";
+import { users, shows, userShows, episodes, userEpisodes, userSettings, recommendations, dismissedRecommendations, newReleasesState, dismissedNewReleases } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, ilike, inArray, desc, asc, lte, sql } from "drizzle-orm";
 
@@ -51,6 +51,13 @@ export interface IStorage {
   dismissRecommendation(userId: string, tmdbId: number): Promise<void>;
   getDismissedRecommendations(userId: string): Promise<DismissedRecommendation[]>;
   updateShowTmdbId(showId: number, tmdbId: number): Promise<void>;
+  
+  // New releases methods
+  getNewReleasesState(): Promise<NewReleasesState | undefined>;
+  updateNewReleasesState(lastCheckedUnix: number, cachedResults: NewReleaseShow[]): Promise<void>;
+  getDismissedNewReleases(userId: string): Promise<DismissedNewRelease[]>;
+  dismissNewRelease(userId: string, tvmazeId: number): Promise<void>;
+  getUserShowIds(userId: string): Promise<number[]>;
 }
 
 
@@ -702,6 +709,60 @@ export class DatabaseStorage implements IStorage {
       .update(shows)
       .set({ tmdbId })
       .where(eq(shows.id, showId));
+  }
+
+  // New releases methods
+  async getNewReleasesState(): Promise<NewReleasesState | undefined> {
+    const [state] = await db.select().from(newReleasesState).limit(1);
+    return state || undefined;
+  }
+
+  async updateNewReleasesState(lastCheckedUnix: number, cachedResults: NewReleaseShow[]): Promise<void> {
+    const existingState = await this.getNewReleasesState();
+    
+    if (existingState) {
+      await db
+        .update(newReleasesState)
+        .set({ 
+          lastCheckedUnix, 
+          cachedResults: cachedResults as any,
+          cachedAt: new Date()
+        })
+        .where(eq(newReleasesState.id, existingState.id));
+    } else {
+      await db
+        .insert(newReleasesState)
+        .values({ 
+          lastCheckedUnix, 
+          cachedResults: cachedResults as any,
+          cachedAt: new Date()
+        });
+    }
+  }
+
+  async getDismissedNewReleases(userId: string): Promise<DismissedNewRelease[]> {
+    return await db
+      .select()
+      .from(dismissedNewReleases)
+      .where(eq(dismissedNewReleases.userId, userId));
+  }
+
+  async dismissNewRelease(userId: string, tvmazeId: number): Promise<void> {
+    await db
+      .insert(dismissedNewReleases)
+      .values({ userId, tvmazeId })
+      .onConflictDoNothing();
+  }
+
+  async getUserShowIds(userId: string): Promise<number[]> {
+    const results = await db
+      .select({ showId: userShows.showId })
+      .from(userShows)
+      .where(and(
+        eq(userShows.userId, userId),
+        eq(userShows.isRemoved, false)
+      ));
+    return results.map(r => r.showId);
   }
 }
 

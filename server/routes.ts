@@ -1943,6 +1943,168 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // New Releases routes
+  app.get("/api/new-releases", async (req, res) => {
+    try {
+      const userId = req.query.userId as string || "demo-user";
+      const { getNewReleases } = await import("./new-releases-service");
+      const result = await getNewReleases(userId);
+      res.json(result);
+    } catch (error) {
+      console.error("Error fetching new releases:", error);
+      res.status(500).json({ error: "Failed to fetch new releases" });
+    }
+  });
+
+  app.post("/api/new-releases/refresh", async (req, res) => {
+    try {
+      const userId = req.body.userId || "demo-user";
+      const { refreshNewReleases, getNewReleases } = await import("./new-releases-service");
+      await refreshNewReleases();
+      const result = await getNewReleases(userId);
+      res.json(result);
+    } catch (error) {
+      console.error("Error refreshing new releases:", error);
+      res.status(500).json({ error: "Failed to refresh new releases" });
+    }
+  });
+
+  app.post("/api/new-releases/dismiss", async (req, res) => {
+    try {
+      const userId = req.body.userId || "demo-user";
+      const { tvmazeId } = req.body;
+      
+      if (!tvmazeId) {
+        return res.status(400).json({ error: "tvmazeId is required" });
+      }
+      
+      await storage.dismissNewRelease(userId, tvmazeId);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error dismissing new release:", error);
+      res.status(500).json({ error: "Failed to dismiss new release" });
+    }
+  });
+
+  app.post("/api/new-releases/add", async (req, res) => {
+    try {
+      const userId = req.body.userId || "demo-user";
+      const { tvmazeId } = req.body;
+      
+      if (!tvmazeId) {
+        return res.status(400).json({ error: "tvmazeId is required" });
+      }
+      
+      // Check if show exists, if not sync it
+      let show = await storage.getShow(tvmazeId);
+      if (!show) {
+        show = await storage.syncShowFromTVMaze(tvmazeId);
+        if (!show) {
+          return res.status(404).json({ error: "Show not found on TVMaze" });
+        }
+      }
+      
+      // Check if user already has this show
+      const existingUserShow = await storage.getUserShow(userId, tvmazeId);
+      if (existingUserShow) {
+        if (existingUserShow.isRemoved) {
+          await storage.updateUserShow(userId, tvmazeId, { isRemoved: false });
+        }
+        return res.json({ userShow: existingUserShow, show });
+      }
+      
+      // Add show to user's library
+      const userShow = await storage.addUserShow({
+        userId,
+        showId: tvmazeId,
+        isRemoved: false,
+        isShared: false,
+      });
+      
+      // Also dismiss from new releases
+      await storage.dismissNewRelease(userId, tvmazeId);
+      
+      // Start async episode sync
+      const jobId = syncJobManager.createJob(tvmazeId);
+      
+      performAsyncAddShowSync(jobId, tvmazeId, userId).catch(error => {
+        console.error(`[NEW_RELEASES_ADD] Async sync failed for job ${jobId}:`, error);
+      });
+      
+      res.json({ userShow, show, syncJobId: jobId });
+    } catch (error) {
+      console.error("Error adding new release:", error);
+      res.status(500).json({ error: "Failed to add new release" });
+    }
+  });
+
+  app.post("/api/new-releases/add-watched", async (req, res) => {
+    try {
+      const userId = req.body.userId || "demo-user";
+      const { tvmazeId } = req.body;
+      
+      if (!tvmazeId) {
+        return res.status(400).json({ error: "tvmazeId is required" });
+      }
+      
+      // Check if show exists, if not sync it
+      let show = await storage.getShow(tvmazeId);
+      if (!show) {
+        show = await storage.syncShowFromTVMaze(tvmazeId);
+        if (!show) {
+          return res.status(404).json({ error: "Show not found on TVMaze" });
+        }
+      }
+      
+      // Check if user already has this show
+      const existingUserShow = await storage.getUserShow(userId, tvmazeId);
+      if (existingUserShow) {
+        if (existingUserShow.isRemoved) {
+          await storage.updateUserShow(userId, tvmazeId, { isRemoved: false });
+        }
+        return res.json({ userShow: existingUserShow, show });
+      }
+      
+      // Add show to user's library
+      const userShow = await storage.addUserShow({
+        userId,
+        showId: tvmazeId,
+        isRemoved: false,
+        isShared: false,
+      });
+      
+      // Also dismiss from new releases
+      await storage.dismissNewRelease(userId, tvmazeId);
+      
+      // Sync episodes and mark all as watched
+      const jobId = syncJobManager.createJob(tvmazeId);
+      
+      (async () => {
+        try {
+          await performAsyncAddShowSync(jobId, tvmazeId, userId);
+          
+          const userEpisodes = await storage.getUserEpisodesForShow(userId, tvmazeId);
+          
+          for (const userEpisode of userEpisodes) {
+            await storage.updateUserEpisode(userId, userEpisode.episodeId, {
+              status: "watched",
+              watchedAt: new Date()
+            });
+          }
+          
+          console.log(`[NEW_RELEASES_ADD_WATCHED] Marked ${userEpisodes.length} episodes as watched for show ${tvmazeId}`);
+        } catch (error) {
+          console.error(`[NEW_RELEASES_ADD_WATCHED] Failed for job ${jobId}:`, error);
+        }
+      })();
+      
+      res.json({ userShow, show, syncJobId: jobId });
+    } catch (error) {
+      console.error("Error adding new release as watched:", error);
+      res.status(500).json({ error: "Failed to add new release" });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }
