@@ -1765,7 +1765,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/recommendations", async (req, res) => {
     try {
       const userId = "demo-user";
-      const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
+      const limit = req.query.limit ? parseInt(req.query.limit as string) : 25; // Default to top 25
       const recommendations = await storage.getRecommendations(userId, limit);
       res.json(recommendations);
     } catch (error) {
