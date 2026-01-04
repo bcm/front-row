@@ -738,37 +738,6 @@ export default function Dashboard() {
     },
   });
 
-  const newReleaseAddWatchedMutation = useMutation({
-    mutationFn: async (show: NewReleaseShow) => {
-      setDismissedNewReleases(prev => new Set(prev).add(show.id));
-      setNewReleaseProcessingId(show.id);
-      const response = await apiRequest("POST", "/api/new-releases/add-watched", { tvmazeId: show.id });
-      return response.json();
-    },
-    onSuccess: () => {
-      setNewReleaseProcessingId(null);
-      queryClient.invalidateQueries({ queryKey: ["/api/new-releases"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/user/shows"] });
-      toast({
-        title: "Added as watched",
-        description: "Show added successfully. All episodes are being marked as watched.",
-      });
-    },
-    onError: (error: Error, show: NewReleaseShow) => {
-      setNewReleaseProcessingId(null);
-      setDismissedNewReleases(prev => {
-        const newSet = new Set(prev);
-        newSet.delete(show.id);
-        return newSet;
-      });
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: error.message || "Failed to add show",
-      });
-    },
-  });
-
   // Recommendations mutations
   const recRefreshMutation = useMutation({
     mutationFn: async () => {
@@ -1385,20 +1354,6 @@ export default function Dashboard() {
                               <Plus className="h-4 w-4 mr-1" />
                             )}
                             Add
-                          </Button>
-                          <Button
-                            onClick={() => newReleaseAddWatchedMutation.mutate(show)}
-                            disabled={newReleaseProcessingId === show.id}
-                            variant="secondary"
-                            size="sm"
-                            data-testid={`button-add-watched-${show.id}`}
-                          >
-                            {newReleaseProcessingId === show.id ? (
-                              <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-                            ) : (
-                              <CheckCheck className="h-4 w-4 mr-1" />
-                            )}
-                            Watched
                           </Button>
                           <Button
                             onClick={() => newReleaseDismissMutation.mutate(show.id)}
