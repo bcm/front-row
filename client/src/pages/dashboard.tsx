@@ -936,7 +936,7 @@ export default function Dashboard() {
   return (
     <div className="p-6 max-w-7xl mx-auto">
       <Tabs defaultValue="queue" className="w-full">
-        <TabsList className="mb-6">
+        <TabsList className="mb-6 mx-auto flex w-fit">
           <TabsTrigger value="queue" className="gap-2" data-testid="tab-queue">
             <PlayCircle className="h-4 w-4" />
             Queue
