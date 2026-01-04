@@ -1,22 +1,31 @@
 import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
-import { UserEpisode, Episode, Show } from "@shared/schema";
+import { UserEpisode, Episode, Show, NewReleaseShow } from "@shared/schema";
 import EpisodeCard from "@/components/episode-card";
 import FloatingAddButton from "@/components/floating-add-button";
 import AddShowDialog from "@/components/add-show-dialog";
-import { PlayCircle, AlertTriangle, ChevronDown, Play, Clock, Eye, SkipForward, Share, User } from "lucide-react";
+import { PlayCircle, AlertTriangle, ChevronDown, Play, Clock, Eye, SkipForward, Share, User, Calendar, Loader2, X, Plus, RefreshCw, CheckCheck } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Card } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Link } from "wouter";
 import CountdownTimer from "@/components/countdown-timer";
+
+interface NewReleasesResponse {
+  shows: NewReleaseShow[];
+  lastChecked: string | null;
+  fromCache: boolean;
+}
 
 export default function Dashboard() {
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [hiddenEpisodes, setHiddenEpisodes] = useState<Set<number>>(new Set());
   const [expandedSeasons, setExpandedSeasons] = useState<Record<string, Set<number>>>({});
+  const [newReleaseProcessingId, setNewReleaseProcessingId] = useState<number | null>(null);
+  const [dismissedNewReleases, setDismissedNewReleases] = useState<Set<number>>(new Set());
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -67,6 +76,15 @@ export default function Dashboard() {
       return response.json() as Promise<{id: string; showId: number; isShared: boolean; addedAt: string}[]>;
     },
   });
+
+  // New releases query
+  const { data: newReleasesData, isLoading: newReleasesLoading } = useQuery<NewReleasesResponse>({
+    queryKey: ["/api/new-releases"],
+    staleTime: 1000 * 60 * 5,
+  });
+
+  const newReleases = newReleasesData?.shows || [];
+  const visibleNewReleases = newReleases.filter(show => !dismissedNewReleases.has(show.id));
 
   // Helper function to get the earliest episode per show for Next Up
   const getNextEpisodesByShow = useMemo(() => {
@@ -524,6 +542,142 @@ export default function Dashboard() {
     };
   };
 
+  // New releases mutations
+  const newReleaseRefreshMutation = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest("POST", "/api/new-releases/refresh");
+      return response.json();
+    },
+    onSuccess: (result: NewReleasesResponse) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/new-releases"] });
+      toast({
+        title: "New releases refreshed",
+        description: `Showing ${result.shows.length} new releases`,
+      });
+    },
+    onError: () => {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Failed to refresh new releases",
+      });
+    },
+  });
+
+  const newReleaseDismissMutation = useMutation({
+    mutationFn: async (tvmazeId: number) => {
+      setDismissedNewReleases(prev => new Set(prev).add(tvmazeId));
+      const response = await apiRequest("POST", "/api/new-releases/dismiss", { tvmazeId });
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/new-releases"] });
+      toast({
+        title: "Dismissed",
+        description: "Show removed from new releases",
+      });
+    },
+    onError: (error: Error, tvmazeId: number) => {
+      setDismissedNewReleases(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(tvmazeId);
+        return newSet;
+      });
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Failed to dismiss show",
+      });
+    },
+  });
+
+  const newReleaseAddMutation = useMutation({
+    mutationFn: async (show: NewReleaseShow) => {
+      setDismissedNewReleases(prev => new Set(prev).add(show.id));
+      setNewReleaseProcessingId(show.id);
+      const response = await apiRequest("POST", "/api/new-releases/add", { tvmazeId: show.id });
+      return response.json();
+    },
+    onSuccess: () => {
+      setNewReleaseProcessingId(null);
+      queryClient.invalidateQueries({ queryKey: ["/api/new-releases"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/user/shows"] });
+      toast({
+        title: "Added to library",
+        description: "Show added successfully. Episodes are being synced in the background.",
+      });
+    },
+    onError: (error: Error, show: NewReleaseShow) => {
+      setNewReleaseProcessingId(null);
+      setDismissedNewReleases(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(show.id);
+        return newSet;
+      });
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: error.message || "Failed to add show",
+      });
+    },
+  });
+
+  const newReleaseAddWatchedMutation = useMutation({
+    mutationFn: async (show: NewReleaseShow) => {
+      setDismissedNewReleases(prev => new Set(prev).add(show.id));
+      setNewReleaseProcessingId(show.id);
+      const response = await apiRequest("POST", "/api/new-releases/add-watched", { tvmazeId: show.id });
+      return response.json();
+    },
+    onSuccess: () => {
+      setNewReleaseProcessingId(null);
+      queryClient.invalidateQueries({ queryKey: ["/api/new-releases"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/user/shows"] });
+      toast({
+        title: "Added as watched",
+        description: "Show added successfully. All episodes are being marked as watched.",
+      });
+    },
+    onError: (error: Error, show: NewReleaseShow) => {
+      setNewReleaseProcessingId(null);
+      setDismissedNewReleases(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(show.id);
+        return newSet;
+      });
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: error.message || "Failed to add show",
+      });
+    },
+  });
+
+  function stripHtml(html: string | null): string {
+    if (!html) return "";
+    return html.replace(/<[^>]*>/g, "");
+  }
+
+  function formatPremiereDate(dateStr: string | null): string {
+    if (!dateStr) return "Unknown";
+    const date = new Date(dateStr);
+    const now = new Date();
+    const diffDays = Math.ceil((date.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+    
+    if (diffDays > 0) {
+      if (diffDays === 1) return "Tomorrow";
+      if (diffDays <= 7) return `In ${diffDays} days`;
+      return date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+    } else if (diffDays === 0) {
+      return "Today";
+    } else {
+      const absDays = Math.abs(diffDays);
+      if (absDays === 1) return "Yesterday";
+      if (absDays <= 7) return `${absDays} days ago`;
+      return date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+    }
+  }
+
   return (
     <div className="p-6 max-w-7xl mx-auto">
       <div className="space-y-8">
@@ -791,6 +945,138 @@ export default function Dashboard() {
                 <AlertTriangle className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
                 <h3 className="text-lg font-semibold text-muted-foreground mb-2">No new episodes</h3>
                 <p className="text-muted-foreground">New episodes will appear here for triage</p>
+              </div>
+            )}
+          </div>
+        </section>
+
+        {/* New Releases Section */}
+        <section>
+          <div className="flex items-center space-x-3 mb-6">
+            <div className="w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center">
+              <Calendar className="w-4 h-4 text-white" />
+            </div>
+            <h2 className="flex-1 min-w-0 text-2xl sm:text-3xl font-bold truncate" data-testid="text-section-title-new-releases">New Releases</h2>
+            <Button
+              onClick={() => newReleaseRefreshMutation.mutate()}
+              disabled={newReleaseRefreshMutation.isPending}
+              variant="outline"
+              size="sm"
+              data-testid="button-refresh-new-releases"
+            >
+              {newReleaseRefreshMutation.isPending ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <RefreshCw className="h-4 w-4 mr-2" />
+              )}
+              Refresh
+            </Button>
+          </div>
+
+          <div className="space-y-4">
+            {newReleasesLoading || newReleaseRefreshMutation.isPending ? (
+              <Card className="p-12 text-center">
+                <Loader2 className="h-12 w-12 mx-auto mb-4 text-muted-foreground animate-spin" />
+                <h3 className="text-xl font-semibold mb-2">Fetching new releases...</h3>
+                <p className="text-muted-foreground">
+                  Checking TV schedules for new show premieres.
+                </p>
+              </Card>
+            ) : visibleNewReleases.length === 0 ? (
+              <div className="text-center py-8">
+                <Calendar className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
+                <h3 className="text-lg font-semibold text-muted-foreground mb-2" data-testid="text-no-new-releases">No new releases</h3>
+                <p className="text-muted-foreground">Check back later for newly premiered shows</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                {visibleNewReleases.map((show) => (
+                  <Card
+                    key={show.id}
+                    className="overflow-hidden flex flex-col"
+                    data-testid={`card-new-release-${show.id}`}
+                  >
+                    {(show.image?.original || show.image?.medium) && (
+                      <img
+                        src={show.image.original || show.image.medium}
+                        alt={show.name}
+                        className="w-full aspect-[2/3] object-cover"
+                        data-testid={`img-poster-${show.id}`}
+                      />
+                    )}
+                    <div className="p-4 flex-1 flex flex-col">
+                      <h3 className="font-semibold text-lg mb-2" data-testid={`text-show-name-${show.id}`}>
+                        {show.name}
+                      </h3>
+                      
+                      {show.genres && show.genres.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mb-2">
+                          {show.genres.slice(0, 3).map((genre) => (
+                            <Badge key={genre} variant="secondary" className="text-xs">
+                              {genre}
+                            </Badge>
+                          ))}
+                        </div>
+                      )}
+
+                      <div className="flex items-center gap-2 mb-2 text-sm text-muted-foreground">
+                        <span className="font-medium" data-testid={`text-premiere-${show.id}`}>
+                          📅 {formatPremiereDate(show.premiered)}
+                        </span>
+                        {(show.network || show.webChannel) && (
+                          <span>• {show.network || show.webChannel}</span>
+                        )}
+                      </div>
+
+                      {show.summary && (
+                        <p className="text-sm text-muted-foreground line-clamp-3 mb-4 flex-1">
+                          {stripHtml(show.summary)}
+                        </p>
+                      )}
+
+                      <div className="flex flex-col gap-2 mt-auto">
+                        <div className="flex gap-2">
+                          <Button
+                            onClick={() => newReleaseAddMutation.mutate(show)}
+                            disabled={newReleaseProcessingId === show.id}
+                            className="flex-1"
+                            data-testid={`button-add-${show.id}`}
+                          >
+                            {newReleaseProcessingId === show.id ? (
+                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                            ) : (
+                              <Plus className="h-4 w-4 mr-2" />
+                            )}
+                            Add
+                          </Button>
+                          <Button
+                            onClick={() => newReleaseDismissMutation.mutate(show.id)}
+                            disabled={newReleaseDismissMutation.isPending}
+                            variant="outline"
+                            size="icon"
+                            data-testid={`button-dismiss-${show.id}`}
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        </div>
+                        <Button
+                          onClick={() => newReleaseAddWatchedMutation.mutate(show)}
+                          disabled={newReleaseProcessingId === show.id}
+                          variant="secondary"
+                          className="w-full"
+                          data-testid={`button-add-watched-${show.id}`}
+                        >
+                          {newReleaseProcessingId === show.id ? (
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          ) : (
+                            <CheckCheck className="h-4 w-4 mr-2" />
+                          )}
+                          Watched
+                        </Button>
+                      </div>
+                    </div>
+                  </Card>
+                ))}
               </div>
             )}
           </div>

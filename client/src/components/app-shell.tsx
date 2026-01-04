@@ -15,7 +15,6 @@ import {
   Clock,
   Library,
   Sparkles,
-  Calendar,
   Settings,
   Menu,
   ChevronLeft,
@@ -44,7 +43,6 @@ const primaryNavItems = [
 
 const discoverNavItems = [
   { id: "recommendations", label: "Recommendations", href: "/recommendations", icon: Sparkles },
-  { id: "new-releases", label: "New Releases", href: "/new-releases", icon: Calendar },
 ];
 
 const secondaryNavItems = [
@@ -152,7 +150,6 @@ export default function AppShell({ children }: AppShellProps) {
     if (location === "/watch-later") return "watch-later";
     if (location === "/library" || location.startsWith("/show/") || location.startsWith("/episode/")) return "library";
     if (location === "/recommendations") return "recommendations";
-    if (location === "/new-releases") return "new-releases";
     if (location === "/settings") return "settings";
     return "dashboard";
   };
