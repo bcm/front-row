@@ -10,6 +10,7 @@ import { PlayCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Link } from "wouter";
+import CountdownTimer from "@/components/countdown-timer";
 
 export default function Dashboard() {
   const [showAddDialog, setShowAddDialog] = useState(false);
@@ -158,6 +159,8 @@ export default function Dashboard() {
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="space-y-8">
 
+          {/* Countdown Timer for Upcoming Episodes */}
+          <CountdownTimer />
 
           {/* Next to Watch Section */}
           <section>

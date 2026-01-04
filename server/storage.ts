@@ -1,7 +1,7 @@
 import { type User, type InsertUser, type Show, type InsertShow, type UserShow, type InsertUserShow, type Episode, type InsertEpisode, type UserEpisode, type InsertUserEpisode, type UserSettings, type InsertUserSettings, type Recommendation, type InsertRecommendation, type DismissedRecommendation, type InsertDismissedRecommendation, type NewReleasesState, type NewReleaseShow, type DismissedNewRelease, type InsertDismissedNewRelease } from "@shared/schema";
 import { users, shows, userShows, episodes, userEpisodes, userSettings, recommendations, dismissedRecommendations, newReleasesState, dismissedNewReleases } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, ilike, inArray, desc, asc, lte, sql } from "drizzle-orm";
+import { eq, and, ilike, inArray, desc, asc, lte, gt, sql } from "drizzle-orm";
 
 export interface IStorage {
   // User methods
@@ -35,6 +35,7 @@ export interface IStorage {
   
   // User episode methods
   getUserEpisodes(userId: string, status?: string, showMode?: string): Promise<(UserEpisode & { episode: Episode & { show: Show } })[]>;
+  getUpcomingEpisodes(userId: string): Promise<(Episode & { show: Show })[]>;
   addUserEpisode(userEpisode: InsertUserEpisode): Promise<{ episode: UserEpisode; isNew: boolean }>;
   updateUserEpisode(userId: string, episodeId: number, updates: Partial<UserEpisode>): Promise<UserEpisode | undefined>;
   getUserEpisode(userId: string, episodeId: number): Promise<UserEpisode | undefined>;
@@ -525,6 +526,49 @@ export class DatabaseStorage implements IStorage {
         ...row.episode,
         show: row.show
       }
+    }));
+  }
+
+  async getUpcomingEpisodes(userId: string): Promise<(Episode & { show: Show })[]> {
+    const today = new Date().toISOString().split('T')[0];
+    
+    const results = await db
+      .select({
+        id: episodes.id,
+        showId: episodes.showId,
+        name: episodes.name,
+        season: episodes.season,
+        number: episodes.number,
+        airdate: episodes.airdate,
+        runtime: episodes.runtime,
+        summary: episodes.summary,
+        image: episodes.image,
+        show: shows
+      })
+      .from(episodes)
+      .innerJoin(shows, eq(episodes.showId, shows.id))
+      .innerJoin(userShows, and(
+        eq(userShows.showId, shows.id),
+        eq(userShows.userId, userId)
+      ))
+      .where(and(
+        eq(userShows.isRemoved, false),
+        gt(episodes.airdate, today)
+      ))
+      .orderBy(asc(episodes.airdate))
+      .limit(20);
+
+    return results.map(row => ({
+      id: row.id,
+      showId: row.showId,
+      name: row.name,
+      season: row.season,
+      number: row.number,
+      airdate: row.airdate,
+      runtime: row.runtime,
+      summary: row.summary,
+      image: row.image,
+      show: row.show
     }));
   }
 

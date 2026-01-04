@@ -1515,6 +1515,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get upcoming episodes with future air dates
+  app.get("/api/user/episodes/upcoming", async (req, res) => {
+    try {
+      const userId = "demo-user";
+      const upcomingEpisodes = await storage.getUpcomingEpisodes(userId);
+      res.json(upcomingEpisodes);
+    } catch (error) {
+      console.error("Error fetching upcoming episodes:", error);
+      res.status(500).json({ error: "Failed to fetch upcoming episodes" });
+    }
+  });
+
   // Update user episode status
   // Get individual episode with show and user data
   app.get("/api/episodes/:id", async (req, res) => {
