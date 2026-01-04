@@ -161,7 +161,7 @@ export default function Dashboard() {
         <div className="space-y-8">
 
           {/* Countdown Timer for Upcoming Episodes */}
-          <CountdownTimer />
+          <CountdownTimer showMode={showMode} />
 
           {/* Next to Watch Section */}
           <section>

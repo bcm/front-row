@@ -63,9 +63,22 @@ function CountdownDisplay({ airdate, schedule }: { airdate: string; schedule?: S
   );
 }
 
-export default function CountdownTimer() {
+interface CountdownTimerProps {
+  showMode?: string;
+}
+
+export default function CountdownTimer({ showMode = 'personal' }: CountdownTimerProps) {
   const { data: upcomingEpisodes, isLoading } = useQuery<UpcomingEpisode[]>({
-    queryKey: ["/api/user/episodes/upcoming"],
+    queryKey: ["/api/user/episodes/upcoming", showMode],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (showMode) {
+        params.set('showMode', showMode);
+      }
+      const response = await fetch(`/api/user/episodes/upcoming?${params.toString()}`);
+      if (!response.ok) throw new Error("Failed to fetch upcoming episodes");
+      return response.json();
+    },
     refetchInterval: 60000,
   });
 

@@ -1519,7 +1519,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/user/episodes/upcoming", async (req, res) => {
     try {
       const userId = "demo-user";
-      const upcomingEpisodes = await storage.getUpcomingEpisodes(userId);
+      const { showMode } = req.query;
+      
+      const validShowModes = ['personal', 'shared', 'all'];
+      const parsedShowMode = typeof showMode === 'string' && validShowModes.includes(showMode) 
+        ? showMode 
+        : undefined;
+      
+      const upcomingEpisodes = await storage.getUpcomingEpisodes(userId, parsedShowMode);
       res.json(upcomingEpisodes);
     } catch (error) {
       console.error("Error fetching upcoming episodes:", error);

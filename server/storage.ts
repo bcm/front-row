@@ -35,7 +35,7 @@ export interface IStorage {
   
   // User episode methods
   getUserEpisodes(userId: string, status?: string, showMode?: string): Promise<(UserEpisode & { episode: Episode & { show: Show } })[]>;
-  getUpcomingEpisodes(userId: string): Promise<(Episode & { show: Show })[]>;
+  getUpcomingEpisodes(userId: string, showMode?: string): Promise<(Episode & { show: Show })[]>;
   addUserEpisode(userEpisode: InsertUserEpisode): Promise<{ episode: UserEpisode; isNew: boolean }>;
   updateUserEpisode(userId: string, episodeId: number, updates: Partial<UserEpisode>): Promise<UserEpisode | undefined>;
   getUserEpisode(userId: string, episodeId: number): Promise<UserEpisode | undefined>;
@@ -529,8 +529,23 @@ export class DatabaseStorage implements IStorage {
     }));
   }
 
-  async getUpcomingEpisodes(userId: string): Promise<(Episode & { show: Show })[]> {
+  async getUpcomingEpisodes(userId: string, showMode?: string): Promise<(Episode & { show: Show })[]> {
     const today = new Date().toISOString().split('T')[0];
+    
+    // Build conditions based on showMode
+    const baseConditions = and(
+      eq(userShows.isRemoved, false),
+      gt(episodes.airdate, today)
+    );
+    
+    let sharedFilter;
+    if (showMode === 'shared') {
+      sharedFilter = eq(userShows.isShared, true);
+    } else if (showMode === 'personal') {
+      sharedFilter = eq(userShows.isShared, false);
+    }
+    
+    const whereClause = sharedFilter ? and(baseConditions, sharedFilter) : baseConditions;
     
     const results = await db
       .select({
@@ -551,10 +566,7 @@ export class DatabaseStorage implements IStorage {
         eq(userShows.showId, shows.id),
         eq(userShows.userId, userId)
       ))
-      .where(and(
-        eq(userShows.isRemoved, false),
-        gt(episodes.airdate, today)
-      ))
+      .where(whereClause)
       .orderBy(asc(episodes.airdate))
       .limit(20);
 
