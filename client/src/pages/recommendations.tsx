@@ -29,9 +29,10 @@ export default function Recommendations() {
     },
     onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/recommendations"] });
+      const displayCount = Math.min(data.imported, 25);
       toast({
         title: "Recommendations refreshed",
-        description: `Found ${data.imported} new recommendations`,
+        description: `Showing top ${displayCount} recommendations`,
       });
     },
     onError: () => {
