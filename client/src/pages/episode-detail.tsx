@@ -77,6 +77,7 @@ export default function EpisodeDetail() {
       queryClient.invalidateQueries({ queryKey: ['/api/episodes', id] });
       queryClient.invalidateQueries({ queryKey: ['/api/user/episodes'] });
       queryClient.invalidateQueries({ queryKey: ['/api/shows', episodeData?.showId, 'user-episodes'] });
+      queryClient.invalidateQueries({ queryKey: ["/api/user/episodes/upcoming"] });
     },
   });
 

@@ -132,6 +132,7 @@ export default function Dashboard() {
     onSuccess: (data, variables, context) => {
       // Invalidate episode queries to keep all lists synchronized
       queryClient.invalidateQueries({ queryKey: ["/api/user/episodes"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/user/episodes/upcoming"] });
       
       // Create informative toast message with show name and episode number
       let toastTitle = "Episode updated";

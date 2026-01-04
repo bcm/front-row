@@ -38,6 +38,7 @@ export default function ShowCard({ userShow, variant = "default", onRemove }: Sh
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/library"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/user/episodes/upcoming"] });
       toast({
         title: "Show removed",
         description: `"${show.name}" has been removed from your library and unfollowed on TVMaze.`,

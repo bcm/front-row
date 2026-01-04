@@ -215,6 +215,7 @@ export default function ShowDetail() {
       queryClient.invalidateQueries({ queryKey: ["/api/library"] });
       queryClient.invalidateQueries({ queryKey: ['/api/user/shows', id] });
       queryClient.invalidateQueries({ queryKey: ['/api/user/episodes'] });
+      queryClient.invalidateQueries({ queryKey: ["/api/user/episodes/upcoming"] });
     },
   });
 
