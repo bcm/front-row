@@ -2,22 +2,26 @@ import { storage } from "./storage";
 import { type NewReleaseShow } from "@shared/schema";
 
 const CACHE_DURATION_MS = 10 * 60 * 1000; // 10 minutes
-const PREMIERE_WINDOW_DAYS = 30; // Show premieres from last 30 days or future
+const DAYS_BACK = 30; // Look back 30 days
+const DAYS_FORWARD = 14; // Look forward 14 days
 
-interface TVMazeUpdate {
-  [showId: string]: number; // showId -> timestamp
-}
-
-interface TVMazeShow {
+interface TVMazeScheduleItem {
   id: number;
-  name: string;
-  summary: string | null;
-  image: { medium?: string; original?: string } | null;
-  premiered: string | null;
-  genres: string[];
-  network: { name: string } | null;
-  webChannel: { name: string } | null;
-  status: string | null;
+  airdate: string;
+  airstamp: string;
+  season: number;
+  number: number;
+  show: {
+    id: number;
+    name: string;
+    summary: string | null;
+    image: { medium?: string; original?: string } | null;
+    premiered: string | null;
+    genres: string[];
+    network: { name: string } | null;
+    webChannel: { name: string } | null;
+    status: string | null;
+  };
 }
 
 export async function getNewReleases(userId: string): Promise<{
@@ -43,7 +47,7 @@ export async function getNewReleases(userId: string): Promise<{
   }
 
   // Fetch fresh data
-  const freshShows = await fetchNewReleases(state?.lastCheckedUnix || 0);
+  const freshShows = await fetchNewReleases();
   
   // Update cache
   const newLastCheckedUnix = Math.floor(now / 1000);
@@ -59,86 +63,97 @@ export async function getNewReleases(userId: string): Promise<{
   };
 }
 
-async function fetchNewReleases(sinceUnix: number): Promise<NewReleaseShow[]> {
+function formatDate(date: Date): string {
+  return date.toISOString().split('T')[0];
+}
+
+async function fetchScheduleForDate(date: string, isWeb: boolean = false): Promise<TVMazeScheduleItem[]> {
   try {
-    // Fetch TVMaze updates (shows updated since last check)
-    const updatesResponse = await fetch('https://api.tvmaze.com/updates/shows');
-    if (!updatesResponse.ok) {
-      console.error(`[NEW_RELEASES] Failed to fetch updates: ${updatesResponse.status}`);
-      return [];
+    const endpoint = isWeb 
+      ? `https://api.tvmaze.com/schedule/web?date=${date}`
+      : `https://api.tvmaze.com/schedule?date=${date}`;
+    
+    const response = await fetch(endpoint);
+    if (!response.ok) return [];
+    
+    return await response.json();
+  } catch {
+    return [];
+  }
+}
+
+async function fetchNewReleases(): Promise<NewReleaseShow[]> {
+  try {
+    const today = new Date();
+    const seenShowIds = new Set<number>();
+    const newReleases: NewReleaseShow[] = [];
+
+    // Generate date range: past 30 days + next 14 days
+    const dates: string[] = [];
+    for (let i = -DAYS_BACK; i <= DAYS_FORWARD; i++) {
+      const date = new Date(today);
+      date.setDate(date.getDate() + i);
+      dates.push(formatDate(date));
     }
 
-    const updates: TVMazeUpdate = await updatesResponse.json();
-    
-    // Get cutoff date for "new releases" (premiered within last 30 days or in future)
-    const cutoffDate = new Date();
-    cutoffDate.setDate(cutoffDate.getDate() - PREMIERE_WINDOW_DAYS);
-    const cutoffStr = cutoffDate.toISOString().split('T')[0];
-    
-    // Filter to shows updated since last check
-    const recentlyUpdatedShowIds = Object.entries(updates)
-      .filter(([_, timestamp]) => timestamp > sinceUnix)
-      .map(([showId, _]) => parseInt(showId))
-      .slice(0, 200); // Limit to avoid too many API calls
+    console.log(`[NEW_RELEASES] Checking ${dates.length} days for new show premieres...`);
 
-    console.log(`[NEW_RELEASES] Found ${recentlyUpdatedShowIds.length} recently updated shows`);
-
-    // Fetch show details and filter by premiere date
-    const newReleases: NewReleaseShow[] = [];
-    
-    // Batch fetch shows (TVMaze rate limit is generous but let's be nice)
-    for (let i = 0; i < recentlyUpdatedShowIds.length; i += 20) {
-      const batch = recentlyUpdatedShowIds.slice(i, i + 20);
+    // Fetch schedules in parallel batches (to respect rate limits)
+    const batchSize = 5;
+    for (let i = 0; i < dates.length; i += batchSize) {
+      const batch = dates.slice(i, i + batchSize);
       
-      const batchPromises = batch.map(async (showId) => {
-        try {
-          const response = await fetch(`https://api.tvmaze.com/shows/${showId}`);
-          if (!response.ok) return null;
+      const batchPromises = batch.flatMap(date => [
+        fetchScheduleForDate(date, false), // Regular TV
+        fetchScheduleForDate(date, true)   // Web/streaming
+      ]);
+
+      const results = await Promise.all(batchPromises);
+      
+      for (const scheduleItems of results) {
+        for (const item of scheduleItems) {
+          // Web schedule has _embedded.show, regular schedule has show directly
+          const show = item.show || (item as any)._embedded?.show;
+          if (!show) continue;
           
-          const show: TVMazeShow = await response.json();
+          // Only include Season 1, Episode 1 (true series premieres)
+          if (item.season !== 1 || item.number !== 1) continue;
           
-          // Filter by premiere date (recent or future premieres only)
-          if (!show.premiered) return null;
-          if (show.premiered < cutoffStr) return null;
-          
-          // Only include scripted/animated shows, skip news/talk shows
-          if (show.status === 'Ended' && new Date(show.premiered) < cutoffDate) return null;
-          
-          return {
+          // Skip if we've already seen this show
+          if (seenShowIds.has(show.id)) continue;
+          seenShowIds.add(show.id);
+
+          // Skip shows without images (usually low-quality entries)
+          if (!show.image?.medium) continue;
+
+          newReleases.push({
             id: show.id,
             name: show.name,
             summary: show.summary,
             image: show.image,
-            premiered: show.premiered,
+            premiered: show.premiered || item.airdate,
             genres: show.genres || [],
             network: show.network?.name || null,
             webChannel: show.webChannel?.name || null,
             status: show.status
-          } as NewReleaseShow;
-        } catch (error) {
-          return null;
+          } as NewReleaseShow);
         }
-      });
-
-      const results = await Promise.all(batchPromises);
-      results.forEach(show => {
-        if (show) newReleases.push(show);
-      });
+      }
 
       // Small delay between batches to be nice to TVMaze API
-      if (i + 20 < recentlyUpdatedShowIds.length) {
-        await new Promise(resolve => setTimeout(resolve, 100));
+      if (i + batchSize < dates.length) {
+        await new Promise(resolve => setTimeout(resolve, 200));
       }
     }
 
-    // Sort by premiere date (newest first)
+    // Sort by premiere date (newest/upcoming first)
     newReleases.sort((a, b) => {
       if (!a.premiered) return 1;
       if (!b.premiered) return -1;
       return b.premiered.localeCompare(a.premiered);
     });
 
-    console.log(`[NEW_RELEASES] Found ${newReleases.length} new releases after filtering`);
+    console.log(`[NEW_RELEASES] Found ${newReleases.length} new show premieres`);
     return newReleases;
 
   } catch (error) {
@@ -162,8 +177,8 @@ async function filterShowsForUser(userId: string, shows: NewReleaseShow[]): Prom
 }
 
 export async function refreshNewReleases(): Promise<NewReleaseShow[]> {
-  // Force refresh by clearing cache timestamp
-  const freshShows = await fetchNewReleases(0);
+  // Force refresh by fetching fresh data
+  const freshShows = await fetchNewReleases();
   const now = Math.floor(Date.now() / 1000);
   await storage.updateNewReleasesState(now, freshShows);
   return freshShows;
