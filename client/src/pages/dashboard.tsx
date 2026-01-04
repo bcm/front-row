@@ -5,12 +5,13 @@ import { UserEpisode, Episode, Show, NewReleaseShow, Recommendation } from "@sha
 import EpisodeCard from "@/components/episode-card";
 import FloatingAddButton from "@/components/floating-add-button";
 import AddShowDialog from "@/components/add-show-dialog";
-import { PlayCircle, AlertTriangle, ChevronDown, Play, Clock, Eye, SkipForward, Share, User, Calendar, Loader2, X, Plus, RefreshCw, CheckCheck, Sparkles } from "lucide-react";
+import { PlayCircle, AlertTriangle, ChevronDown, Play, Clock, Eye, SkipForward, Share, User, Calendar, Loader2, X, Plus, RefreshCw, CheckCheck, Sparkles, Timer } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Link } from "wouter";
 import CountdownTimer from "@/components/countdown-timer";
 
@@ -934,11 +935,23 @@ export default function Dashboard() {
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
-      <div className="space-y-8">
+      <Tabs defaultValue="queue" className="w-full">
+        <TabsList className="mb-6">
+          <TabsTrigger value="queue" className="gap-2" data-testid="tab-queue">
+            <PlayCircle className="h-4 w-4" />
+            Queue
+          </TabsTrigger>
+          <TabsTrigger value="countdown" className="gap-2" data-testid="tab-countdown">
+            <Timer className="h-4 w-4" />
+            Countdown
+          </TabsTrigger>
+        </TabsList>
 
-        {/* Countdown Timer for Upcoming Episodes */}
-        <CountdownTimer showMode={showMode} />
+        <TabsContent value="countdown" className="space-y-8">
+          <CountdownTimer showMode={showMode} />
+        </TabsContent>
 
+        <TabsContent value="queue" className="space-y-8">
         {/* Next to Watch Section */}
         <section>
           <div className="flex items-center space-x-3 mb-6">
@@ -1538,7 +1551,8 @@ export default function Dashboard() {
           </div>
         </section>
 
-      </div>
+        </TabsContent>
+      </Tabs>
 
       <FloatingAddButton onClick={() => setShowAddDialog(true)} />
       
