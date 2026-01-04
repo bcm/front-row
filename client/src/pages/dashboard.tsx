@@ -1,11 +1,11 @@
 import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
-import { UserEpisode, Episode, Show, NewReleaseShow } from "@shared/schema";
+import { UserEpisode, Episode, Show, NewReleaseShow, Recommendation } from "@shared/schema";
 import EpisodeCard from "@/components/episode-card";
 import FloatingAddButton from "@/components/floating-add-button";
 import AddShowDialog from "@/components/add-show-dialog";
-import { PlayCircle, AlertTriangle, ChevronDown, Play, Clock, Eye, SkipForward, Share, User, Calendar, Loader2, X, Plus, RefreshCw, CheckCheck } from "lucide-react";
+import { PlayCircle, AlertTriangle, ChevronDown, Play, Clock, Eye, SkipForward, Share, User, Calendar, Loader2, X, Plus, RefreshCw, CheckCheck, Sparkles } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -26,6 +26,8 @@ export default function Dashboard() {
   const [expandedSeasons, setExpandedSeasons] = useState<Record<string, Set<number>>>({});
   const [newReleaseProcessingId, setNewReleaseProcessingId] = useState<number | null>(null);
   const [dismissedNewReleases, setDismissedNewReleases] = useState<Set<number>>(new Set());
+  const [recProcessingTmdbId, setRecProcessingTmdbId] = useState<number | null>(null);
+  const [dismissedRecs, setDismissedRecs] = useState<Set<number>>(new Set());
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -101,6 +103,14 @@ export default function Dashboard() {
 
   const newReleases = newReleasesData?.shows || [];
   const visibleNewReleases = newReleases.filter(show => !dismissedNewReleases.has(show.id));
+
+  // Recommendations query
+  const { data: recommendations = [], isLoading: recommendationsLoading } = useQuery<Recommendation[]>({
+    queryKey: ["/api/recommendations"],
+    staleTime: 1000 * 60 * 5,
+  });
+
+  const visibleRecommendations = recommendations.filter(rec => !dismissedRecs.has(rec.tmdbId));
 
   // Helper function to get the earliest episode per show for Next Up
   const getNextEpisodesByShow = useMemo(() => {
@@ -761,6 +771,142 @@ export default function Dashboard() {
     },
   });
 
+  // Recommendations mutations
+  const recRefreshMutation = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest("POST", "/api/recommendations/refresh");
+      return response.json();
+    },
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/recommendations"] });
+      const displayCount = Math.min(data.imported, 25);
+      toast({
+        title: "Recommendations refreshed",
+        description: `Showing top ${displayCount} recommendations`,
+      });
+    },
+    onError: () => {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Failed to refresh recommendations",
+      });
+    },
+  });
+
+  const recDismissMutation = useMutation({
+    mutationFn: async (tmdbId: number) => {
+      setDismissedRecs(prev => new Set(prev).add(tmdbId));
+      const response = await apiRequest("POST", "/api/recommendations/dismiss", { tmdbId });
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/recommendations"] });
+      toast({
+        title: "Dismissed",
+        description: "Show removed from recommendations",
+      });
+    },
+    onError: (error: Error, tmdbId: number) => {
+      setDismissedRecs(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(tmdbId);
+        return newSet;
+      });
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Failed to dismiss recommendation",
+      });
+    },
+  });
+
+  const recAcceptMutation = useMutation({
+    mutationFn: async ({ tmdbId, showName }: { tmdbId: number; showName: string }) => {
+      setDismissedRecs(prev => new Set(prev).add(tmdbId));
+      setRecProcessingTmdbId(tmdbId);
+      
+      const tvmazeResponse = await fetch(
+        `https://api.tvmaze.com/search/shows?q=${encodeURIComponent(showName)}`
+      );
+      const tvmazeResults = await tvmazeResponse.json();
+
+      if (tvmazeResults.length === 0) {
+        throw new Error("Show not found on TVMaze");
+      }
+
+      const tvmazeId = tvmazeResults[0].show.id;
+
+      const response = await apiRequest("POST", "/api/recommendations/accept", { tmdbId, tvmazeId });
+      return response.json();
+    },
+    onSuccess: () => {
+      setRecProcessingTmdbId(null);
+      queryClient.invalidateQueries({ queryKey: ["/api/recommendations"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/user/shows"] });
+      toast({
+        title: "Added to library",
+        description: "Show added successfully. Episodes are being synced in the background.",
+      });
+    },
+    onError: (error: Error, { tmdbId }: { tmdbId: number; showName: string }) => {
+      setRecProcessingTmdbId(null);
+      setDismissedRecs(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(tmdbId);
+        return newSet;
+      });
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: error.message || "Failed to add show",
+      });
+    },
+  });
+
+  const recAcceptWatchedMutation = useMutation({
+    mutationFn: async ({ tmdbId, showName }: { tmdbId: number; showName: string }) => {
+      setDismissedRecs(prev => new Set(prev).add(tmdbId));
+      setRecProcessingTmdbId(tmdbId);
+      
+      const tvmazeResponse = await fetch(
+        `https://api.tvmaze.com/search/shows?q=${encodeURIComponent(showName)}`
+      );
+      const tvmazeResults = await tvmazeResponse.json();
+
+      if (tvmazeResults.length === 0) {
+        throw new Error("Show not found on TVMaze");
+      }
+
+      const tvmazeId = tvmazeResults[0].show.id;
+
+      const response = await apiRequest("POST", "/api/recommendations/accept-watched", { tmdbId, tvmazeId });
+      return response.json();
+    },
+    onSuccess: () => {
+      setRecProcessingTmdbId(null);
+      queryClient.invalidateQueries({ queryKey: ["/api/recommendations"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/user/shows"] });
+      toast({
+        title: "Added as watched",
+        description: "Show added successfully. All episodes are being marked as watched.",
+      });
+    },
+    onError: (error: Error, { tmdbId }: { tmdbId: number; showName: string }) => {
+      setRecProcessingTmdbId(null);
+      setDismissedRecs(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(tmdbId);
+        return newSet;
+      });
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: error.message || "Failed to add show",
+      });
+    },
+  });
+
   function stripHtml(html: string | null): string {
     if (!html) return "";
     return html.replace(/<[^>]*>/g, "");
@@ -1226,6 +1372,157 @@ export default function Dashboard() {
                           data-testid={`button-add-watched-${show.id}`}
                         >
                           {newReleaseProcessingId === show.id ? (
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          ) : (
+                            <CheckCheck className="h-4 w-4 mr-2" />
+                          )}
+                          Watched
+                        </Button>
+                      </div>
+                    </div>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </div>
+        </section>
+
+        {/* Recommendations Section */}
+        <section>
+          <div className="flex items-center space-x-3 mb-6">
+            <div className="w-6 h-6 bg-purple-500 rounded-full flex items-center justify-center">
+              <Sparkles className="w-4 h-4 text-white" />
+            </div>
+            <h2 className="flex-1 min-w-0 text-2xl sm:text-3xl font-bold truncate" data-testid="text-section-title-recommendations">Recommendations</h2>
+            <Button
+              onClick={() => recRefreshMutation.mutate()}
+              disabled={recRefreshMutation.isPending}
+              variant="outline"
+              size="sm"
+              data-testid="button-refresh-recommendations"
+            >
+              {recRefreshMutation.isPending ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <RefreshCw className="h-4 w-4 mr-2" />
+              )}
+              Refresh
+            </Button>
+          </div>
+
+          <div className="space-y-4">
+            {recommendationsLoading || recRefreshMutation.isPending ? (
+              <Card className="p-12 text-center">
+                <Loader2 className="h-12 w-12 mx-auto mb-4 text-muted-foreground animate-spin" />
+                <h3 className="text-xl font-semibold mb-2">Generating recommendations...</h3>
+                <p className="text-muted-foreground">
+                  Analyzing your library to find the best matches.
+                </p>
+              </Card>
+            ) : visibleRecommendations.length === 0 ? (
+              <div className="text-center py-8">
+                <Sparkles className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
+                <h3 className="text-lg font-semibold text-muted-foreground mb-2" data-testid="text-no-recommendations">No recommendations yet</h3>
+                <p className="text-muted-foreground mb-4">Add more shows to your library to get personalized recommendations</p>
+                <Button
+                  onClick={() => recRefreshMutation.mutate()}
+                  disabled={recRefreshMutation.isPending}
+                  data-testid="button-generate-recommendations"
+                >
+                  {recRefreshMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <RefreshCw className="h-4 w-4 mr-2" />
+                  )}
+                  Generate Recommendations
+                </Button>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                {visibleRecommendations.map((rec) => (
+                  <Card
+                    key={rec.id}
+                    className="overflow-hidden flex flex-col"
+                    data-testid={`card-recommendation-${rec.tmdbId}`}
+                  >
+                    {rec.posterPath && (
+                      <img
+                        src={`https://image.tmdb.org/t/p/w500${rec.posterPath}`}
+                        alt={rec.name}
+                        className="w-full aspect-[2/3] object-cover"
+                        data-testid={`img-rec-poster-${rec.tmdbId}`}
+                      />
+                    )}
+                    <div className="p-4 flex-1 flex flex-col">
+                      <h3 className="font-semibold text-lg mb-2" data-testid={`text-rec-show-name-${rec.tmdbId}`}>
+                        {rec.name}
+                      </h3>
+                      
+                      {rec.genres && rec.genres.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mb-2">
+                          {rec.genres.slice(0, 3).map((genre) => (
+                            <Badge key={genre} variant="secondary" className="text-xs">
+                              {genre}
+                            </Badge>
+                          ))}
+                        </div>
+                      )}
+
+                      {(rec.voteAverage || rec.network || rec.firstAirDate) && (
+                        <div className="flex items-center gap-2 mb-2 text-sm text-muted-foreground flex-wrap">
+                          {rec.voteAverage && (
+                            <span className="font-medium" data-testid={`text-rec-rating-${rec.tmdbId}`}>
+                              ⭐ {(rec.voteAverage / 10).toFixed(1)}
+                            </span>
+                          )}
+                          {rec.network && (
+                            <span data-testid={`text-rec-network-${rec.tmdbId}`}>📺 {rec.network}</span>
+                          )}
+                          {rec.firstAirDate && (
+                            <span>• {new Date(rec.firstAirDate).getFullYear()}</span>
+                          )}
+                        </div>
+                      )}
+
+                      {rec.overview && (
+                        <p className="text-sm text-muted-foreground line-clamp-3 mb-4 flex-1">
+                          {rec.overview}
+                        </p>
+                      )}
+
+                      <div className="flex flex-col gap-2 mt-auto">
+                        <div className="flex gap-2">
+                          <Button
+                            onClick={() => recAcceptMutation.mutate({ tmdbId: rec.tmdbId, showName: rec.name })}
+                            disabled={recProcessingTmdbId === rec.tmdbId}
+                            className="flex-1"
+                            data-testid={`button-rec-accept-${rec.tmdbId}`}
+                          >
+                            {recProcessingTmdbId === rec.tmdbId ? (
+                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                            ) : (
+                              <Plus className="h-4 w-4 mr-2" />
+                            )}
+                            Add
+                          </Button>
+                          <Button
+                            onClick={() => recDismissMutation.mutate(rec.tmdbId)}
+                            disabled={recDismissMutation.isPending}
+                            variant="outline"
+                            size="icon"
+                            data-testid={`button-rec-dismiss-${rec.tmdbId}`}
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        </div>
+                        <Button
+                          onClick={() => recAcceptWatchedMutation.mutate({ tmdbId: rec.tmdbId, showName: rec.name })}
+                          disabled={recProcessingTmdbId === rec.tmdbId}
+                          variant="secondary"
+                          className="w-full"
+                          data-testid={`button-rec-accept-watched-${rec.tmdbId}`}
+                        >
+                          {recProcessingTmdbId === rec.tmdbId ? (
                             <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                           ) : (
                             <CheckCheck className="h-4 w-4 mr-2" />

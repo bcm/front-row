@@ -13,7 +13,6 @@ import {
   Tv,
   PlayCircle,
   Library,
-  Sparkles,
   Settings,
   Menu,
   ChevronLeft,
@@ -38,10 +37,6 @@ interface AppShellProps {
 const primaryNavItems = [
   { id: "dashboard", label: "Dashboard", href: "/", showBadge: true, icon: PlayCircle },
   { id: "library", label: "Library", href: "/library", icon: Library },
-];
-
-const discoverNavItems = [
-  { id: "recommendations", label: "Recommendations", href: "/recommendations", icon: Sparkles },
 ];
 
 const secondaryNavItems = [
@@ -146,7 +141,6 @@ export default function AppShell({ children }: AppShellProps) {
   const getActiveTab = () => {
     if (location === "/" || location === "/dashboard") return "dashboard";
     if (location === "/library" || location.startsWith("/show/") || location.startsWith("/episode/")) return "library";
-    if (location === "/recommendations") return "recommendations";
     if (location === "/settings") return "settings";
     return "dashboard";
   };
@@ -203,19 +197,6 @@ export default function AppShell({ children }: AppShellProps) {
           )}
           <div className="space-y-1">
             {primaryNavItems.map(item => (
-              <NavItem key={item.id} item={item} collapsed={collapsed} />
-            ))}
-          </div>
-        </div>
-
-        <div>
-          {!collapsed && (
-            <div className="px-3 mb-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-              Discover
-            </div>
-          )}
-          <div className="space-y-1">
-            {discoverNavItems.map(item => (
               <NavItem key={item.id} item={item} collapsed={collapsed} />
             ))}
           </div>
@@ -281,7 +262,7 @@ export default function AppShell({ children }: AppShellProps) {
               </button>
             </div>
             <nav className="flex-1 px-2 space-y-1 mt-4">
-              {[...primaryNavItems, ...discoverNavItems, ...secondaryNavItems].map(item => (
+              {[...primaryNavItems, ...secondaryNavItems].map(item => (
                 <Tooltip key={item.id}>
                   <TooltipTrigger asChild>
                     <div>

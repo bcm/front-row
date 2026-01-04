@@ -7,7 +7,6 @@ import AppShell from "@/components/app-shell";
 import Dashboard from "./pages/dashboard";
 import Library from "./pages/library";
 import Shared from "./pages/shared";
-import Recommendations from "./pages/recommendations";
 import SettingsPage from "./pages/settings";
 import ShowDetail from "./pages/show-detail";
 import EpisodeDetail from "./pages/episode-detail";
@@ -20,7 +19,6 @@ function Router() {
       <Route path="/dashboard" component={Dashboard} />
       <Route path="/library" component={Library} />
       <Route path="/shared" component={Shared} />
-      <Route path="/recommendations" component={Recommendations} />
       <Route path="/settings" component={SettingsPage} />
       <Route path="/show/:id" component={ShowDetail} />
       <Route path="/shows/:id" component={ShowDetail} />
