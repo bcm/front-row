@@ -203,7 +203,15 @@ export default function Recommendations() {
           </Button>
         </div>
 
-        {visibleRecommendations.length === 0 ? (
+        {refreshMutation.isPending ? (
+          <Card className="p-12 text-center">
+            <Loader2 className="h-12 w-12 mx-auto mb-4 text-muted-foreground animate-spin" />
+            <h3 className="text-xl font-semibold mb-2">Generating recommendations...</h3>
+            <p className="text-muted-foreground">
+              This may take a minute. We're analyzing your library to find the best matches.
+            </p>
+          </Card>
+        ) : visibleRecommendations.length === 0 ? (
           <Card className="p-12 text-center">
             <Sparkles className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
             <h3 className="text-xl font-semibold mb-2" data-testid="text-no-recommendations">No recommendations yet</h3>
