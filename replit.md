@@ -52,6 +52,11 @@ Currently implemented with basic session-based authentication structure, though 
 
 ## Recent Changes
 
+### January 4, 2026
+- **Unified Dashboard**: Consolidated all six sections (Countdown Timer, Next Up, Watch Later, New in Feed, New Releases, Recommendations) into a single Dashboard page
+- **Simplified Navigation**: Replaced sidebar with top navigation bar containing Dashboard and Library links
+- **Removed Settings Page**: Eliminated the empty settings page from routes
+
 ### October 28, 2025
 - **TMDB Recommendations System**: Implemented complete recommendation engine using TMDB's collaborative filtering API
   - New `/recommendations` page with mobile-responsive card layout showing personalized show suggestions
