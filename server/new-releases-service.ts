@@ -21,6 +21,7 @@ interface TVMazeScheduleItem {
     network: { name: string } | null;
     webChannel: { name: string } | null;
     status: string | null;
+    language: string | null;
   };
 }
 
@@ -118,6 +119,9 @@ async function fetchNewReleases(): Promise<NewReleaseShow[]> {
           
           // Only include Season 1, Episode 1 (true series premieres)
           if (item.season !== 1 || item.number !== 1) continue;
+          
+          // Only include English language shows
+          if (show.language !== 'English') continue;
           
           // Skip if we've already seen this show
           if (seenShowIds.has(show.id)) continue;
