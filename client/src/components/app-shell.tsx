@@ -13,7 +13,6 @@ import {
   Tv,
   PlayCircle,
   Clock,
-  Filter,
   Library,
   Sparkles,
   Calendar,
@@ -39,8 +38,7 @@ interface AppShellProps {
 }
 
 const primaryNavItems = [
-  { id: "dashboard", label: "Next Up", href: "/", icon: PlayCircle },
-  { id: "triage", label: "Triage", href: "/triage", showBadge: true, icon: Filter },
+  { id: "dashboard", label: "Dashboard", href: "/", showBadge: true, icon: PlayCircle },
   { id: "library", label: "Library", href: "/library", icon: Library },
 ];
 
@@ -152,7 +150,6 @@ export default function AppShell({ children }: AppShellProps) {
   const getActiveTab = () => {
     if (location === "/" || location === "/dashboard") return "dashboard";
     if (location === "/watch-later") return "watch-later";
-    if (location === "/triage") return "triage";
     if (location === "/library" || location.startsWith("/show/") || location.startsWith("/episode/")) return "library";
     if (location === "/recommendations") return "recommendations";
     if (location === "/new-releases") return "new-releases";
@@ -299,7 +296,7 @@ export default function AppShell({ children }: AppShellProps) {
                   </TooltipTrigger>
                   <TooltipContent side="right">
                     {item.label}
-                    {item.id === 'triage' && untriagedCount > 0 && ` (${untriagedCount})`}
+                    {item.id === 'dashboard' && untriagedCount > 0 && ` (${untriagedCount})`}
                   </TooltipContent>
                 </Tooltip>
               ))}

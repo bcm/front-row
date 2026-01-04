@@ -6,7 +6,6 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import AppShell from "@/components/app-shell";
 import Dashboard from "./pages/dashboard";
 import WatchLater from "./pages/watch-later";
-import Triage from "./pages/triage";
 import Library from "./pages/library";
 import Shared from "./pages/shared";
 import Recommendations from "./pages/recommendations";
@@ -22,7 +21,6 @@ function Router() {
       <Route path="/" component={Dashboard} />
       <Route path="/dashboard" component={Dashboard} />
       <Route path="/watch-later" component={WatchLater} />
-      <Route path="/triage" component={Triage} />
       <Route path="/library" component={Library} />
       <Route path="/shared" component={Shared} />
       <Route path="/recommendations" component={Recommendations} />
