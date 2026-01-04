@@ -1331,90 +1331,84 @@ export default function Dashboard() {
                 <p className="text-muted-foreground">Check back later for newly premiered shows</p>
               </div>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+              <div className="space-y-4">
                 {visibleNewReleases.map((show) => (
                   <Card
                     key={show.id}
-                    className="overflow-hidden flex flex-col"
+                    className="overflow-hidden"
                     data-testid={`card-new-release-${show.id}`}
                   >
-                    {(show.image?.original || show.image?.medium) && (
-                      <img
-                        src={show.image.original || show.image.medium}
-                        alt={show.name}
-                        className="w-full aspect-[2/3] object-cover"
-                        data-testid={`img-poster-${show.id}`}
-                      />
-                    )}
-                    <div className="p-4 flex-1 flex flex-col">
-                      <h3 className="font-semibold text-lg mb-2" data-testid={`text-show-name-${show.id}`}>
-                        {show.name}
-                      </h3>
-                      
-                      {show.genres && show.genres.length > 0 && (
-                        <div className="flex flex-wrap gap-1 mb-2">
-                          {show.genres.slice(0, 3).map((genre) => (
-                            <Badge key={genre} variant="secondary" className="text-xs">
-                              {genre}
-                            </Badge>
-                          ))}
+                    <div className="flex flex-col sm:flex-row">
+                      {(show.image?.original || show.image?.medium) && (
+                        <img
+                          src={show.image.medium || show.image.original}
+                          alt={show.name}
+                          className="w-full sm:w-24 h-48 sm:h-auto object-cover flex-shrink-0"
+                          data-testid={`img-poster-${show.id}`}
+                        />
+                      )}
+                      <div className="p-4 flex-1 flex flex-col sm:flex-row sm:items-center gap-4">
+                        <div className="flex-1 min-w-0">
+                          <h3 className="font-semibold text-lg mb-1" data-testid={`text-show-name-${show.id}`}>
+                            {show.name}
+                          </h3>
+                          <div className="flex items-center gap-2 text-sm text-muted-foreground mb-2">
+                            <span data-testid={`text-premiere-${show.id}`}>
+                              📅 {formatPremiereDate(show.premiered)}
+                            </span>
+                            {(show.network || show.webChannel) && (
+                              <span>• {show.network || show.webChannel}</span>
+                            )}
+                          </div>
+                          {show.genres && show.genres.length > 0 && (
+                            <div className="flex flex-wrap gap-1">
+                              {show.genres.slice(0, 3).map((genre) => (
+                                <Badge key={genre} variant="secondary" className="text-xs">
+                                  {genre}
+                                </Badge>
+                              ))}
+                            </div>
+                          )}
                         </div>
-                      )}
-
-                      <div className="flex items-center gap-2 mb-2 text-sm text-muted-foreground">
-                        <span className="font-medium" data-testid={`text-premiere-${show.id}`}>
-                          📅 {formatPremiereDate(show.premiered)}
-                        </span>
-                        {(show.network || show.webChannel) && (
-                          <span>• {show.network || show.webChannel}</span>
-                        )}
-                      </div>
-
-                      {show.summary && (
-                        <p className="text-sm text-muted-foreground line-clamp-3 mb-4 flex-1">
-                          {stripHtml(show.summary)}
-                        </p>
-                      )}
-
-                      <div className="flex flex-col gap-2 mt-auto">
-                        <div className="flex gap-2">
+                        <div className="flex gap-2 flex-shrink-0">
                           <Button
                             onClick={() => newReleaseAddMutation.mutate(show)}
                             disabled={newReleaseProcessingId === show.id}
-                            className="flex-1"
+                            size="sm"
                             data-testid={`button-add-${show.id}`}
                           >
                             {newReleaseProcessingId === show.id ? (
-                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                              <Loader2 className="h-4 w-4 mr-1 animate-spin" />
                             ) : (
-                              <Plus className="h-4 w-4 mr-2" />
+                              <Plus className="h-4 w-4 mr-1" />
                             )}
                             Add
+                          </Button>
+                          <Button
+                            onClick={() => newReleaseAddWatchedMutation.mutate(show)}
+                            disabled={newReleaseProcessingId === show.id}
+                            variant="secondary"
+                            size="sm"
+                            data-testid={`button-add-watched-${show.id}`}
+                          >
+                            {newReleaseProcessingId === show.id ? (
+                              <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                            ) : (
+                              <CheckCheck className="h-4 w-4 mr-1" />
+                            )}
+                            Watched
                           </Button>
                           <Button
                             onClick={() => newReleaseDismissMutation.mutate(show.id)}
                             disabled={newReleaseDismissMutation.isPending}
                             variant="outline"
                             size="icon"
+                            className="h-8 w-8"
                             data-testid={`button-dismiss-${show.id}`}
                           >
                             <X className="h-4 w-4" />
                           </Button>
                         </div>
-                        <Button
-                          onClick={() => newReleaseAddWatchedMutation.mutate(show)}
-                          disabled={newReleaseProcessingId === show.id}
-                          variant="secondary"
-                          className="w-full"
-                          data-testid={`button-add-watched-${show.id}`}
-                        >
-                          {newReleaseProcessingId === show.id ? (
-                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                          ) : (
-                            <CheckCheck className="h-4 w-4 mr-2" />
-                          )}
-                          Watched
-                        </Button>
                       </div>
                     </div>
                   </Card>
@@ -1475,97 +1469,89 @@ export default function Dashboard() {
                 </Button>
               </div>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+              <div className="space-y-4">
                 {visibleRecommendations.map((rec) => (
                   <Card
                     key={rec.id}
-                    className="overflow-hidden flex flex-col"
+                    className="overflow-hidden"
                     data-testid={`card-recommendation-${rec.tmdbId}`}
                   >
-                    {rec.posterPath && (
-                      <img
-                        src={`https://image.tmdb.org/t/p/w500${rec.posterPath}`}
-                        alt={rec.name}
-                        className="w-full aspect-[2/3] object-cover"
-                        data-testid={`img-rec-poster-${rec.tmdbId}`}
-                      />
-                    )}
-                    <div className="p-4 flex-1 flex flex-col">
-                      <h3 className="font-semibold text-lg mb-2" data-testid={`text-rec-show-name-${rec.tmdbId}`}>
-                        {rec.name}
-                      </h3>
-                      
-                      {rec.genres && rec.genres.length > 0 && (
-                        <div className="flex flex-wrap gap-1 mb-2">
-                          {rec.genres.slice(0, 3).map((genre) => (
-                            <Badge key={genre} variant="secondary" className="text-xs">
-                              {genre}
-                            </Badge>
-                          ))}
+                    <div className="flex flex-col sm:flex-row">
+                      {rec.posterPath && (
+                        <img
+                          src={`https://image.tmdb.org/t/p/w154${rec.posterPath}`}
+                          alt={rec.name}
+                          className="w-full sm:w-24 h-48 sm:h-auto object-cover flex-shrink-0"
+                          data-testid={`img-rec-poster-${rec.tmdbId}`}
+                        />
+                      )}
+                      <div className="p-4 flex-1 flex flex-col sm:flex-row sm:items-center gap-4">
+                        <div className="flex-1 min-w-0">
+                          <h3 className="font-semibold text-lg mb-1" data-testid={`text-rec-show-name-${rec.tmdbId}`}>
+                            {rec.name}
+                          </h3>
+                          <div className="flex items-center gap-2 text-sm text-muted-foreground mb-2 flex-wrap">
+                            {rec.voteAverage && (
+                              <span data-testid={`text-rec-rating-${rec.tmdbId}`}>
+                                ⭐ {(rec.voteAverage / 10).toFixed(1)}
+                              </span>
+                            )}
+                            {rec.network && (
+                              <span data-testid={`text-rec-network-${rec.tmdbId}`}>📺 {rec.network}</span>
+                            )}
+                            {rec.firstAirDate && (
+                              <span>• {new Date(rec.firstAirDate).getFullYear()}</span>
+                            )}
+                          </div>
+                          {rec.genres && rec.genres.length > 0 && (
+                            <div className="flex flex-wrap gap-1">
+                              {rec.genres.slice(0, 3).map((genre) => (
+                                <Badge key={genre} variant="secondary" className="text-xs">
+                                  {genre}
+                                </Badge>
+                              ))}
+                            </div>
+                          )}
                         </div>
-                      )}
-
-                      {(rec.voteAverage || rec.network || rec.firstAirDate) && (
-                        <div className="flex items-center gap-2 mb-2 text-sm text-muted-foreground flex-wrap">
-                          {rec.voteAverage && (
-                            <span className="font-medium" data-testid={`text-rec-rating-${rec.tmdbId}`}>
-                              ⭐ {(rec.voteAverage / 10).toFixed(1)}
-                            </span>
-                          )}
-                          {rec.network && (
-                            <span data-testid={`text-rec-network-${rec.tmdbId}`}>📺 {rec.network}</span>
-                          )}
-                          {rec.firstAirDate && (
-                            <span>• {new Date(rec.firstAirDate).getFullYear()}</span>
-                          )}
-                        </div>
-                      )}
-
-                      {rec.overview && (
-                        <p className="text-sm text-muted-foreground line-clamp-3 mb-4 flex-1">
-                          {rec.overview}
-                        </p>
-                      )}
-
-                      <div className="flex flex-col gap-2 mt-auto">
-                        <div className="flex gap-2">
+                        <div className="flex gap-2 flex-shrink-0">
                           <Button
                             onClick={() => recAcceptMutation.mutate({ tmdbId: rec.tmdbId, showName: rec.name })}
                             disabled={recProcessingTmdbId === rec.tmdbId}
-                            className="flex-1"
+                            size="sm"
                             data-testid={`button-rec-accept-${rec.tmdbId}`}
                           >
                             {recProcessingTmdbId === rec.tmdbId ? (
-                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                              <Loader2 className="h-4 w-4 mr-1 animate-spin" />
                             ) : (
-                              <Plus className="h-4 w-4 mr-2" />
+                              <Plus className="h-4 w-4 mr-1" />
                             )}
                             Add
+                          </Button>
+                          <Button
+                            onClick={() => recAcceptWatchedMutation.mutate({ tmdbId: rec.tmdbId, showName: rec.name })}
+                            disabled={recProcessingTmdbId === rec.tmdbId}
+                            variant="secondary"
+                            size="sm"
+                            data-testid={`button-rec-accept-watched-${rec.tmdbId}`}
+                          >
+                            {recProcessingTmdbId === rec.tmdbId ? (
+                              <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                            ) : (
+                              <CheckCheck className="h-4 w-4 mr-1" />
+                            )}
+                            Watched
                           </Button>
                           <Button
                             onClick={() => recDismissMutation.mutate(rec.tmdbId)}
                             disabled={recDismissMutation.isPending}
                             variant="outline"
                             size="icon"
+                            className="h-8 w-8"
                             data-testid={`button-rec-dismiss-${rec.tmdbId}`}
                           >
                             <X className="h-4 w-4" />
                           </Button>
                         </div>
-                        <Button
-                          onClick={() => recAcceptWatchedMutation.mutate({ tmdbId: rec.tmdbId, showName: rec.name })}
-                          disabled={recProcessingTmdbId === rec.tmdbId}
-                          variant="secondary"
-                          className="w-full"
-                          data-testid={`button-rec-accept-watched-${rec.tmdbId}`}
-                        >
-                          {recProcessingTmdbId === rec.tmdbId ? (
-                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                          ) : (
-                            <CheckCheck className="h-4 w-4 mr-2" />
-                          )}
-                          Watched
-                        </Button>
                       </div>
                     </div>
                   </Card>
