@@ -22,6 +22,8 @@ interface TMDBSearchResult {
   vote_count: number;
   genre_ids: number[];
   first_air_date: string;
+  original_language: string;
+  origin_country: string[];
 }
 
 interface TMDBRecommendationResult {
@@ -151,6 +153,14 @@ export async function aggregateRecommendations(
     }
     
     for (const rec of recommendations) {
+      // Filter: English language only
+      if (rec.original_language !== 'en') continue;
+      
+      // Filter: US origin (or global streaming with no specific country)
+      const isUSOrigin = rec.origin_country?.includes('US');
+      const isGlobalStreaming = !rec.origin_country || rec.origin_country.length === 0;
+      if (!isUSOrigin && !isGlobalStreaming) continue;
+      
       if (!recommendationMap.has(rec.id)) {
         const genres = rec.genre_ids.map(id => genreMap[id] || "Unknown");
         const genreMatchScore = genres.filter(g => userGenres.includes(g)).length;
