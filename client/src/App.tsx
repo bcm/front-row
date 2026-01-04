@@ -9,6 +9,7 @@ import Triage from "./pages/triage";
 import Library from "./pages/library";
 import Shared from "./pages/shared";
 import Recommendations from "./pages/recommendations";
+import NewReleases from "./pages/new-releases";
 import SettingsPage from "./pages/settings";
 import ShowDetail from "./pages/show-detail";
 import EpisodeDetail from "./pages/episode-detail";
@@ -24,6 +25,7 @@ function Router() {
       <Route path="/library" component={Library} />
       <Route path="/shared" component={Shared} />
       <Route path="/recommendations" component={Recommendations} />
+      <Route path="/new-releases" component={NewReleases} />
       <Route path="/settings" component={SettingsPage} />
       <Route path="/show/:id" component={ShowDetail} />
       <Route path="/shows/:id" component={ShowDetail} />

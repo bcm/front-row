@@ -174,6 +174,7 @@ export default function Header({ onSearch }: HeaderProps) {
     { id: "triage", label: "Triage", href: "/triage", showBadge: true, icon: Filter },
     { id: "library", label: "Library", href: "/library", icon: Library },
     { id: "recommendations", label: "Recommendations", href: "/recommendations", icon: Sparkles },
+    { id: "new-releases", label: "New Releases", href: "/new-releases", icon: Calendar },
   ];
 
   const getActiveTab = () => {
@@ -182,6 +183,7 @@ export default function Header({ onSearch }: HeaderProps) {
     if (location === "/triage") return "triage";
     if (location === "/library" || location.startsWith("/show/") || location.startsWith("/episode/")) return "library";
     if (location === "/recommendations") return "recommendations";
+    if (location === "/new-releases") return "new-releases";
     return "dashboard";
   };
 
