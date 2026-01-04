@@ -945,7 +945,7 @@ export default function Dashboard() {
             <AlertTriangle className="h-4 w-4" />
             Triage
             {untriagedEpisodes && untriagedEpisodes.filter((ep: any) => ep.episode.airdate && !hiddenEpisodes.has(ep.episode.id)).length > 0 && (
-              <Badge variant="secondary" className="ml-1 text-xs px-1.5 py-0">
+              <Badge variant="destructive" className="ml-1 text-xs px-1.5 py-0">
                 {untriagedEpisodes.filter((ep: any) => ep.episode.airdate && !hiddenEpisodes.has(ep.episode.id)).length}
               </Badge>
             )}
@@ -958,7 +958,7 @@ export default function Dashboard() {
             <Sparkles className="h-4 w-4" />
             Discover
             {visibleNewReleases.length > 0 && (
-              <Badge variant="secondary" className="ml-1 text-xs px-1.5 py-0">
+              <Badge variant="destructive" className="ml-1 text-xs px-1.5 py-0">
                 {visibleNewReleases.length}
               </Badge>
             )}
