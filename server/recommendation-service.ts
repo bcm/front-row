@@ -72,6 +72,10 @@ export async function refreshRecommendationsForUser(userId: string): Promise<{ i
     console.log(`[RECOMMENDATIONS] Aggregating recommendations from ${tmdbIds.length} shows (${highlyEngagedTmdbIds.length} highly engaged, ${moderatelyEngagedTmdbIds.length} moderately engaged)`);
     const aggregated = await aggregateRecommendations(tmdbIds, Array.from(userGenres), highlyEngagedTmdbIds, moderatelyEngagedTmdbIds);
     
+    // Clear old recommendations before adding new ones
+    await storage.clearRecommendations(userId);
+    console.log(`[RECOMMENDATIONS] Cleared old recommendations for user ${userId}`);
+    
     const dismissed = await storage.getDismissedRecommendations(userId);
     const dismissedIds = new Set(dismissed.map(d => d.tmdbId));
     
