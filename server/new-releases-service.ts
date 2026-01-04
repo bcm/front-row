@@ -18,8 +18,8 @@ interface TVMazeScheduleItem {
     image: { medium?: string; original?: string } | null;
     premiered: string | null;
     genres: string[];
-    network: { name: string } | null;
-    webChannel: { name: string } | null;
+    network: { name: string; country?: { code: string } | null } | null;
+    webChannel: { name: string; country?: { code: string } | null } | null;
     status: string | null;
     language: string | null;
   };
@@ -122,6 +122,14 @@ async function fetchNewReleases(): Promise<NewReleaseShow[]> {
           
           // Only include English language shows
           if (show.language !== 'English') continue;
+          
+          // Only include US channels/platforms (or global streaming services with no country)
+          const networkCountry = show.network?.country?.code;
+          const webChannelCountry = show.webChannel?.country?.code;
+          const isUSNetwork = networkCountry === 'US';
+          const isUSWebChannel = webChannelCountry === 'US';
+          const isGlobalStreaming = show.webChannel && !webChannelCountry; // Netflix, Amazon, etc.
+          if (!isUSNetwork && !isUSWebChannel && !isGlobalStreaming) continue;
           
           // Skip if we've already seen this show
           if (seenShowIds.has(show.id)) continue;
