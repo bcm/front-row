@@ -1420,7 +1420,7 @@ export default function Dashboard() {
             <div className="w-6 h-6 bg-purple-500 rounded-full flex items-center justify-center">
               <Sparkles className="w-4 h-4 text-white" />
             </div>
-            <h2 className="flex-1 min-w-0 text-2xl sm:text-3xl font-bold truncate" data-testid="text-section-title-recommendations">Recommendations</h2>
+            <h2 className="flex-1 min-w-0 text-2xl sm:text-3xl font-bold truncate" data-testid="text-section-title-recommendations">You Might Also Like...</h2>
             <Button
               onClick={() => recRefreshMutation.mutate()}
               disabled={recRefreshMutation.isPending}
@@ -1449,7 +1449,7 @@ export default function Dashboard() {
             ) : visibleRecommendations.length === 0 ? (
               <div className="text-center py-8">
                 <Sparkles className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
-                <h3 className="text-lg font-semibold text-muted-foreground mb-2" data-testid="text-no-recommendations">No recommendations yet</h3>
+                <h3 className="text-lg font-semibold text-muted-foreground mb-2" data-testid="text-no-recommendations">Nothing to suggest yet</h3>
                 <p className="text-muted-foreground mb-4">Add more shows to your library to get personalized recommendations</p>
                 <Button
                   onClick={() => recRefreshMutation.mutate()}
