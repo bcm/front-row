@@ -945,13 +945,13 @@ export default function Dashboard() {
             <AlertTriangle className="h-4 w-4" />
             Triage
           </TabsTrigger>
-          <TabsTrigger value="discover" className="gap-2" data-testid="tab-discover">
-            <Sparkles className="h-4 w-4" />
-            Discover
-          </TabsTrigger>
           <TabsTrigger value="countdown" className="gap-2" data-testid="tab-countdown">
             <Timer className="h-4 w-4" />
             Countdown
+          </TabsTrigger>
+          <TabsTrigger value="discover" className="gap-2" data-testid="tab-discover">
+            <Sparkles className="h-4 w-4" />
+            Discover
           </TabsTrigger>
         </TabsList>
 
