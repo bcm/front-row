@@ -1,0 +1,124 @@
+Here’s a paste-ready prompt you can drop into Replit AI. It’s written to be implementation-driven, with clear assumptions, steps, and acceptance criteria. (Swap the bracketed placeholders to match your app.)
+
+⸻
+
+Prompt for Replit
+
+You are working inside my existing TV app codebase. Your job is to add a “New Releases” page that shows items newly added to the TVmaze database, including:
+	1.	New shows (shows we have never seen before)
+	2.	New seasons for existing shows (seasons we have never seen before)
+
+This is not based on air date; it is based on database addition / change detection.
+
+Constraints / Assumptions
+	•	The app already has routing and a navigation UI. Add a new nav item: New Releases.
+	•	The app already has a backend (or server API layer). If it’s a single-page app with no backend, create a minimal server route using the existing pattern in this repo (e.g., Next.js API routes / Express routes / Remix loaders / etc.). Follow the repo’s established conventions.
+	•	Use the public TVmaze API:
+	•	GET https://api.tvmaze.com/updates/shows?since={unixTimestamp}
+	•	GET https://api.tvmaze.com/shows/{id}
+	•	GET https://api.tvmaze.com/shows/{id}/seasons
+	•	Add caching and persistence so we can reliably detect “newly added” compared to what we’ve previously seen.
+
+Required behavior
+
+New Releases page UI
+	•	Route: /<whatever-your-routing-pattern-is>/new-releases (use the app’s existing route style)
+	•	Page sections:
+	1.	New Shows
+	2.	New Seasons
+	•	Each item is a “card” consistent with our existing show cards.
+	•	For New Show cards, display:
+	•	Show poster (if available), show name, premiered date (if present), genres, network/webChannel, summary snippet
+	•	Link to the show detail page in our app
+	•	For New Season cards, display:
+	•	Show poster (if available), show name, “Season X”, episodeOrder (if available), premiereDate (if present)
+	•	Link to the show detail page in our app (and/or season detail if we have one)
+
+Data definition
+	•	“New show” = a show ID returned by /updates/shows that does not exist in our local persistence store of known show IDs.
+	•	“New season” = any season ID returned by /shows/{id}/seasons for an updated show where that season ID does not exist in our local persistence store of known season IDs.
+	•	A single poll can yield both a new show and new seasons; dedupe appropriately.
+
+Persistence (must implement)
+
+Implement a lightweight persistence store in the simplest way compatible with this repo:
+	•	Preferred: use the app’s existing database (if present).
+	•	If no DB exists, use a local file store in the project like:
+	•	data/tvmaze_state.json (or similar)
+	•	The stored state must include:
+	•	lastCheckedUnix (number)
+	•	knownShowIds (set/list)
+	•	knownSeasonIds (set/list)
+	•	On startup, load state; if missing, initialize it safely.
+
+Backend/API layer (must implement)
+
+Add an internal endpoint that the New Releases page calls, e.g.:
+	•	GET /api/new-releases
+Returns JSON shaped like:
+
+{
+  "asOfUnix": 1234567890,
+  "newShows": [ { "id": 1, "name": "...", "image": "...", "summary": "...", "premiered": "...", "genres": [], "network": "...", "webChannel": "..." } ],
+  "newSeasons": [ { "showId": 1, "showName": "...", "showImage": "...", "seasonId": 999, "seasonNumber": 2, "episodeOrder": 10, "premiereDate": "..." } ]
+}
+
+Implementation details for GET /api/new-releases:
+	1.	Read persisted state (lastCheckedUnix, known IDs).
+	2.	Call TVmaze updates/shows?since=lastCheckedUnix.
+	3.	For each returned show ID:
+	•	Fetch /shows/{id} (for show metadata)
+	•	Fetch /shows/{id}/seasons (for season list)
+	4.	Compute:
+	•	newShows = show IDs not in knownShowIds
+	•	newSeasons = season IDs not in knownSeasonIds
+	5.	Update stored state:
+	•	Add all encountered show IDs to knownShowIds
+	•	Add all encountered season IDs to knownSeasonIds
+	•	Set lastCheckedUnix = nowUnix
+	6.	Return JSON payload described above.
+
+Performance / rate limiting / caching requirements
+	•	Avoid hammering TVmaze:
+	•	Add server-side caching so /api/new-releases only performs the poll if at least 10 minutes have passed since the last poll; otherwise return cached results.
+	•	Concurrency:
+	•	Fetch show details/seasons with a max concurrency limit (e.g., 5 at a time) to avoid bursts.
+	•	Errors:
+	•	If TVmaze API fails, return a helpful error payload and do not corrupt state.
+	•	Partial failure is acceptable: skip failed show IDs and log them; still update state carefully (only after successful processing).
+
+Tests (must implement)
+
+Add automated tests consistent with this repo’s testing stack (Jest/Vitest/etc.). Include at least:
+	1.	First run with empty state: returns items and persists state.
+	2.	Second run with no new updates: returns empty arrays.
+	3.	New seasons detected for an existing show: returns season entries without re-adding show as new.
+	4.	TVmaze failure: does not advance lastCheckedUnix.
+
+Mock network calls (do not hit real TVmaze in tests).
+
+UI polish
+	•	Add loading state, empty state (“No new releases since last check”), and error state.
+	•	Add a “Last checked: {date/time}” line at top, based on asOfUnix.
+	•	Provide a manual “Refresh” button that calls /api/new-releases?force=true:
+	•	force=true bypasses the 10-minute cache and re-polls immediately.
+
+Deliverables
+	•	All code changes committed in-place.
+	•	A short NEW_RELEASES.md describing:
+	•	How the feed works (show vs season detection)
+	•	Where state is stored
+	•	How to run tests
+	•	Any configuration knobs (poll interval, concurrency)
+
+Important
+
+Before coding:
+	1.	Inspect the repo structure.
+	2.	Identify framework (Next/React/Express/etc.), routing pattern, existing API conventions, and test stack.
+	3.	Reuse existing styling/components.
+	4.	Then implement the New Releases feature following the above requirements.
+
+⸻
+
+If you tell me what stack your “existing tv app” is (Next.js? Remix? Vite + Express? etc.), I can tailor that prompt even more tightly to your folder structure and patterns.
