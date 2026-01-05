@@ -85,25 +85,33 @@ export default function CountdownTimer({ showMode = 'personal' }: CountdownTimer
   const nextEpisodesByShow = useMemo(() => {
     if (!upcomingEpisodes || upcomingEpisodes.length === 0) return [];
     
+    const isEarlier = (a: UpcomingEpisode, b: UpcomingEpisode): boolean => {
+      if (!a.airdate) return false;
+      if (!b.airdate) return true;
+      if (a.airdate < b.airdate) return true;
+      if (a.airdate > b.airdate) return false;
+      // Same date - compare by season then episode number
+      if ((a.season || 0) < (b.season || 0)) return true;
+      if ((a.season || 0) > (b.season || 0)) return false;
+      return (a.number || 0) < (b.number || 0);
+    };
+    
     const showMap = new Map<number, UpcomingEpisode>();
     
     upcomingEpisodes.forEach(episode => {
       const showId = episode.show.id;
       const existing = showMap.get(showId);
       
-      if (!existing) {
+      if (!existing || isEarlier(episode, existing)) {
         showMap.set(showId, episode);
-      } else {
-        // Replace if: new episode has a date and (existing has no date OR new is earlier)
-        if (episode.airdate && (!existing.airdate || episode.airdate < existing.airdate)) {
-          showMap.set(showId, episode);
-        }
       }
     });
     
     return Array.from(showMap.values()).sort((a, b) => {
       if (!a.airdate || !b.airdate) return 0;
-      return a.airdate.localeCompare(b.airdate);
+      if (a.airdate !== b.airdate) return a.airdate.localeCompare(b.airdate);
+      if ((a.season || 0) !== (b.season || 0)) return (a.season || 0) - (b.season || 0);
+      return (a.number || 0) - (b.number || 0);
     });
   }, [upcomingEpisodes]);
 
