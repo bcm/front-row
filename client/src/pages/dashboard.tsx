@@ -37,7 +37,11 @@ export default function Dashboard() {
   const activeTab: TabType = VALID_TABS.includes(params.tab as TabType) ? (params.tab as TabType) : "queue";
 
   const handleTabChange = (value: string) => {
-    setLocation(`/dashboard/${value}`);
+    if (value === "queue") {
+      setLocation("/dashboard");
+    } else {
+      setLocation(`/dashboard/${value}`);
+    }
   };
 
   // User settings query to get show mode
