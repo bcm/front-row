@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Link } from "wouter";
+import { Link, useParams, useLocation } from "wouter";
 import CountdownTimer from "@/components/countdown-timer";
 
 interface NewReleasesResponse {
@@ -19,7 +19,12 @@ interface NewReleasesResponse {
   fromCache: boolean;
 }
 
+const VALID_TABS = ["queue", "countdown", "triage", "discover"] as const;
+type TabType = typeof VALID_TABS[number];
+
 export default function Dashboard() {
+  const params = useParams<{ tab?: string }>();
+  const [, setLocation] = useLocation();
   const [hiddenEpisodes, setHiddenEpisodes] = useState<Set<number>>(new Set());
   const [expandedSeasons, setExpandedSeasons] = useState<Record<string, Set<number>>>({});
   const [newReleaseProcessingId, setNewReleaseProcessingId] = useState<number | null>(null);
@@ -28,6 +33,12 @@ export default function Dashboard() {
   const [dismissedRecs, setDismissedRecs] = useState<Set<number>>(new Set());
   const { toast } = useToast();
   const queryClient = useQueryClient();
+
+  const activeTab: TabType = VALID_TABS.includes(params.tab as TabType) ? (params.tab as TabType) : "queue";
+
+  const handleTabChange = (value: string) => {
+    setLocation(`/dashboard/${value}`);
+  };
 
   // User settings query to get show mode
   const { data: userSettings } = useQuery({
@@ -901,7 +912,7 @@ export default function Dashboard() {
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
-      <Tabs defaultValue="queue" className="w-full">
+      <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
         <TabsList className="mb-6 mx-auto flex w-fit">
           <TabsTrigger value="queue" className="gap-2" data-testid="tab-queue">
             <PlayCircle className="h-4 w-4" />

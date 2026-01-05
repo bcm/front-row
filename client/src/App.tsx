@@ -16,6 +16,7 @@ function Router() {
     <Switch>
       <Route path="/" component={Dashboard} />
       <Route path="/dashboard" component={Dashboard} />
+      <Route path="/dashboard/:tab" component={Dashboard} />
       <Route path="/library" component={Library} />
       <Route path="/shared" component={Shared} />
       <Route path="/show/:id" component={ShowDetail} />
