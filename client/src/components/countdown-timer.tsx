@@ -1,6 +1,5 @@
-import { useState, useEffect, useMemo } from "react";
+import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Badge } from "@/components/ui/badge";
 import { Timer, Tv, Calendar } from "lucide-react";
 import { Link } from "wouter";
 import type { Episode, Show } from "@shared/schema";
@@ -9,57 +8,32 @@ interface UpcomingEpisode extends Episode {
   show: Show;
 }
 
-function formatCountdown(targetDate: Date): { text: string; urgent: boolean } {
-  const now = new Date();
-  const diff = targetDate.getTime() - now.getTime();
+function formatRelativeDate(airdate: string): string {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
   
-  if (diff <= 0) {
-    return { text: "Airing now!", urgent: true };
-  }
+  const target = new Date(airdate + "T00:00:00");
+  target.setHours(0, 0, 0, 0);
   
-  const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-  const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-  const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-  const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+  const diffMs = target.getTime() - today.getTime();
+  const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24));
   
-  if (days > 0) {
-    return { text: `${days}d ${hours}h ${minutes}m`, urgent: false };
-  } else if (hours > 0) {
-    return { text: `${hours}h ${minutes}m ${seconds}s`, urgent: hours < 2 };
+  if (diffDays < 0) {
+    const absDays = Math.abs(diffDays);
+    if (absDays === 1) return "Yesterday";
+    return `${absDays} days ago`;
+  } else if (diffDays === 0) {
+    return "Today";
+  } else if (diffDays === 1) {
+    return "Tomorrow";
+  } else if (diffDays < 7) {
+    return `${diffDays} days from now`;
+  } else if (diffDays < 14) {
+    return "Next week";
   } else {
-    return { text: `${minutes}m ${seconds}s`, urgent: true };
+    const weeks = Math.floor(diffDays / 7);
+    return `${weeks} weeks from now`;
   }
-}
-
-interface ScheduleInfo {
-  time?: string;
-  days?: string[];
-}
-
-function CountdownDisplay({ airdate, schedule }: { airdate: string; schedule?: ScheduleInfo | null }) {
-  const [countdown, setCountdown] = useState<{ text: string; urgent: boolean }>({ text: "", urgent: false });
-  
-  useEffect(() => {
-    let airTime = "00:00";
-    if (schedule?.time && /^\d{2}:\d{2}$/.test(schedule.time)) {
-      airTime = schedule.time;
-    }
-    const targetDate = new Date(`${airdate}T${airTime}:00`);
-    
-    const update = () => {
-      setCountdown(formatCountdown(targetDate));
-    };
-    
-    update();
-    const interval = setInterval(update, 1000);
-    return () => clearInterval(interval);
-  }, [airdate, schedule]);
-  
-  return (
-    <span className={`font-mono text-sm ${countdown.urgent ? "text-orange-500 dark:text-orange-400" : "text-muted-foreground"}`}>
-      {countdown.text}
-    </span>
-  );
 }
 
 interface CountdownTimerProps {
@@ -212,19 +186,9 @@ export default function CountdownTimer({ showMode = 'personal' }: CountdownTimer
                 )}
               </div>
               
-              <div className="flex flex-col sm:flex-row sm:items-start gap-4 flex-shrink-0">
-                <div className="space-y-1 text-sm text-muted-foreground">
-                  <div className="flex items-center space-x-1">
-                    <Calendar className="w-4 h-4" />
-                    <span>{new Date(episode.airdate!).toLocaleDateString('en-US')}</span>
-                  </div>
-                  {episode.airdate && (
-                    <div className="flex items-center space-x-1">
-                      <Timer className="w-4 h-4" />
-                      <CountdownDisplay airdate={episode.airdate} schedule={episode.show.schedule} />
-                    </div>
-                  )}
-                </div>
+              <div className="flex items-center gap-2 text-sm text-muted-foreground flex-shrink-0">
+                <Calendar className="w-4 h-4" />
+                <span>{formatRelativeDate(episode.airdate!)}</span>
               </div>
             </div>
           </div>
