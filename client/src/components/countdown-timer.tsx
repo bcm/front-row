@@ -173,12 +173,6 @@ export default function CountdownTimer({ showMode = 'personal' }: CountdownTimer
           </div>
         ))}
       </div>
-      
-      {nextEpisodesByShow.length > 5 && (
-        <div className="text-center text-sm text-muted-foreground mt-3">
-          +{nextEpisodesByShow.length - 5} more upcoming
-        </div>
-      )}
     </Card>
   );
 }
