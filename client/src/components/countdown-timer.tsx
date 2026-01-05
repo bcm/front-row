@@ -18,6 +18,8 @@ function formatRelativeDate(airdate: string): string {
   const diffMs = target.getTime() - today.getTime();
   const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24));
   
+  const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+  
   if (diffDays < 0) {
     const absDays = Math.abs(diffDays);
     if (absDays === 1) return "Yesterday";
@@ -29,7 +31,8 @@ function formatRelativeDate(airdate: string): string {
   } else if (diffDays < 7) {
     return `${diffDays} days from now`;
   } else if (diffDays < 14) {
-    return "Next week";
+    const dayOfWeek = dayNames[target.getDay()];
+    return `Next ${dayOfWeek}`;
   } else {
     const weeks = Math.floor(diffDays / 7);
     return `${weeks} weeks from now`;
