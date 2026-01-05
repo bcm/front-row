@@ -130,7 +130,7 @@ export default function CountdownTimer({ showMode = 'personal' }: CountdownTimer
       </div>
       
       <div className="space-y-3">
-        {nextEpisodesByShow.slice(0, 5).map((episode) => (
+        {nextEpisodesByShow.map((episode) => (
           <div 
             key={episode.id} 
             className="flex items-center gap-3 p-2 rounded-lg bg-muted/50 hover:bg-muted transition-colors"
