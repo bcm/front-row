@@ -29,7 +29,8 @@ function formatRelativeDate(airdate: string): string {
   } else if (diffDays === 1) {
     return "Tomorrow";
   } else if (diffDays < 7) {
-    return `${diffDays} days from now`;
+    const dayOfWeek = dayNames[target.getDay()];
+    return `This ${dayOfWeek}`;
   } else if (diffDays < 14) {
     const dayOfWeek = dayNames[target.getDay()];
     return `Next ${dayOfWeek}`;
