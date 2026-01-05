@@ -166,7 +166,7 @@ export default function CountdownTimer({ showMode = 'personal' }: CountdownTimer
               </Link>
               <Link href={`/episode/${episode.id}`}>
                 <div className="text-xs text-muted-foreground hover:underline cursor-pointer">
-                  S{String(episode.season).padStart(2, '0')}E{String(episode.number).padStart(2, '0')}: {episode.name}
+                  {episode.season}x{episode.number}: {episode.name}
                 </div>
               </Link>
               <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1">
