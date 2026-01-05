@@ -171,11 +171,7 @@ export default function CountdownTimer({ showMode = 'personal' }: CountdownTimer
               </Link>
               <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1">
                 <Calendar className="h-3 w-3" />
-                <span>{(() => {
-                    const [year, month, day] = episode.airdate!.split('-').map(Number);
-                    const date = new Date(year, month - 1, day);
-                    return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
-                  })()}</span>
+                <span>{new Date(episode.airdate + "T00:00:00").toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</span>
               </div>
             </div>
             
