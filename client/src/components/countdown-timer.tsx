@@ -179,16 +179,15 @@ export default function CountdownTimer({ showMode = 'personal' }: CountdownTimer
                     {episode.season}x{episode.number}: {episode.name}
                   </p>
                 </Link>
+                <div className="flex items-center gap-2 text-sm text-muted-foreground mt-1">
+                  <Calendar className="w-4 h-4" />
+                  <span>{formatRelativeDate(episode.airdate!)}</span>
+                </div>
                 {episode.summary && (
-                  <p className="text-sm text-muted-foreground line-clamp-2 mb-3">
+                  <p className="text-sm text-muted-foreground line-clamp-2 mt-2">
                     {episode.summary.replace(/<[^>]*>/g, '')}
                   </p>
                 )}
-              </div>
-              
-              <div className="flex items-center gap-2 text-sm text-muted-foreground flex-shrink-0">
-                <Calendar className="w-4 h-4" />
-                <span>{formatRelativeDate(episode.airdate!)}</span>
               </div>
             </div>
           </div>
