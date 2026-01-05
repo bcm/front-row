@@ -89,11 +89,13 @@ export default function CountdownTimer({ showMode = 'personal' }: CountdownTimer
     
     upcomingEpisodes.forEach(episode => {
       const showId = episode.show.id;
-      if (!showMap.has(showId)) {
+      const existing = showMap.get(showId);
+      
+      if (!existing) {
         showMap.set(showId, episode);
       } else {
-        const existing = showMap.get(showId)!;
-        if (episode.airdate && existing.airdate && episode.airdate < existing.airdate) {
+        // Replace if: new episode has a date and (existing has no date OR new is earlier)
+        if (episode.airdate && (!existing.airdate || episode.airdate < existing.airdate)) {
           showMap.set(showId, episode);
         }
       }
