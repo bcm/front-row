@@ -917,36 +917,34 @@ export default function Dashboard() {
   return (
     <div className="p-6 max-w-7xl mx-auto">
       <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
-        <div className="overflow-x-auto mb-6 -mx-6 px-6 sm:mx-0 sm:px-0">
-          <TabsList className="mx-auto flex w-fit">
-          <TabsTrigger value="queue" className="gap-2" data-testid="tab-queue">
+        <TabsList className="mb-6 mx-auto flex w-fit">
+          <TabsTrigger value="queue" className="gap-1 sm:gap-2 px-2 sm:px-3" data-testid="tab-queue">
             <PlayCircle className="h-4 w-4" />
-            Queue
+            <span className="hidden sm:inline">Queue</span>
           </TabsTrigger>
-          <TabsTrigger value="countdown" className="gap-2" data-testid="tab-countdown">
+          <TabsTrigger value="countdown" className="gap-1 sm:gap-2 px-2 sm:px-3" data-testid="tab-countdown">
             <Timer className="h-4 w-4" />
-            Countdown
+            <span className="hidden sm:inline">Countdown</span>
           </TabsTrigger>
-          <TabsTrigger value="triage" className="gap-2" data-testid="tab-triage">
+          <TabsTrigger value="triage" className="gap-1 sm:gap-2 px-2 sm:px-3" data-testid="tab-triage">
             <AlertTriangle className="h-4 w-4" />
-            Triage
+            <span className="hidden sm:inline">Triage</span>
             {untriagedEpisodes && untriagedEpisodes.filter((ep: any) => ep.episode.airdate && !hiddenEpisodes.has(ep.episode.id)).length > 0 && (
-              <Badge variant="destructive" className="ml-1 text-xs px-1.5 py-0">
+              <Badge variant="destructive" className="text-xs px-1.5 py-0">
                 {untriagedEpisodes.filter((ep: any) => ep.episode.airdate && !hiddenEpisodes.has(ep.episode.id)).length}
               </Badge>
             )}
           </TabsTrigger>
-          <TabsTrigger value="discover" className="gap-2" data-testid="tab-discover">
+          <TabsTrigger value="discover" className="gap-1 sm:gap-2 px-2 sm:px-3" data-testid="tab-discover">
             <Sparkles className="h-4 w-4" />
-            Discover
+            <span className="hidden sm:inline">Discover</span>
             {visibleNewReleases.length > 0 && (
-              <Badge variant="destructive" className="ml-1 text-xs px-1.5 py-0">
+              <Badge variant="destructive" className="text-xs px-1.5 py-0">
                 {visibleNewReleases.length}
               </Badge>
             )}
           </TabsTrigger>
-          </TabsList>
-        </div>
+        </TabsList>
 
         <TabsContent value="countdown" className="space-y-8">
           <CountdownTimer showMode={showMode} />

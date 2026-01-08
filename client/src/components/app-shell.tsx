@@ -153,11 +153,11 @@ export default function AppShell({ children }: AppShellProps) {
           </Link>
         </nav>
 
-        <div className="flex items-center gap-2 flex-1 max-w-lg ml-auto">
+        <div className="flex items-center gap-2 flex-1 max-w-xs sm:max-w-md ml-auto">
           <div className="flex-1 relative">
             <input
               type="text"
-              placeholder="Search shows and episodes..."
+              placeholder="Search..."
               value={searchQuery}
               onChange={(e) => {
                 setSearchQuery(e.target.value);
@@ -166,9 +166,9 @@ export default function AppShell({ children }: AppShellProps) {
               onBlur={() => setTimeout(() => setShowDropdown(false), 200)}
               onFocus={() => searchQuery.length >= 2 && setShowDropdown(true)}
               data-testid="input-search"
-              className="w-full bg-muted border border-border rounded-lg pl-10 pr-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              className="w-full bg-muted border border-border rounded-lg pl-9 pr-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
             />
-            <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Search className="absolute left-2.5 top-2 h-4 w-4 text-muted-foreground" />
 
           {showDropdown && (groupedResults.shows.length > 0 || groupedResults.episodes.length > 0 || searchLoading) && (
             <div className="absolute top-full left-0 right-0 mt-1 bg-card border border-border rounded-lg shadow-lg z-50 max-h-80 overflow-y-auto">
@@ -230,11 +230,11 @@ export default function AppShell({ children }: AppShellProps) {
           </div>
           <Button
             onClick={() => setShowAddDialog(true)}
-            size="sm"
+            size="icon"
+            className="h-8 w-8 shrink-0"
             data-testid="button-add-show"
           >
-            <Plus className="h-4 w-4 mr-1" />
-            Add
+            <Plus className="h-4 w-4" />
           </Button>
         </div>
 
