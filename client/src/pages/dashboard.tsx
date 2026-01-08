@@ -917,7 +917,8 @@ export default function Dashboard() {
   return (
     <div className="p-6 max-w-7xl mx-auto">
       <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
-        <TabsList className="mb-6 mx-auto flex w-fit">
+        <div className="overflow-x-auto mb-6 -mx-6 px-6 sm:mx-0 sm:px-0">
+          <TabsList className="mx-auto flex w-fit">
           <TabsTrigger value="queue" className="gap-2" data-testid="tab-queue">
             <PlayCircle className="h-4 w-4" />
             Queue
@@ -944,7 +945,8 @@ export default function Dashboard() {
               </Badge>
             )}
           </TabsTrigger>
-        </TabsList>
+          </TabsList>
+        </div>
 
         <TabsContent value="countdown" className="space-y-8">
           <CountdownTimer showMode={showMode} />
