@@ -40,6 +40,8 @@ import {
   Trash2,
   Mail,
   Loader2,
+  Link as LinkIcon,
+  Clock,
 } from "lucide-react";
 
 interface Group {
@@ -75,33 +77,49 @@ interface GroupInvite {
   group?: Group;
 }
 
-interface GroupWithMembers extends Group {
+interface GroupWithDetails extends Group {
   members: GroupMember[];
+  invites: GroupInvite[];
 }
 
 export default function Shared() {
   const { user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
-  const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
   const [newGroupName, setNewGroupName] = useState("");
   const [newGroupDescription, setNewGroupDescription] = useState("");
-  const [copiedInvite, setCopiedInvite] = useState(false);
-  const [generatedInviteUrl, setGeneratedInviteUrl] = useState<string | null>(null);
+  const [copiedInviteId, setCopiedInviteId] = useState<string | null>(null);
 
-  const { data: groups = [], isLoading: groupsLoading } = useQuery<Group[]>({
+  const { data: groups = [], isLoading: groupsLoading } = useQuery<GroupWithDetails[]>({
     queryKey: ["/api/groups"],
+    queryFn: async () => {
+      const response = await fetch('/api/groups');
+      if (!response.ok) throw new Error('Failed to fetch groups');
+      const groupList = await response.json();
+      
+      const groupsWithDetails = await Promise.all(
+        groupList.map(async (group: Group) => {
+          try {
+            const detailResponse = await fetch(`/api/groups/${group.id}`);
+            if (detailResponse.ok) {
+              const details = await detailResponse.json();
+              const invitesResponse = await fetch(`/api/groups/${group.id}/invites`);
+              const invites = invitesResponse.ok ? await invitesResponse.json() : [];
+              return { ...details, invites };
+            }
+          } catch (e) {
+            console.error('Failed to fetch group details:', e);
+          }
+          return { ...group, members: [], invites: [] };
+        })
+      );
+      return groupsWithDetails;
+    },
   });
 
   const { data: pendingInvites = [] } = useQuery<GroupInvite[]>({
     queryKey: ["/api/invites/pending"],
-  });
-
-  const { data: selectedGroup } = useQuery<GroupWithMembers>({
-    queryKey: ["/api/groups", selectedGroupId],
-    enabled: !!selectedGroupId,
   });
 
   const createGroupMutation = useMutation({
@@ -126,9 +144,9 @@ export default function Shared() {
       const response = await apiRequest("POST", `/api/groups/${groupId}/invites`, { expiresInDays: 7 });
       return response.json();
     },
-    onSuccess: (data: { inviteUrl: string }) => {
-      const fullUrl = `${window.location.origin}${data.inviteUrl}`;
-      setGeneratedInviteUrl(fullUrl);
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/groups"] });
+      toast({ title: "Invite link created!" });
     },
     onError: () => {
       toast({ title: "Failed to create invite", variant: "destructive" });
@@ -155,11 +173,8 @@ export default function Shared() {
       const response = await apiRequest("DELETE", `/api/groups/${groupId}/members/me`);
       return response.json();
     },
-    onSuccess: (_, groupId) => {
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/groups"] });
-      if (selectedGroupId === groupId) {
-        setSelectedGroupId(null);
-      }
       toast({ title: "Left group successfully" });
     },
     onError: () => {
@@ -167,13 +182,12 @@ export default function Shared() {
     },
   });
 
-  const copyInviteLink = () => {
-    if (generatedInviteUrl) {
-      navigator.clipboard.writeText(generatedInviteUrl);
-      setCopiedInvite(true);
-      setTimeout(() => setCopiedInvite(false), 2000);
-      toast({ title: "Invite link copied to clipboard!" });
-    }
+  const copyInviteLink = (invite: GroupInvite) => {
+    const fullUrl = `${window.location.origin}/join/${invite.inviteCode}`;
+    navigator.clipboard.writeText(fullUrl);
+    setCopiedInviteId(invite.id);
+    setTimeout(() => setCopiedInviteId(null), 2000);
+    toast({ title: "Invite link copied!" });
   };
 
   const handleCreateGroup = () => {
@@ -182,12 +196,6 @@ export default function Shared() {
       name: newGroupName.trim(),
       description: newGroupDescription.trim(),
     });
-  };
-
-  const handleGenerateInvite = (groupId: string) => {
-    setGeneratedInviteUrl(null);
-    setInviteDialogOpen(true);
-    createInviteMutation.mutate(groupId);
   };
 
   const getInitials = (member: GroupMember["user"]) => {
@@ -207,6 +215,16 @@ export default function Shared() {
     return member.email || "Unknown";
   };
 
+  const formatExpiryDate = (expiresAt: string | null) => {
+    if (!expiresAt) return "Never expires";
+    const date = new Date(expiresAt);
+    const now = new Date();
+    const diffDays = Math.ceil((date.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+    if (diffDays <= 0) return "Expired";
+    if (diffDays === 1) return "Expires tomorrow";
+    return `Expires in ${diffDays} days`;
+  };
+
   if (groupsLoading) {
     return (
       <div className="p-6 max-w-7xl mx-auto flex items-center justify-center min-h-[400px]">
@@ -216,10 +234,10 @@ export default function Shared() {
   }
 
   return (
-    <div className="p-6 max-w-7xl mx-auto">
+    <div className="p-6 max-w-4xl mx-auto">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold">Shared Viewing</h1>
+          <h1 className="text-2xl font-bold">Groups</h1>
           <p className="text-muted-foreground">Manage groups for watching shows together</p>
         </div>
         <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
@@ -292,22 +310,20 @@ export default function Shared() {
                       You've been invited to join this group
                     </p>
                   </div>
-                  <div className="flex gap-2">
-                    <Button
-                      size="sm"
-                      onClick={() => acceptInviteMutation.mutate(invite.inviteCode)}
-                      disabled={acceptInviteMutation.isPending}
-                    >
-                      {acceptInviteMutation.isPending ? (
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                      ) : (
-                        <>
-                          <Check className="w-4 h-4 mr-1" />
-                          Accept
-                        </>
-                      )}
-                    </Button>
-                  </div>
+                  <Button
+                    size="sm"
+                    onClick={() => acceptInviteMutation.mutate(invite.inviteCode)}
+                    disabled={acceptInviteMutation.isPending}
+                  >
+                    {acceptInviteMutation.isPending ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <>
+                        <Check className="w-4 h-4 mr-1" />
+                        Accept
+                      </>
+                    )}
+                  </Button>
                 </div>
               ))}
             </div>
@@ -330,56 +346,40 @@ export default function Shared() {
           </CardContent>
         </Card>
       ) : (
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+        <div className="space-y-6">
           {groups.map((group) => (
-            <Card key={group.id} className="relative">
+            <Card key={group.id}>
               <CardHeader>
                 <div className="flex items-start justify-between">
                   <div>
                     <CardTitle className="flex items-center gap-2">
                       {group.name}
                       {group.createdBy === user?.id && (
-                        <Crown className="w-4 h-4 text-yellow-500" />
+                        <Badge variant="secondary" className="text-xs">
+                          <Crown className="w-3 h-3 mr-1" />
+                          Owner
+                        </Badge>
                       )}
                     </CardTitle>
-                    <CardDescription>
-                      {group.description || "No description"}
-                    </CardDescription>
+                    {group.description && (
+                      <CardDescription className="mt-1">
+                        {group.description}
+                      </CardDescription>
+                    )}
                   </div>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="flex items-center gap-2 text-sm text-muted-foreground mb-4">
-                  <Users className="w-4 h-4" />
-                  {group.memberCount} {group.memberCount === 1 ? "member" : "members"}
-                </div>
-
-                <div className="flex flex-wrap gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleGenerateInvite(group.id)}
-                  >
-                    <UserPlus className="w-4 h-4 mr-1" />
-                    Invite
-                  </Button>
-                  
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setSelectedGroupId(group.id)}
-                  >
-                    <Users className="w-4 h-4 mr-1" />
-                    Members
-                  </Button>
-
                   <AlertDialog>
                     <AlertDialogTrigger asChild>
                       <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive">
                         {group.createdBy === user?.id ? (
-                          <Trash2 className="w-4 h-4" />
+                          <>
+                            <Trash2 className="w-4 h-4 mr-1" />
+                            Delete
+                          </>
                         ) : (
-                          <LogOut className="w-4 h-4" />
+                          <>
+                            <LogOut className="w-4 h-4 mr-1" />
+                            Leave
+                          </>
                         )}
                       </Button>
                     </AlertDialogTrigger>
@@ -406,86 +406,93 @@ export default function Shared() {
                     </AlertDialogContent>
                   </AlertDialog>
                 </div>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div>
+                  <h4 className="text-sm font-medium mb-3 flex items-center gap-2">
+                    <Users className="w-4 h-4" />
+                    Members ({group.members?.length || 0})
+                  </h4>
+                  <div className="flex flex-wrap gap-3">
+                    {group.members?.map((member) => (
+                      <div
+                        key={member.id}
+                        className="flex items-center gap-2 p-2 rounded-lg bg-muted/50"
+                      >
+                        <Avatar className="w-8 h-8">
+                          <AvatarImage src={member.user.profileImageUrl || undefined} />
+                          <AvatarFallback className="text-xs">{getInitials(member.user)}</AvatarFallback>
+                        </Avatar>
+                        <div>
+                          <div className="text-sm font-medium flex items-center gap-1">
+                            {getMemberName(member.user)}
+                            {member.userId === group.createdBy && (
+                              <Crown className="w-3 h-3 text-yellow-500" />
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <h4 className="text-sm font-medium mb-3 flex items-center gap-2">
+                    <LinkIcon className="w-4 h-4" />
+                    Invite Links
+                  </h4>
+                  {group.invites && group.invites.length > 0 ? (
+                    <div className="space-y-2">
+                      {group.invites.map((invite) => (
+                        <div
+                          key={invite.id}
+                          className="flex items-center gap-2 p-2 rounded-lg bg-muted/50"
+                        >
+                          <code className="flex-1 text-xs bg-background px-2 py-1 rounded truncate">
+                            {window.location.origin}/join/{invite.inviteCode}
+                          </code>
+                          <span className="text-xs text-muted-foreground flex items-center gap-1">
+                            <Clock className="w-3 h-3" />
+                            {formatExpiryDate(invite.expiresAt)}
+                          </span>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7"
+                            onClick={() => copyInviteLink(invite)}
+                          >
+                            {copiedInviteId === invite.id ? (
+                              <Check className="w-3 h-3 text-green-500" />
+                            ) : (
+                              <Copy className="w-3 h-3" />
+                            )}
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">No active invite links</p>
+                  )}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="mt-3"
+                    onClick={() => createInviteMutation.mutate(group.id)}
+                    disabled={createInviteMutation.isPending}
+                  >
+                    {createInviteMutation.isPending ? (
+                      <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                    ) : (
+                      <UserPlus className="w-4 h-4 mr-1" />
+                    )}
+                    Create New Invite Link
+                  </Button>
+                </div>
               </CardContent>
             </Card>
           ))}
         </div>
       )}
-
-      <Dialog open={inviteDialogOpen} onOpenChange={setInviteDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Invite Members</DialogTitle>
-            <DialogDescription>
-              Share this link with people you want to invite to your group.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="py-4">
-            {createInviteMutation.isPending ? (
-              <div className="flex items-center justify-center py-8">
-                <Loader2 className="w-6 h-6 animate-spin text-primary" />
-              </div>
-            ) : generatedInviteUrl ? (
-              <div className="space-y-4">
-                <div className="flex items-center gap-2">
-                  <Input value={generatedInviteUrl} readOnly className="font-mono text-sm" />
-                  <Button variant="outline" size="icon" onClick={copyInviteLink}>
-                    {copiedInvite ? (
-                      <Check className="w-4 h-4 text-green-500" />
-                    ) : (
-                      <Copy className="w-4 h-4" />
-                    )}
-                  </Button>
-                </div>
-                <p className="text-sm text-muted-foreground">
-                  This link expires in 7 days. Anyone with this link can join the group.
-                </p>
-              </div>
-            ) : null}
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={!!selectedGroupId} onOpenChange={(open) => !open && setSelectedGroupId(null)}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Group Members</DialogTitle>
-          </DialogHeader>
-          <div className="py-4">
-            {selectedGroup?.members && selectedGroup.members.length > 0 ? (
-              <div className="space-y-3">
-                {selectedGroup.members.map((member: GroupMember) => (
-                  <div
-                    key={member.id}
-                    className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted/50"
-                  >
-                    <Avatar className="w-10 h-10">
-                      <AvatarImage src={member.user.profileImageUrl || undefined} />
-                      <AvatarFallback>{getInitials(member.user)}</AvatarFallback>
-                    </Avatar>
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2">
-                        <span className="font-medium">{getMemberName(member.user)}</span>
-                        {member.userId === selectedGroup.createdBy && (
-                          <Badge variant="secondary" className="text-xs">
-                            <Crown className="w-3 h-3 mr-1" />
-                            Owner
-                          </Badge>
-                        )}
-                      </div>
-                      {member.user.email && (
-                        <p className="text-sm text-muted-foreground">{member.user.email}</p>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="text-center text-muted-foreground py-4">No members yet</p>
-            )}
-          </div>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }
