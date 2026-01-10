@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Link, useLocation } from "wouter";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
@@ -39,6 +39,21 @@ export default function AppShell({ children }: AppShellProps) {
   const [showAddDialog, setShowAddDialog] = useState(false);
   const debouncedSearch = useDebounce(searchQuery, 300);
   const queryClient = useQueryClient();
+
+  const { data: userSettings } = useQuery({
+    queryKey: ["/api/user/settings"],
+    queryFn: async () => {
+      const response = await fetch('/api/user/settings');
+      if (!response.ok) throw new Error('Failed to fetch user settings');
+      return response.json();
+    },
+  });
+
+  useEffect(() => {
+    if (userSettings?.showMode && (userSettings.showMode === 'personal' || userSettings.showMode === 'shared')) {
+      setShowMode(userSettings.showMode);
+    }
+  }, [userSettings?.showMode]);
 
   const handleShowModeChange = async (newMode: string) => {
     if (newMode !== showMode && (newMode === 'personal' || newMode === 'shared')) {
