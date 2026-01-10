@@ -1,7 +1,7 @@
 import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
-import { UserEpisode, Episode, Show, NewReleaseShow, Recommendation } from "@shared/schema";
+import { UserEpisode, Episode, Show, NewReleaseShow, Recommendation, Group } from "@shared/schema";
 import EpisodeCard from "@/components/episode-card";
 import { PlayCircle, AlertTriangle, ChevronDown, Play, Clock, Eye, SkipForward, Share, User, Calendar, Loader2, X, Plus, RefreshCw, CheckCheck, Sparkles, Timer } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
@@ -55,6 +55,18 @@ export default function Dashboard() {
   });
 
   const showMode = userSettings?.showMode || 'personal';
+
+  // Query for user's groups to display group names on episode cards
+  const { data: userGroups } = useQuery<Group[]>({
+    queryKey: ['/api/groups'],
+  });
+
+  // Helper to get group name from groupId
+  const getGroupName = (groupId: string | null | undefined): string | null => {
+    if (!groupId || !userGroups) return null;
+    const group = userGroups.find(g => g.id === groupId);
+    return group?.name || null;
+  };
 
   // Episode queries
   const { data: nextEpisodes, isLoading: nextLoading } = useQuery({
@@ -989,12 +1001,13 @@ export default function Dashboard() {
               </div>
             ) : getNextEpisodesByShow.length > 0 ? (
               <div className="space-y-4">
-                {getNextEpisodesByShow.map((userEpisode) => (
+                {getNextEpisodesByShow.map((userEpisode: any) => (
                   <EpisodeCard
                     key={userEpisode.id}
                     userEpisode={userEpisode}
                     onStatusChange={handleNextEpisodeStatusChange}
                     variant="wide"
+                    groupName={getGroupName(userEpisode.groupId)}
                   />
                 ))}
               </div>
@@ -1040,12 +1053,13 @@ export default function Dashboard() {
               </div>
             ) : getLaterEpisodesByShow.length > 0 ? (
               <div className="space-y-4">
-                {getLaterEpisodesByShow.map((userEpisode) => (
+                {getLaterEpisodesByShow.map((userEpisode: any) => (
                   <EpisodeCard
                     key={userEpisode.id}
                     userEpisode={userEpisode}
                     onStatusChange={handleLaterEpisodeStatusChange}
                     variant="wide"
+                    groupName={getGroupName(userEpisode.groupId)}
                   />
                 ))}
               </div>
@@ -1229,12 +1243,13 @@ export default function Dashboard() {
                               
                               {/* Episodes */}
                               <div className="space-y-3">
-                                {visibleEpisodes.map((userEpisode) => (
+                                {visibleEpisodes.map((userEpisode: any) => (
                                   <EpisodeCard
                                     key={userEpisode.id}
                                     userEpisode={userEpisode}
                                     onStatusChange={handleTriageEpisodeStatusChange}
                                     variant="wide"
+                                    groupName={getGroupName(userEpisode.groupId)}
                                   />
                                 ))}
                               </div>

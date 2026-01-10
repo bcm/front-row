@@ -1301,28 +1301,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Toggle show shared status
-  app.patch("/api/user/shows/:showId/shared", async (req, res) => {
+  // Update show group assignment (null = personal, groupId = shared with group)
+  app.patch("/api/user/shows/:showId/group", async (req, res) => {
     try {
       const userId = getUserId(req);
       const { showId } = req.params;
       
-      // Validate request body
-      const sharedStatusSchema = z.object({
-        isShared: z.boolean()
+      // Validate request body - groupId can be null (personal) or a string (group ID)
+      const groupSchema = z.object({
+        groupId: z.string().nullable()
       });
       
-      const validatedData = sharedStatusSchema.parse(req.body);
+      const validatedData = groupSchema.parse(req.body);
 
-      const updatedUserShow = await storage.updateUserShow(userId, parseInt(showId), { isShared: validatedData.isShared });
+      // If groupId is provided, verify user is a member of that group
+      if (validatedData.groupId) {
+        const userGroupIds = await storage.getUserGroupIds(userId);
+        if (!userGroupIds.includes(validatedData.groupId)) {
+          return res.status(403).json({ error: "You are not a member of this group" });
+        }
+      }
+
+      const updatedUserShow = await storage.updateUserShow(userId, parseInt(showId), { 
+        groupId: validatedData.groupId,
+        isShared: validatedData.groupId !== null // Keep isShared in sync for backward compatibility
+      });
       if (!updatedUserShow) {
         return res.status(404).json({ error: "Show not found in your collection" });
       }
 
       res.json(updatedUserShow);
     } catch (error) {
-      console.error("Error updating show shared status:", error);
-      res.status(500).json({ error: "Failed to update show shared status" });
+      console.error("Error updating show group:", error);
+      res.status(500).json({ error: "Failed to update show group" });
     }
   });
 

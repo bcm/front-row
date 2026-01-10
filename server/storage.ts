@@ -1,7 +1,7 @@
 import { type User, type UpsertUser, type Show, type InsertShow, type UserShow, type InsertUserShow, type Episode, type InsertEpisode, type UserEpisode, type InsertUserEpisode, type UserSettings, type InsertUserSettings, type Recommendation, type InsertRecommendation, type DismissedRecommendation, type InsertDismissedRecommendation, type NewReleasesState, type NewReleaseShow, type DismissedNewRelease, type InsertDismissedNewRelease, type Group, type InsertGroup, type GroupMember, type InsertGroupMember, type GroupInvite, type InsertGroupInvite } from "@shared/schema";
 import { users, shows, userShows, episodes, userEpisodes, userSettings, recommendations, dismissedRecommendations, newReleasesState, dismissedNewReleases, groups, groupMembers, groupInvites } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, ilike, inArray, desc, asc, lte, gt, sql } from "drizzle-orm";
+import { eq, and, ilike, inArray, desc, asc, lte, gt, sql, or, isNull } from "drizzle-orm";
 
 export interface IStorage {
   // User methods
@@ -35,8 +35,8 @@ export interface IStorage {
   searchUserEpisodes(userId: string, query: string): Promise<(Episode & { show: Show })[]>;
   
   // User episode methods
-  getUserEpisodes(userId: string, status?: string, showMode?: string, groupIds?: string[]): Promise<(UserEpisode & { episode: Episode & { show: Show } })[]>;
-  getUpcomingEpisodes(userId: string, showMode?: string, groupIds?: string[]): Promise<(Episode & { show: Show })[]>;
+  getUserEpisodes(userId: string, status?: string, showMode?: string, groupIds?: string[]): Promise<(UserEpisode & { episode: Episode & { show: Show }; groupId?: string | null })[]>;
+  getUpcomingEpisodes(userId: string, showMode?: string, groupIds?: string[]): Promise<(Episode & { show: Show; groupId?: string | null })[]>;
   getUserGroupIds(userId: string): Promise<string[]>;
   addUserEpisode(userEpisode: InsertUserEpisode): Promise<{ episode: UserEpisode; isNew: boolean }>;
   updateUserEpisode(userId: string, episodeId: number, updates: Partial<UserEpisode>): Promise<UserEpisode | undefined>;
@@ -538,15 +538,14 @@ export class DatabaseStorage implements IStorage {
     // Filter by group membership: "shared" = shows with groupId in user's groups, "personal" = shows with null groupId
     if (showMode === 'shared') {
       if (groupIds && groupIds.length > 0) {
-        // Use raw SQL for IN clause with proper escaping
-        const groupIdList = groupIds.map(id => `'${id}'`).join(',');
-        allConditions.push(sql.raw(`"user_shows"."group_id" IN (${groupIdList})`));
+        // Use parameterized OR conditions for group filtering
+        allConditions.push(or(...groupIds.map(gid => eq(userShows.groupId, gid)))!);
       } else {
         // User has no groups - return empty result by adding impossible condition
         allConditions.push(sql`1=0`);
       }
     } else if (showMode === 'personal') {
-      allConditions.push(sql`${userShows.groupId} IS NULL`);
+      allConditions.push(isNull(userShows.groupId));
     }
     
     const whereClause = and(...allConditions);
@@ -561,7 +560,8 @@ export class DatabaseStorage implements IStorage {
         triagedAt: userEpisodes.triagedAt,
         addedAt: userEpisodes.addedAt,
         episode: episodes,
-        show: shows
+        show: shows,
+        groupId: userShows.groupId
       })
       .from(userEpisodes)
       .innerJoin(episodes, eq(userEpisodes.episodeId, episodes.id))
@@ -581,6 +581,7 @@ export class DatabaseStorage implements IStorage {
       watchedAt: row.watchedAt,
       triagedAt: row.triagedAt,
       addedAt: row.addedAt,
+      groupId: row.groupId,
       episode: {
         ...row.episode,
         show: row.show
@@ -588,7 +589,7 @@ export class DatabaseStorage implements IStorage {
     }));
   }
 
-  async getUpcomingEpisodes(userId: string, showMode?: string, groupIds?: string[]): Promise<(Episode & { show: Show })[]> {
+  async getUpcomingEpisodes(userId: string, showMode?: string, groupIds?: string[]): Promise<(Episode & { show: Show; groupId?: string | null })[]> {
     const today = new Date().toISOString().split('T')[0];
     
     // Build conditions based on showMode
@@ -600,15 +601,14 @@ export class DatabaseStorage implements IStorage {
     // Filter by group membership: "shared" = shows with groupId in user's groups, "personal" = shows with null groupId
     if (showMode === 'shared') {
       if (groupIds && groupIds.length > 0) {
-        // Use raw SQL for IN clause with proper escaping
-        const groupIdList = groupIds.map(id => `'${id}'`).join(',');
-        allConditions.push(sql.raw(`"user_shows"."group_id" IN (${groupIdList})`));
+        // Use parameterized OR conditions for group filtering
+        allConditions.push(or(...groupIds.map(gid => eq(userShows.groupId, gid)))!);
       } else {
         // User has no groups - return empty result by adding impossible condition
         allConditions.push(sql`1=0`);
       }
     } else if (showMode === 'personal') {
-      allConditions.push(sql`${userShows.groupId} IS NULL`);
+      allConditions.push(isNull(userShows.groupId));
     }
     
     const whereClause = and(...allConditions);
@@ -624,7 +624,8 @@ export class DatabaseStorage implements IStorage {
         runtime: episodes.runtime,
         summary: episodes.summary,
         image: episodes.image,
-        show: shows
+        show: shows,
+        groupId: userShows.groupId
       })
       .from(episodes)
       .innerJoin(shows, eq(episodes.showId, shows.id))
@@ -646,7 +647,8 @@ export class DatabaseStorage implements IStorage {
       runtime: row.runtime,
       summary: row.summary,
       image: row.image,
-      show: row.show
+      show: row.show,
+      groupId: row.groupId
     }));
   }
 

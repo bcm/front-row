@@ -2,18 +2,19 @@ import { UserEpisode, Episode, Show } from "@shared/schema";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { Calendar, Clock, Eye, ArrowRight, MoreHorizontal, X } from "lucide-react";
+import { Calendar, Clock, Eye, ArrowRight, MoreHorizontal, X, Users } from "lucide-react";
 import { Link } from "wouter";
 import { cn } from "@/lib/utils";
 
 interface EpisodeCardProps {
-  userEpisode: UserEpisode & { episode: Episode & { show: Show } };
+  userEpisode: UserEpisode & { episode: Episode & { show: Show }; groupId?: string | null };
   onStatusChange: (episodeId: number, status: string) => void;
   variant?: "default" | "compact" | "priority" | "wide";
+  groupName?: string | null;
 }
 
-export default function EpisodeCard({ userEpisode, onStatusChange, variant = "default" }: EpisodeCardProps) {
-  const { episode } = userEpisode;
+export default function EpisodeCard({ userEpisode, onStatusChange, variant = "default", groupName }: EpisodeCardProps) {
+  const { episode, groupId } = userEpisode;
   const { show } = episode;
 
   const getStatusBadge = (status: string, variant?: string) => {
@@ -97,6 +98,12 @@ export default function EpisodeCard({ userEpisode, onStatusChange, variant = "de
                 {getNetworkName() && (
                   <span className="ml-2 text-xs font-normal text-muted-foreground bg-muted px-2 py-0.5 rounded">
                     {getNetworkName()}
+                  </span>
+                )}
+                {groupId && groupName && (
+                  <span className="ml-2 text-xs font-normal text-blue-400 bg-blue-500/20 border border-blue-500/30 px-2 py-0.5 rounded inline-flex items-center gap-1">
+                    <Users className="w-3 h-3" />
+                    {groupName}
                   </span>
                 )}
               </h2>
@@ -202,6 +209,12 @@ export default function EpisodeCard({ userEpisode, onStatusChange, variant = "de
                     {getNetworkName()}
                   </span>
                 )}
+                {groupId && groupName && (
+                  <span className="ml-2 text-xs font-normal text-blue-400 bg-blue-500/20 border border-blue-500/30 px-1.5 py-0.5 rounded inline-flex items-center gap-1">
+                    <Users className="w-2 h-2" />
+                    {groupName}
+                  </span>
+                )}
               </h3>
             </Link>
             <Link href={`/episode/${episode.id}`}>
@@ -258,6 +271,12 @@ export default function EpisodeCard({ userEpisode, onStatusChange, variant = "de
                 {getNetworkName() && (
                   <span className="ml-2 text-xs font-normal text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
                     {getNetworkName()}
+                  </span>
+                )}
+                {groupId && groupName && (
+                  <span className="ml-2 text-xs font-normal text-blue-400 bg-blue-500/20 border border-blue-500/30 px-1.5 py-0.5 rounded inline-flex items-center gap-1">
+                    <Users className="w-2 h-2" />
+                    {groupName}
                   </span>
                 )}
               </h2>
@@ -344,6 +363,12 @@ export default function EpisodeCard({ userEpisode, onStatusChange, variant = "de
               {getNetworkName() && (
                 <span className="ml-2 text-xs font-normal text-muted-foreground bg-muted px-2 py-0.5 rounded">
                   {getNetworkName()}
+                </span>
+              )}
+              {groupId && groupName && (
+                <span className="ml-2 text-xs font-normal text-blue-400 bg-blue-500/20 border border-blue-500/30 px-2 py-0.5 rounded inline-flex items-center gap-1">
+                  <Users className="w-3 h-3" />
+                  {groupName}
                 </span>
               )}
             </h2>

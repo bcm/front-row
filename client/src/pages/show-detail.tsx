@@ -4,14 +4,14 @@ import { ArrowLeft, Star, Calendar, Clock, Globe, Tv, Users, Monitor, Play, Hash
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { Breadcrumb, BreadcrumbList, BreadcrumbItem, BreadcrumbLink, BreadcrumbPage, BreadcrumbSeparator } from "@/components/ui/breadcrumb";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { TVMazeShow } from "@/lib/tvmaze";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { UserShow } from "@shared/schema";
+import { UserShow, Group } from "@shared/schema";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -152,12 +152,17 @@ export default function ShowDetail() {
     },
   });
 
-  // Update shared status mutation with optimistic updates
-  const updateSharedStatusMutation = useMutation({
-    mutationFn: async (isShared: boolean) => {
-      return apiRequest("PATCH", `/api/user/shows/${id}/shared`, { isShared });
+  // Query for user's groups
+  const { data: userGroups } = useQuery<Group[]>({
+    queryKey: ['/api/groups'],
+  });
+
+  // Update group assignment mutation with optimistic updates
+  const updateGroupMutation = useMutation({
+    mutationFn: async (groupId: string | null) => {
+      return apiRequest("PATCH", `/api/user/shows/${id}/group`, { groupId });
     },
-    onMutate: async (isShared: boolean) => {
+    onMutate: async (groupId: string | null) => {
       // Cancel any outgoing refetches to avoid overwriting our optimistic update
       await queryClient.cancelQueries({ queryKey: ['/api/user/shows', id] });
       await queryClient.cancelQueries({ queryKey: ['/api/library'] });
@@ -169,7 +174,7 @@ export default function ShowDetail() {
       // Optimistically update the user show cache
       queryClient.setQueryData(['/api/user/shows', id], (old: any) => {
         if (old) {
-          return { ...old, isShared };
+          return { ...old, groupId, isShared: groupId !== null };
         }
         return old;
       });
@@ -178,17 +183,17 @@ export default function ShowDetail() {
       queryClient.setQueryData(['/api/library'], (old: any) => {
         if (old && Array.isArray(old)) {
           return old.map((us: any) => 
-            us?.show?.id === parseInt(id) 
-              ? { ...us, isShared }
+            us?.show?.id === parseInt(id!) 
+              ? { ...us, groupId, isShared: groupId !== null }
               : us
           );
         }
         return old;
       });
 
-      return { previousUserShow, previousLibrary, targetValue: isShared };
+      return { previousUserShow, previousLibrary, groupId };
     },
-    onError: (error: any, isShared: boolean, context: any) => {
+    onError: (error: any, groupId: string | null, context: any) => {
       // Restore the cache from snapshots on error
       if (context?.previousUserShow !== undefined) {
         queryClient.setQueryData(['/api/user/shows', id], context.previousUserShow);
@@ -199,14 +204,15 @@ export default function ShowDetail() {
       
       toast({
         title: "Update failed",
-        description: error.message || `Failed to update shared status for "${show?.name}"`,
+        description: error.message || `Failed to update group for "${show?.name}"`,
         variant: "destructive",
       });
     },
-    onSuccess: (data: any, isShared: boolean, context: any) => {
+    onSuccess: (data: any, groupId: string | null, context: any) => {
+      const groupName = groupId ? userGroups?.find(g => g.id === groupId)?.name : 'Personal';
       toast({
-        title: "Shared status updated",
-        description: `"${show?.name}" has been ${context?.targetValue ? 'marked' : 'unmarked'} as shared.`,
+        title: "Group updated",
+        description: `"${show?.name}" has been moved to ${groupName}.`,
       });
     },
     onSettled: () => {
@@ -892,16 +898,26 @@ export default function ShowDetail() {
                   {userShow && (
                     <div className="flex items-center space-x-2 bg-card border rounded-lg px-3 py-2">
                       <Users className="w-4 h-4 text-muted-foreground" />
-                      <Label htmlFor="shared-toggle" className="text-sm font-medium cursor-pointer">
-                        Shared
+                      <Label className="text-sm font-medium">
+                        Collection
                       </Label>
-                      <Switch
-                        id="shared-toggle"
-                        checked={userShow.isShared || false}
-                        onCheckedChange={(checked) => updateSharedStatusMutation.mutate(checked)}
-                        disabled={updateSharedStatusMutation.isPending}
-                        data-testid={`toggle-shared-show-${id}`}
-                      />
+                      <Select
+                        value={userShow.groupId || "personal"}
+                        onValueChange={(value) => updateGroupMutation.mutate(value === "personal" ? null : value)}
+                        disabled={updateGroupMutation.isPending}
+                      >
+                        <SelectTrigger className="w-32 h-8" data-testid={`select-group-show-${id}`}>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="personal">Personal</SelectItem>
+                          {userGroups?.map((group) => (
+                            <SelectItem key={group.id} value={group.id}>
+                              {group.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
                   )}
                   <AlertDialog open={isRemoveDialogOpen} onOpenChange={setIsRemoveDialogOpen}>
