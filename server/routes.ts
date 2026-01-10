@@ -1516,9 +1516,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let groupIds: string[] | undefined;
       if (parsedShowMode === 'shared') {
         groupIds = await storage.getUserGroupIds(userId);
+        console.log('[DEBUG] Shared mode - userId:', userId, 'groupIds:', groupIds);
       }
       
       const episodes = await storage.getUserEpisodes(userId, status as string, parsedShowMode, groupIds);
+      console.log('[DEBUG] getUserEpisodes returned', episodes.length, 'episodes for showMode:', parsedShowMode);
       res.json(episodes);
     } catch (error) {
       console.error("Error fetching user episodes:", error);

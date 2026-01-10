@@ -538,7 +538,9 @@ export class DatabaseStorage implements IStorage {
     // Filter by group membership: "shared" = shows with groupId in user's groups, "personal" = shows with null groupId
     if (showMode === 'shared') {
       if (groupIds && groupIds.length > 0) {
-        allConditions.push(inArray(userShows.groupId, groupIds));
+        // Use raw SQL for IN clause with proper escaping
+        const groupIdList = groupIds.map(id => `'${id}'`).join(',');
+        allConditions.push(sql.raw(`"user_shows"."group_id" IN (${groupIdList})`));
       } else {
         // User has no groups - return empty result by adding impossible condition
         allConditions.push(sql`1=0`);
@@ -598,7 +600,9 @@ export class DatabaseStorage implements IStorage {
     // Filter by group membership: "shared" = shows with groupId in user's groups, "personal" = shows with null groupId
     if (showMode === 'shared') {
       if (groupIds && groupIds.length > 0) {
-        allConditions.push(inArray(userShows.groupId, groupIds));
+        // Use raw SQL for IN clause with proper escaping
+        const groupIdList = groupIds.map(id => `'${id}'`).join(',');
+        allConditions.push(sql.raw(`"user_shows"."group_id" IN (${groupIdList})`));
       } else {
         // User has no groups - return empty result by adding impossible condition
         allConditions.push(sql`1=0`);
