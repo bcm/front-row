@@ -32,6 +32,7 @@ export const userShows = pgTable("user_shows", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").notNull(),
   showId: integer("show_id").notNull(),
+  groupId: varchar("group_id"), // null = personal, set = group show
   addedAt: timestamp("added_at").defaultNow(),
   isRemoved: boolean("is_removed").notNull().default(false),
   isShared: boolean("is_shared").notNull().default(false),

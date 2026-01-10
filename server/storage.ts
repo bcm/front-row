@@ -24,6 +24,7 @@ export interface IStorage {
   updateUserShow(userId: string, showId: number, updates: Partial<UserShow>): Promise<UserShow | undefined>;
   removeUserShow(userId: string, showId: number): Promise<boolean>;
   softRemoveUserShow(userId: string, showId: number): Promise<UserShow | undefined>;
+  getGroupShows(groupId: string): Promise<(UserShow & { show: Show })[]>;
   
   // Episode methods
   getEpisodes(showId: number): Promise<Episode[]>;
@@ -283,6 +284,7 @@ export class DatabaseStorage implements IStorage {
         id: userShows.id,
         userId: userShows.userId,
         showId: userShows.showId,
+        groupId: userShows.groupId,
         addedAt: userShows.addedAt,
         isRemoved: userShows.isRemoved,
         isShared: userShows.isShared,
@@ -297,6 +299,7 @@ export class DatabaseStorage implements IStorage {
       id: row.id,
       userId: row.userId,
       showId: row.showId,
+      groupId: row.groupId,
       addedAt: row.addedAt,
       isRemoved: row.isRemoved,
       isShared: row.isShared,
@@ -344,6 +347,38 @@ export class DatabaseStorage implements IStorage {
       .where(and(eq(userShows.userId, userId), eq(userShows.showId, showId)))
       .returning();
     return removedUserShow || undefined;
+  }
+
+  async getGroupShows(groupId: string): Promise<(UserShow & { show: Show })[]> {
+    const results = await db
+      .select({
+        id: userShows.id,
+        userId: userShows.userId,
+        showId: userShows.showId,
+        groupId: userShows.groupId,
+        addedAt: userShows.addedAt,
+        isRemoved: userShows.isRemoved,
+        isShared: userShows.isShared,
+        show: shows
+      })
+      .from(userShows)
+      .innerJoin(shows, eq(userShows.showId, shows.id))
+      .where(and(
+        eq(userShows.groupId, groupId),
+        eq(userShows.isRemoved, false)
+      ))
+      .orderBy(asc(shows.name));
+
+    return results.map(row => ({
+      id: row.id,
+      userId: row.userId,
+      showId: row.showId,
+      groupId: row.groupId,
+      addedAt: row.addedAt,
+      isRemoved: row.isRemoved,
+      isShared: row.isShared,
+      show: row.show
+    }));
   }
 
   // Episode methods

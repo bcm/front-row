@@ -2202,7 +2202,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       const members = await storage.getGroupMembers(groupId);
-      res.json({ ...group, members });
+      const groupShows = await storage.getGroupShows(groupId);
+      res.json({ ...group, members, shows: groupShows });
     } catch (error) {
       console.error("Error fetching group:", error);
       res.status(500).json({ error: "Failed to fetch group" });
