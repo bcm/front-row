@@ -3,9 +3,18 @@ import { Link, useLocation } from "wouter";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import { useDebounce } from "@/hooks/use-debounce";
+import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Badge } from "@/components/ui/badge";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import AddShowDialog from "@/components/add-show-dialog";
 import {
   Search,
@@ -15,6 +24,7 @@ import {
   Users,
   User,
   Plus,
+  LogOut,
 } from "lucide-react";
 
 interface SearchResult {
@@ -39,6 +49,7 @@ export default function AppShell({ children }: AppShellProps) {
   const [showAddDialog, setShowAddDialog] = useState(false);
   const debouncedSearch = useDebounce(searchQuery, 300);
   const queryClient = useQueryClient();
+  const { user } = useAuth();
 
   const { data: userSettings } = useQuery({
     queryKey: ["/api/user/settings"],
@@ -283,6 +294,36 @@ export default function AppShell({ children }: AppShellProps) {
             <TooltipContent>Shared View</TooltipContent>
           </Tooltip>
         </div>
+
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="icon" className="rounded-full">
+              <Avatar className="h-8 w-8">
+                <AvatarImage src={user?.profileImageUrl || undefined} alt={user?.firstName || "User"} />
+                <AvatarFallback>
+                  {user?.firstName?.[0]?.toUpperCase() || user?.email?.[0]?.toUpperCase() || "U"}
+                </AvatarFallback>
+              </Avatar>
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-56">
+            <div className="px-2 py-1.5">
+              <p className="text-sm font-medium">
+                {user?.firstName} {user?.lastName}
+              </p>
+              <p className="text-xs text-muted-foreground truncate">
+                {user?.email}
+              </p>
+            </div>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem asChild>
+              <a href="/api/logout" className="w-full cursor-pointer">
+                <LogOut className="mr-2 h-4 w-4" />
+                Sign out
+              </a>
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </header>
 
       <AddShowDialog 

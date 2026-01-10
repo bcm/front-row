@@ -1,9 +1,15 @@
-import type { Express } from "express";
+import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { insertShowSchema, insertUserShowSchema, insertEpisodeSchema, insertUserEpisodeSchema } from "@shared/schema";
 import { z } from "zod";
 import { syncJobManager } from "./sync-job-manager";
+import { isAuthenticated } from "./replit_integrations/auth";
+
+function getUserId(req: Request): string {
+  const user = req.user as any;
+  return user?.claims?.sub || "demo-user";
+}
 
 // Async sync function for adding shows with progress reporting
 async function performAsyncAddShowSync(jobId: string, showId: number, userId: string): Promise<void> {
@@ -160,9 +166,8 @@ async function performAsyncAddShowSync(jobId: string, showId: number, userId: st
 }
 
 // Async sync function with progress reporting
-async function performAsyncSync(jobId: string, showId: number): Promise<void> {
+async function performAsyncSync(jobId: string, showId: number, userId: string): Promise<void> {
   const reporter = syncJobManager.createReporter(jobId);
-  const userId = "demo-user"; // Mock user ID
   
   try {
     syncJobManager.markJobRunning(jobId);
@@ -311,7 +316,7 @@ async function performAsyncSync(jobId: string, showId: number): Promise<void> {
 }
 
 // Async library import function with progress reporting
-async function performAsyncLibraryImport(jobId: string): Promise<void> {
+async function performAsyncLibraryImport(jobId: string, userId: string): Promise<void> {
   const reporter = syncJobManager.createReporter(jobId);
   
   try {
@@ -320,7 +325,6 @@ async function performAsyncLibraryImport(jobId: string): Promise<void> {
     
     const apiKey = process.env.TVMAZE_API_KEY;
     const username = process.env.TVMAZE_USERNAME;
-    const userId = "demo-user"; // Mock user ID
     
     if (!apiKey || !username) {
       throw new Error("TVMaze API credentials not configured");
@@ -419,14 +423,12 @@ async function performAsyncLibraryImport(jobId: string): Promise<void> {
 }
 
 // Async episode import function with progress reporting
-async function performAsyncEpisodeImport(jobId: string): Promise<void> {
+async function performAsyncEpisodeImport(jobId: string, userId: string): Promise<void> {
   const reporter = syncJobManager.createReporter(jobId);
   
   try {
     console.log(`[EPISODE_IMPORT] Starting async episode import, job ${jobId}`);
     syncJobManager.markJobRunning(jobId);
-    
-    const userId = "demo-user"; // Mock user ID
     
     // Phase 1: Fetch user shows
     reporter.setPhase('fetch-episodes', 'Fetching your shows...');
@@ -606,7 +608,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { id } = req.params;
       const showId = parseInt(id);
-      const userId = "demo-user"; // Mock user ID
+      const userId = getUserId(req);
       const apiKey = process.env.TVMAZE_API_KEY;
       const username = process.env.TVMAZE_USERNAME;
       
@@ -766,13 +768,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { id } = req.params;
       const showId = parseInt(id);
+      const userId = getUserId(req);
       
       // Create new sync job
       const jobId = syncJobManager.createJob(showId);
       
       // Start async sync process
       setImmediate(async () => {
-        await performAsyncSync(jobId, showId);
+        await performAsyncSync(jobId, showId, userId);
       });
       
       res.json({ jobId });
@@ -895,7 +898,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { id } = req.params;
       const showId = parseInt(id);
-      const userId = "demo-user"; // Mock user ID
+      const userId = getUserId(req);
       
       const userEpisodes = await storage.getUserEpisodesForShow(userId, showId);
       
@@ -954,7 +957,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const query = q as string;
-      const userId = "demo-user"; // Mock user ID
+      const userId = getUserId(req);
       const shouldIncludeRemoved = includeRemoved === 'true';
       
       // Search both shows and episodes in user's library in parallel
@@ -1032,12 +1035,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Import followed shows from TVMaze into local database with progress tracking
   app.post("/api/library/import", async (req, res) => {
     try {
+      const userId = getUserId(req);
+      
       // Create new library import job
       const jobId = syncJobManager.createJob(0);
       
       // Start async import process
       setImmediate(async () => {
-        await performAsyncLibraryImport(jobId);
+        await performAsyncLibraryImport(jobId, userId);
       });
       
       res.json({ jobId, message: "Library import started" });
@@ -1103,7 +1108,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get library from local database
   app.get("/api/library", async (req, res) => {
     try {
-      const userId = "demo-user"; // Mock user ID
+      const userId = getUserId(req);
       
       const userShows = await storage.getUserShows(userId);
       res.json(userShows);
@@ -1117,7 +1122,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/user/shows", async (req, res) => {
     try {
       // For demo purposes, using a mock user ID
-      const userId = "demo-user";
+      const userId = getUserId(req);
       
       const shows = await storage.getUserShows(userId);
       res.json(shows);
@@ -1130,7 +1135,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Enhanced POST endpoint - Async job processing for adding shows with scrobble sync
   app.post("/api/user/shows", async (req, res) => {
     try {
-      const userId = "demo-user"; // Mock user ID
+      const userId = getUserId(req);
       const showData = req.body;
 
       console.log(`[ADD_SHOW] Starting add show process for show ${showData.showId}`);
@@ -1238,7 +1243,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.patch("/api/user/shows/:showId", async (req, res) => {
     try {
-      const userId = "demo-user"; // Mock user ID
+      const userId = getUserId(req);
       const { showId } = req.params;
       const updates = req.body;
 
@@ -1256,7 +1261,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.delete("/api/user/shows/:showId", async (req, res) => {
     try {
-      const userId = "demo-user"; // Mock user ID
+      const userId = getUserId(req);
       const { showId } = req.params;
       const apiKey = process.env.TVMAZE_API_KEY;
       const username = process.env.TVMAZE_USERNAME;
@@ -1299,7 +1304,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Toggle show shared status
   app.patch("/api/user/shows/:showId/shared", async (req, res) => {
     try {
-      const userId = "demo-user"; // Mock user ID
+      const userId = getUserId(req);
       const { showId } = req.params;
       
       // Validate request body
@@ -1324,7 +1329,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Import episodes for all followed shows
   app.post("/api/episodes/import", async (req, res) => {
     try {
-      const userId = "demo-user"; // Mock user ID
+      const userId = getUserId(req);
       
       // Get all user shows (followed shows)
       const userShows = await storage.getUserShows(userId);
@@ -1414,7 +1419,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const jobId = syncJobManager.createJob(0);
       
       // Start async episode import
-      performAsyncEpisodeImport(jobId).catch(error => {
+      performAsyncEpisodeImport(jobId, userId).catch(error => {
         console.error("Async episode import failed:", error);
       });
       
@@ -1499,7 +1504,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/user/episodes", async (req, res) => {
     try {
       const { status, showMode } = req.query;
-      const userId = "demo-user"; // Mock user ID
+      const userId = getUserId(req);
       
       // Validate showMode parameter
       const validShowModes = ['personal', 'shared', 'all'];
@@ -1518,7 +1523,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get upcoming episodes with future air dates
   app.get("/api/user/episodes/upcoming", async (req, res) => {
     try {
-      const userId = "demo-user";
+      const userId = getUserId(req);
       const { showMode } = req.query;
       
       const validShowModes = ['personal', 'shared', 'all'];
@@ -1540,7 +1545,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { id } = req.params;
       const episodeId = parseInt(id);
-      const userId = "demo-user"; // Mock user ID
+      const userId = getUserId(req);
       
       const episodeData = await storage.getEpisodeWithShowAndUserData(userId, episodeId);
       
@@ -1557,7 +1562,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.patch("/api/user/episodes/:episodeId", async (req, res) => {
     try {
-      const userId = "demo-user"; // Mock user ID
+      const userId = getUserId(req);
       const { episodeId } = req.params;
       const updates = req.body;
 
@@ -1623,7 +1628,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const apiKey = process.env.TVMAZE_API_KEY;
       const username = process.env.TVMAZE_USERNAME;
-      const userId = "demo-user"; // Mock user ID
+      const userId = getUserId(req);
       
       if (!apiKey || !username) {
         return res.status(500).json({ error: "TVMaze API credentials not configured" });
@@ -1731,7 +1736,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // User settings routes
   app.get("/api/user/settings", async (req, res) => {
     try {
-      const userId = "demo-user"; // Mock user ID
+      const userId = getUserId(req);
       
       let settings = await storage.getUserSettings(userId);
       
@@ -1754,7 +1759,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.patch("/api/user/settings", async (req, res) => {
     try {
-      const userId = "demo-user"; // Mock user ID
+      const userId = getUserId(req);
       const updates = req.body;
       
       // Ensure user settings exist first
@@ -1783,7 +1788,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Recommendation routes
   app.get("/api/recommendations", async (req, res) => {
     try {
-      const userId = "demo-user";
+      const userId = getUserId(req);
       const limit = req.query.limit ? parseInt(req.query.limit as string) : 25; // Default to top 25
       const recommendations = await storage.getRecommendations(userId, limit);
       res.json(recommendations);
@@ -1795,7 +1800,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/recommendations/refresh", async (req, res) => {
     try {
-      const userId = "demo-user";
+      const userId = getUserId(req);
       const { refreshRecommendationsForUser } = await import("./recommendation-service");
       const result = await refreshRecommendationsForUser(userId);
       res.json(result);
@@ -1807,7 +1812,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/recommendations/dismiss", async (req, res) => {
     try {
-      const userId = "demo-user";
+      const userId = getUserId(req);
       const { tmdbId } = req.body;
       
       if (!tmdbId) {
@@ -1824,7 +1829,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/recommendations/accept", async (req, res) => {
     try {
-      const userId = "demo-user";
+      const userId = getUserId(req);
       const { tmdbId, tvmazeId } = req.body;
       
       if (!tvmazeId) {
@@ -1885,7 +1890,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/recommendations/accept-watched", async (req, res) => {
     try {
-      const userId = "demo-user";
+      const userId = getUserId(req);
       const { tmdbId, tvmazeId } = req.body;
       
       if (!tvmazeId) {
@@ -1965,7 +1970,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // New Releases routes
   app.get("/api/new-releases", async (req, res) => {
     try {
-      const userId = req.query.userId as string || "demo-user";
+      const userId = getUserId(req);
       const { getNewReleases } = await import("./new-releases-service");
       const result = await getNewReleases(userId);
       res.json(result);
@@ -1977,7 +1982,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/new-releases/refresh", async (req, res) => {
     try {
-      const userId = req.body.userId || "demo-user";
+      const userId = getUserId(req);
       const { refreshNewReleases, getNewReleases } = await import("./new-releases-service");
       await refreshNewReleases();
       const result = await getNewReleases(userId);
@@ -1990,7 +1995,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/new-releases/dismiss", async (req, res) => {
     try {
-      const userId = req.body.userId || "demo-user";
+      const userId = getUserId(req);
       const { tvmazeId } = req.body;
       
       if (!tvmazeId) {
@@ -2007,7 +2012,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/new-releases/add", async (req, res) => {
     try {
-      const userId = req.body.userId || "demo-user";
+      const userId = getUserId(req);
       const { tvmazeId } = req.body;
       
       if (!tvmazeId) {
@@ -2059,7 +2064,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/new-releases/add-watched", async (req, res) => {
     try {
-      const userId = req.body.userId || "demo-user";
+      const userId = getUserId(req);
       const { tvmazeId } = req.body;
       
       if (!tvmazeId) {

@@ -3,11 +3,7 @@ import { pgTable, text, varchar, integer, timestamp, jsonb, boolean, unique } fr
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
-export const users = pgTable("users", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  username: text("username").notNull().unique(),
-  password: text("password").notNull(),
-});
+export * from "./models/auth";
 
 export const shows = pgTable("shows", {
   id: integer("id").primaryKey(), // TVMaze show ID
@@ -73,10 +69,6 @@ export const userSettings = pgTable("user_settings", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
-export const insertUserSchema = createInsertSchema(users).pick({
-  username: true,
-  password: true,
-});
 
 export const insertShowSchema = createInsertSchema(shows).omit({
   createdAt: true,
@@ -177,8 +169,6 @@ export type NewReleaseShow = {
   status: string | null;
 };
 
-export type InsertUser = z.infer<typeof insertUserSchema>;
-export type User = typeof users.$inferSelect;
 export type Show = typeof shows.$inferSelect;
 export type InsertShow = z.infer<typeof insertShowSchema>;
 export type UserShow = typeof userShows.$inferSelect;
