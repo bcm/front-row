@@ -414,13 +414,13 @@ export default function Header({ onSearch }: HeaderProps) {
                 </DropdownMenuTrigger>
                 <DropdownMenuContent>
                   <DropdownMenuItem 
-                    onClick={() => handleShowModeChange('personal')}
+                    onSelect={() => handleShowModeChange('personal')}
                     className={showMode === 'personal' ? 'bg-accent' : ''}
                   >
                     Personal
                   </DropdownMenuItem>
                   <DropdownMenuItem 
-                    onClick={() => handleShowModeChange('shared')}
+                    onSelect={() => handleShowModeChange('shared')}
                     className={showMode === 'shared' ? 'bg-accent' : ''}
                   >
                     Shared
@@ -448,13 +448,13 @@ export default function Header({ onSearch }: HeaderProps) {
                 </DropdownMenuTrigger>
                 <DropdownMenuContent>
                   <DropdownMenuItem 
-                    onClick={() => handleShowModeChange('personal')}
+                    onSelect={() => handleShowModeChange('personal')}
                     className={showMode === 'personal' ? 'bg-accent' : ''}
                   >
                     Personal
                   </DropdownMenuItem>
                   <DropdownMenuItem 
-                    onClick={() => handleShowModeChange('shared')}
+                    onSelect={() => handleShowModeChange('shared')}
                     className={showMode === 'shared' ? 'bg-accent' : ''}
                   >
                     Shared
@@ -482,13 +482,13 @@ export default function Header({ onSearch }: HeaderProps) {
                 </DropdownMenuTrigger>
                 <DropdownMenuContent>
                   <DropdownMenuItem 
-                    onClick={() => handleShowModeChange('personal')}
+                    onSelect={() => handleShowModeChange('personal')}
                     className={showMode === 'personal' ? 'bg-accent' : ''}
                   >
                     Personal
                   </DropdownMenuItem>
                   <DropdownMenuItem 
-                    onClick={() => handleShowModeChange('shared')}
+                    onSelect={() => handleShowModeChange('shared')}
                     className={showMode === 'shared' ? 'bg-accent' : ''}
                   >
                     Shared
