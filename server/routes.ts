@@ -2167,6 +2167,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         userId,
       });
       
+      // Create a permanent invite link for the group
+      const inviteCode = Math.random().toString(36).substring(2, 10) + 
+                        Math.random().toString(36).substring(2, 10);
+      await storage.createGroupInvite({
+        groupId: group.id,
+        inviteCode,
+        invitedEmail: null,
+        invitedBy: userId,
+        expiresAt: null,
+      });
+      
       res.json(group);
     } catch (error) {
       console.error("Error creating group:", error);

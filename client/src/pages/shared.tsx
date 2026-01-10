@@ -34,14 +34,12 @@ import {
   Plus, 
   Copy, 
   Check, 
-  UserPlus,
   Crown,
   LogOut,
   Trash2,
   Mail,
   Loader2,
   Link as LinkIcon,
-  Clock,
 } from "lucide-react";
 
 interface Group {
@@ -139,20 +137,6 @@ export default function Shared() {
     },
   });
 
-  const createInviteMutation = useMutation({
-    mutationFn: async (groupId: string) => {
-      const response = await apiRequest("POST", `/api/groups/${groupId}/invites`, { expiresInDays: 7 });
-      return response.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/groups"] });
-      toast({ title: "Invite link created!" });
-    },
-    onError: () => {
-      toast({ title: "Failed to create invite", variant: "destructive" });
-    },
-  });
-
   const acceptInviteMutation = useMutation({
     mutationFn: async (inviteCode: string) => {
       const response = await apiRequest("POST", `/api/invites/${inviteCode}/accept`);
@@ -179,20 +163,6 @@ export default function Shared() {
     },
     onError: () => {
       toast({ title: "Failed to leave group", variant: "destructive" });
-    },
-  });
-
-  const deleteInviteMutation = useMutation({
-    mutationFn: async ({ groupId, inviteId }: { groupId: string; inviteId: string }) => {
-      const response = await apiRequest("DELETE", `/api/groups/${groupId}/invites/${inviteId}`);
-      return response.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/groups"] });
-      toast({ title: "Invite link deleted" });
-    },
-    onError: () => {
-      toast({ title: "Failed to delete invite", variant: "destructive" });
     },
   });
 
@@ -227,16 +197,6 @@ export default function Shared() {
     }
     if (member.firstName) return member.firstName;
     return member.email || "Unknown";
-  };
-
-  const formatExpiryDate = (expiresAt: string | null) => {
-    if (!expiresAt) return "Never expires";
-    const date = new Date(expiresAt);
-    const now = new Date();
-    const diffDays = Math.ceil((date.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-    if (diffDays <= 0) return "Expired";
-    if (diffDays === 1) return "Expires tomorrow";
-    return `Expires in ${diffDays} days`;
   };
 
   if (groupsLoading) {
@@ -450,67 +410,31 @@ export default function Shared() {
                   </div>
                 </div>
 
-                <div>
-                  <h4 className="text-sm font-medium mb-3 flex items-center gap-2">
-                    <LinkIcon className="w-4 h-4" />
-                    Invite Links
-                  </h4>
-                  {group.invites && group.invites.length > 0 ? (
-                    <div className="space-y-2">
-                      {group.invites.map((invite) => (
-                        <div
-                          key={invite.id}
-                          className="flex items-center gap-2 p-2 rounded-lg bg-muted/50"
-                        >
-                          <code className="flex-1 text-xs bg-background px-2 py-1 rounded truncate">
-                            {window.location.origin}/join/{invite.inviteCode}
-                          </code>
-                          <span className="text-xs text-muted-foreground flex items-center gap-1">
-                            <Clock className="w-3 h-3" />
-                            {formatExpiryDate(invite.expiresAt)}
-                          </span>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7"
-                            onClick={() => copyInviteLink(invite)}
-                          >
-                            {copiedInviteId === invite.id ? (
-                              <Check className="w-3 h-3 text-green-500" />
-                            ) : (
-                              <Copy className="w-3 h-3" />
-                            )}
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7 text-destructive hover:text-destructive"
-                            onClick={() => deleteInviteMutation.mutate({ groupId: group.id, inviteId: invite.id })}
-                            disabled={deleteInviteMutation.isPending}
-                          >
-                            <Trash2 className="w-3 h-3" />
-                          </Button>
-                        </div>
-                      ))}
+                {group.invites && group.invites[0] && (
+                  <div>
+                    <h4 className="text-sm font-medium mb-3 flex items-center gap-2">
+                      <LinkIcon className="w-4 h-4" />
+                      Invite Link
+                    </h4>
+                    <div className="flex items-center gap-2 p-2 rounded-lg bg-muted/50">
+                      <code className="flex-1 text-xs bg-background px-2 py-1 rounded truncate">
+                        {window.location.origin}/join/{group.invites[0].inviteCode}
+                      </code>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7"
+                        onClick={() => copyInviteLink(group.invites[0])}
+                      >
+                        {copiedInviteId === group.invites[0].id ? (
+                          <Check className="w-3 h-3 text-green-500" />
+                        ) : (
+                          <Copy className="w-3 h-3" />
+                        )}
+                      </Button>
                     </div>
-                  ) : (
-                    <p className="text-sm text-muted-foreground">No active invite links</p>
-                  )}
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="mt-3"
-                    onClick={() => createInviteMutation.mutate(group.id)}
-                    disabled={createInviteMutation.isPending}
-                  >
-                    {createInviteMutation.isPending ? (
-                      <Loader2 className="w-4 h-4 mr-1 animate-spin" />
-                    ) : (
-                      <UserPlus className="w-4 h-4 mr-1" />
-                    )}
-                    Create New Invite Link
-                  </Button>
-                </div>
+                  </div>
+                )}
               </CardContent>
             </Card>
           ))}
