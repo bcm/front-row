@@ -101,6 +101,17 @@ export default function AppShell({ children }: AppShellProps) {
     (episode: any) => episode.episode.airdate
   ).length : 0;
 
+  const { data: pendingInvites = [] } = useQuery({
+    queryKey: ["/api/invites/pending"],
+    queryFn: async () => {
+      const response = await fetch('/api/invites/pending');
+      if (!response.ok) return [];
+      return response.json();
+    },
+  });
+
+  const pendingInviteCount = Array.isArray(pendingInvites) ? pendingInvites.length : 0;
+
   const { data: searchResults, isLoading: searchLoading } = useQuery({
     queryKey: ['/api/search', debouncedSearch],
     queryFn: async () => {
@@ -132,8 +143,9 @@ export default function AppShell({ children }: AppShellProps) {
   };
 
   const getActiveTab = () => {
-    if (location === "/" || location === "/dashboard") return "dashboard";
+    if (location === "/" || location === "/dashboard" || location.startsWith("/dashboard/")) return "dashboard";
     if (location === "/library" || location.startsWith("/show/") || location.startsWith("/episode/")) return "library";
+    if (location === "/shared" || location.startsWith("/join/")) return "shared";
     return "dashboard";
   };
 
@@ -175,6 +187,22 @@ export default function AppShell({ children }: AppShellProps) {
             >
               <Library className="h-4 w-4" />
               <span className="hidden sm:inline">Library</span>
+            </Button>
+          </Link>
+          <Link href="/shared">
+            <Button
+              variant={activeTab === "shared" ? "secondary" : "ghost"}
+              size="sm"
+              className="gap-2"
+              data-testid="nav-shared"
+            >
+              <Users className="h-4 w-4" />
+              <span className="hidden sm:inline">Groups</span>
+              {pendingInviteCount > 0 && (
+                <Badge variant="default" className="ml-1 text-xs px-1.5 py-0 bg-primary">
+                  {pendingInviteCount}
+                </Badge>
+              )}
             </Button>
           </Link>
         </nav>
