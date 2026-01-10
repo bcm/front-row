@@ -79,6 +79,7 @@ export interface IStorage {
   getGroupInvitesByEmail(email: string): Promise<(GroupInvite & { group: Group })[]>;
   getPendingInvitesForGroup(groupId: string): Promise<GroupInvite[]>;
   useGroupInvite(inviteCode: string, userId: string): Promise<GroupInvite | undefined>;
+  deleteGroupInvite(inviteId: string): Promise<boolean>;
 }
 
 
@@ -997,6 +998,11 @@ export class DatabaseStorage implements IStorage {
       ))
       .returning();
     return updated || undefined;
+  }
+
+  async deleteGroupInvite(inviteId: string): Promise<boolean> {
+    await db.delete(groupInvites).where(eq(groupInvites.id, inviteId));
+    return true;
   }
 }
 

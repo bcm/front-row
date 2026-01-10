@@ -182,6 +182,20 @@ export default function Shared() {
     },
   });
 
+  const deleteInviteMutation = useMutation({
+    mutationFn: async ({ groupId, inviteId }: { groupId: string; inviteId: string }) => {
+      const response = await apiRequest("DELETE", `/api/groups/${groupId}/invites/${inviteId}`);
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/groups"] });
+      toast({ title: "Invite link deleted" });
+    },
+    onError: () => {
+      toast({ title: "Failed to delete invite", variant: "destructive" });
+    },
+  });
+
   const copyInviteLink = (invite: GroupInvite) => {
     const fullUrl = `${window.location.origin}/join/${invite.inviteCode}`;
     navigator.clipboard.writeText(fullUrl);
@@ -466,6 +480,15 @@ export default function Shared() {
                             ) : (
                               <Copy className="w-3 h-3" />
                             )}
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 text-destructive hover:text-destructive"
+                            onClick={() => deleteInviteMutation.mutate({ groupId: group.id, inviteId: invite.id })}
+                            disabled={deleteInviteMutation.isPending}
+                          >
+                            <Trash2 className="w-3 h-3" />
                           </Button>
                         </div>
                       ))}

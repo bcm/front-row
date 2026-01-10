@@ -2343,6 +2343,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Delete an invite
+  app.delete("/api/groups/:groupId/invites/:inviteId", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const { groupId, inviteId } = req.params;
+      
+      const isMember = await storage.isGroupMember(groupId, userId);
+      if (!isMember) {
+        return res.status(403).json({ error: "Not a member of this group" });
+      }
+      
+      await storage.deleteGroupInvite(inviteId);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting invite:", error);
+      res.status(500).json({ error: "Failed to delete invite" });
+    }
+  });
+
   // Get pending invites for current user (by email)
   app.get("/api/invites/pending", async (req, res) => {
     try {
