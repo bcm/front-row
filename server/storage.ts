@@ -1,13 +1,13 @@
-import { type User, type InsertUser, type Show, type InsertShow, type UserShow, type InsertUserShow, type Episode, type InsertEpisode, type UserEpisode, type InsertUserEpisode, type UserSettings, type InsertUserSettings, type Recommendation, type InsertRecommendation, type DismissedRecommendation, type InsertDismissedRecommendation, type NewReleasesState, type NewReleaseShow, type DismissedNewRelease, type InsertDismissedNewRelease } from "@shared/schema";
-import { users, shows, userShows, episodes, userEpisodes, userSettings, recommendations, dismissedRecommendations, newReleasesState, dismissedNewReleases } from "@shared/schema";
+import { type User, type UpsertUser, type Show, type InsertShow, type UserShow, type InsertUserShow, type Episode, type InsertEpisode, type UserEpisode, type InsertUserEpisode, type UserSettings, type InsertUserSettings, type Recommendation, type InsertRecommendation, type DismissedRecommendation, type InsertDismissedRecommendation, type NewReleasesState, type NewReleaseShow, type DismissedNewRelease, type InsertDismissedNewRelease, type Group, type InsertGroup, type GroupMember, type InsertGroupMember, type GroupInvite, type InsertGroupInvite } from "@shared/schema";
+import { users, shows, userShows, episodes, userEpisodes, userSettings, recommendations, dismissedRecommendations, newReleasesState, dismissedNewReleases, groups, groupMembers, groupInvites } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, ilike, inArray, desc, asc, lte, gt, sql } from "drizzle-orm";
 
 export interface IStorage {
   // User methods
   getUser(id: string): Promise<User | undefined>;
-  getUserByUsername(username: string): Promise<User | undefined>;
-  createUser(user: InsertUser): Promise<User>;
+  getUserByEmail(email: string): Promise<User | undefined>;
+  createUser(user: UpsertUser): Promise<User>;
   
   // Show methods
   getShow(id: number): Promise<Show | undefined>;
@@ -59,6 +59,26 @@ export interface IStorage {
   getDismissedNewReleases(userId: string): Promise<DismissedNewRelease[]>;
   dismissNewRelease(userId: string, tvmazeId: number): Promise<void>;
   getUserShowIds(userId: string): Promise<number[]>;
+  
+  // Group methods
+  createGroup(group: InsertGroup): Promise<Group>;
+  getGroup(groupId: string): Promise<Group | undefined>;
+  getUserGroups(userId: string): Promise<(Group & { memberCount: number })[]>;
+  updateGroup(groupId: string, updates: Partial<Group>): Promise<Group | undefined>;
+  deleteGroup(groupId: string): Promise<boolean>;
+  
+  // Group member methods
+  addGroupMember(member: InsertGroupMember): Promise<GroupMember>;
+  getGroupMembers(groupId: string): Promise<(GroupMember & { user: User })[]>;
+  isGroupMember(groupId: string, userId: string): Promise<boolean>;
+  removeGroupMember(groupId: string, userId: string): Promise<boolean>;
+  
+  // Group invite methods
+  createGroupInvite(invite: InsertGroupInvite): Promise<GroupInvite>;
+  getGroupInvite(inviteCode: string): Promise<GroupInvite | undefined>;
+  getGroupInvitesByEmail(email: string): Promise<(GroupInvite & { group: Group })[]>;
+  getPendingInvitesForGroup(groupId: string): Promise<GroupInvite[]>;
+  useGroupInvite(inviteCode: string, userId: string): Promise<GroupInvite | undefined>;
 }
 
 
@@ -69,12 +89,12 @@ export class DatabaseStorage implements IStorage {
     return user || undefined;
   }
 
-  async getUserByUsername(username: string): Promise<User | undefined> {
-    const [user] = await db.select().from(users).where(eq(users.username, username));
+  async getUserByEmail(email: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.email, email));
     return user || undefined;
   }
 
-  async createUser(insertUser: InsertUser): Promise<User> {
+  async createUser(insertUser: UpsertUser): Promise<User> {
     const [user] = await db
       .insert(users)
       .values([insertUser])
@@ -819,6 +839,164 @@ export class DatabaseStorage implements IStorage {
         eq(userShows.isRemoved, false)
       ));
     return results.map(r => r.showId);
+  }
+
+  // Group methods
+  async createGroup(group: InsertGroup): Promise<Group> {
+    const [newGroup] = await db.insert(groups).values(group).returning();
+    return newGroup;
+  }
+
+  async getGroup(groupId: string): Promise<Group | undefined> {
+    const [group] = await db.select().from(groups).where(eq(groups.id, groupId));
+    return group || undefined;
+  }
+
+  async getUserGroups(userId: string): Promise<(Group & { memberCount: number })[]> {
+    const membershipGroups = await db
+      .select({ groupId: groupMembers.groupId })
+      .from(groupMembers)
+      .where(eq(groupMembers.userId, userId));
+    
+    if (membershipGroups.length === 0) return [];
+    
+    const groupIds = membershipGroups.map(m => m.groupId);
+    const userGroups = await db.select().from(groups).where(inArray(groups.id, groupIds));
+    
+    const result = await Promise.all(userGroups.map(async (group) => {
+      const [countResult] = await db
+        .select({ count: sql<number>`count(*)` })
+        .from(groupMembers)
+        .where(eq(groupMembers.groupId, group.id));
+      return { ...group, memberCount: Number(countResult?.count || 0) };
+    }));
+    
+    return result;
+  }
+
+  async updateGroup(groupId: string, updates: Partial<Group>): Promise<Group | undefined> {
+    const [updated] = await db
+      .update(groups)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(groups.id, groupId))
+      .returning();
+    return updated || undefined;
+  }
+
+  async deleteGroup(groupId: string): Promise<boolean> {
+    await db.delete(groupInvites).where(eq(groupInvites.groupId, groupId));
+    await db.delete(groupMembers).where(eq(groupMembers.groupId, groupId));
+    const result = await db.delete(groups).where(eq(groups.id, groupId));
+    return true;
+  }
+
+  // Group member methods
+  async addGroupMember(member: InsertGroupMember): Promise<GroupMember> {
+    const [newMember] = await db
+      .insert(groupMembers)
+      .values(member)
+      .onConflictDoNothing()
+      .returning();
+    
+    if (!newMember) {
+      const [existing] = await db
+        .select()
+        .from(groupMembers)
+        .where(and(
+          eq(groupMembers.groupId, member.groupId),
+          eq(groupMembers.userId, member.userId)
+        ));
+      return existing;
+    }
+    return newMember;
+  }
+
+  async getGroupMembers(groupId: string): Promise<(GroupMember & { user: User })[]> {
+    const members = await db
+      .select()
+      .from(groupMembers)
+      .where(eq(groupMembers.groupId, groupId));
+    
+    const result = await Promise.all(members.map(async (member) => {
+      const [user] = await db.select().from(users).where(eq(users.id, member.userId));
+      return { ...member, user };
+    }));
+    
+    return result.filter(m => m.user);
+  }
+
+  async isGroupMember(groupId: string, userId: string): Promise<boolean> {
+    const [member] = await db
+      .select()
+      .from(groupMembers)
+      .where(and(
+        eq(groupMembers.groupId, groupId),
+        eq(groupMembers.userId, userId)
+      ));
+    return !!member;
+  }
+
+  async removeGroupMember(groupId: string, userId: string): Promise<boolean> {
+    await db
+      .delete(groupMembers)
+      .where(and(
+        eq(groupMembers.groupId, groupId),
+        eq(groupMembers.userId, userId)
+      ));
+    return true;
+  }
+
+  // Group invite methods
+  async createGroupInvite(invite: InsertGroupInvite): Promise<GroupInvite> {
+    const [newInvite] = await db.insert(groupInvites).values(invite).returning();
+    return newInvite;
+  }
+
+  async getGroupInvite(inviteCode: string): Promise<GroupInvite | undefined> {
+    const [invite] = await db
+      .select()
+      .from(groupInvites)
+      .where(eq(groupInvites.inviteCode, inviteCode));
+    return invite || undefined;
+  }
+
+  async getGroupInvitesByEmail(email: string): Promise<(GroupInvite & { group: Group })[]> {
+    const invites = await db
+      .select()
+      .from(groupInvites)
+      .where(and(
+        eq(groupInvites.invitedEmail, email),
+        sql`${groupInvites.usedAt} IS NULL`
+      ));
+    
+    const result = await Promise.all(invites.map(async (invite) => {
+      const [group] = await db.select().from(groups).where(eq(groups.id, invite.groupId));
+      return { ...invite, group };
+    }));
+    
+    return result.filter(i => i.group);
+  }
+
+  async getPendingInvitesForGroup(groupId: string): Promise<GroupInvite[]> {
+    return await db
+      .select()
+      .from(groupInvites)
+      .where(and(
+        eq(groupInvites.groupId, groupId),
+        sql`${groupInvites.usedAt} IS NULL`
+      ));
+  }
+
+  async useGroupInvite(inviteCode: string, userId: string): Promise<GroupInvite | undefined> {
+    const [updated] = await db
+      .update(groupInvites)
+      .set({ usedAt: new Date(), usedBy: userId })
+      .where(and(
+        eq(groupInvites.inviteCode, inviteCode),
+        sql`${groupInvites.usedAt} IS NULL`
+      ))
+      .returning();
+    return updated || undefined;
   }
 }
 

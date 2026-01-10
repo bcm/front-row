@@ -2129,6 +2129,308 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // =====================
+  // Group routes
+  // =====================
+  
+  // Get user's groups
+  app.get("/api/groups", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const userGroups = await storage.getUserGroups(userId);
+      res.json(userGroups);
+    } catch (error) {
+      console.error("Error fetching groups:", error);
+      res.status(500).json({ error: "Failed to fetch groups" });
+    }
+  });
+
+  // Create a new group
+  app.post("/api/groups", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const { name, description } = req.body;
+      
+      if (!name) {
+        return res.status(400).json({ error: "Group name is required" });
+      }
+      
+      const group = await storage.createGroup({
+        name,
+        description: description || null,
+        createdBy: userId,
+      });
+      
+      // Add creator as a member
+      await storage.addGroupMember({
+        groupId: group.id,
+        userId,
+      });
+      
+      res.json(group);
+    } catch (error) {
+      console.error("Error creating group:", error);
+      res.status(500).json({ error: "Failed to create group" });
+    }
+  });
+
+  // Get a specific group
+  app.get("/api/groups/:groupId", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const { groupId } = req.params;
+      
+      const isMember = await storage.isGroupMember(groupId, userId);
+      if (!isMember) {
+        return res.status(403).json({ error: "Not a member of this group" });
+      }
+      
+      const group = await storage.getGroup(groupId);
+      if (!group) {
+        return res.status(404).json({ error: "Group not found" });
+      }
+      
+      const members = await storage.getGroupMembers(groupId);
+      res.json({ ...group, members });
+    } catch (error) {
+      console.error("Error fetching group:", error);
+      res.status(500).json({ error: "Failed to fetch group" });
+    }
+  });
+
+  // Update a group
+  app.patch("/api/groups/:groupId", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const { groupId } = req.params;
+      const { name, description } = req.body;
+      
+      const isMember = await storage.isGroupMember(groupId, userId);
+      if (!isMember) {
+        return res.status(403).json({ error: "Not a member of this group" });
+      }
+      
+      const updated = await storage.updateGroup(groupId, { name, description });
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating group:", error);
+      res.status(500).json({ error: "Failed to update group" });
+    }
+  });
+
+  // Delete a group
+  app.delete("/api/groups/:groupId", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const { groupId } = req.params;
+      
+      const group = await storage.getGroup(groupId);
+      if (!group) {
+        return res.status(404).json({ error: "Group not found" });
+      }
+      
+      // Only creator can delete
+      if (group.createdBy !== userId) {
+        return res.status(403).json({ error: "Only the group creator can delete the group" });
+      }
+      
+      await storage.deleteGroup(groupId);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting group:", error);
+      res.status(500).json({ error: "Failed to delete group" });
+    }
+  });
+
+  // Get group members
+  app.get("/api/groups/:groupId/members", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const { groupId } = req.params;
+      
+      const isMember = await storage.isGroupMember(groupId, userId);
+      if (!isMember) {
+        return res.status(403).json({ error: "Not a member of this group" });
+      }
+      
+      const members = await storage.getGroupMembers(groupId);
+      res.json(members);
+    } catch (error) {
+      console.error("Error fetching group members:", error);
+      res.status(500).json({ error: "Failed to fetch group members" });
+    }
+  });
+
+  // Leave a group
+  app.delete("/api/groups/:groupId/members/me", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const { groupId } = req.params;
+      
+      const group = await storage.getGroup(groupId);
+      if (!group) {
+        return res.status(404).json({ error: "Group not found" });
+      }
+      
+      // If creator is leaving, delete the group
+      if (group.createdBy === userId) {
+        await storage.deleteGroup(groupId);
+        return res.json({ success: true, groupDeleted: true });
+      }
+      
+      await storage.removeGroupMember(groupId, userId);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error leaving group:", error);
+      res.status(500).json({ error: "Failed to leave group" });
+    }
+  });
+
+  // Create an invite link
+  app.post("/api/groups/:groupId/invites", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const { groupId } = req.params;
+      const { email, expiresInDays } = req.body;
+      
+      const isMember = await storage.isGroupMember(groupId, userId);
+      if (!isMember) {
+        return res.status(403).json({ error: "Not a member of this group" });
+      }
+      
+      // Generate unique invite code
+      const inviteCode = Math.random().toString(36).substring(2, 10) + 
+                        Math.random().toString(36).substring(2, 10);
+      
+      const expiresAt = expiresInDays 
+        ? new Date(Date.now() + expiresInDays * 24 * 60 * 60 * 1000)
+        : null;
+      
+      const invite = await storage.createGroupInvite({
+        groupId,
+        inviteCode,
+        invitedEmail: email || null,
+        invitedBy: userId,
+        expiresAt,
+      });
+      
+      res.json({ 
+        invite, 
+        inviteUrl: `/join/${inviteCode}` 
+      });
+    } catch (error) {
+      console.error("Error creating invite:", error);
+      res.status(500).json({ error: "Failed to create invite" });
+    }
+  });
+
+  // Get pending invites for a group
+  app.get("/api/groups/:groupId/invites", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const { groupId } = req.params;
+      
+      const isMember = await storage.isGroupMember(groupId, userId);
+      if (!isMember) {
+        return res.status(403).json({ error: "Not a member of this group" });
+      }
+      
+      const invites = await storage.getPendingInvitesForGroup(groupId);
+      res.json(invites);
+    } catch (error) {
+      console.error("Error fetching invites:", error);
+      res.status(500).json({ error: "Failed to fetch invites" });
+    }
+  });
+
+  // Get pending invites for current user (by email)
+  app.get("/api/invites/pending", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const user = await storage.getUser(userId);
+      
+      if (!user?.email) {
+        return res.json([]);
+      }
+      
+      const invites = await storage.getGroupInvitesByEmail(user.email);
+      res.json(invites);
+    } catch (error) {
+      console.error("Error fetching pending invites:", error);
+      res.status(500).json({ error: "Failed to fetch pending invites" });
+    }
+  });
+
+  // Get invite info (public endpoint)
+  app.get("/api/invites/:inviteCode", async (req, res) => {
+    try {
+      const { inviteCode } = req.params;
+      
+      const invite = await storage.getGroupInvite(inviteCode);
+      if (!invite) {
+        return res.status(404).json({ error: "Invite not found" });
+      }
+      
+      if (invite.usedAt) {
+        return res.status(400).json({ error: "Invite already used" });
+      }
+      
+      if (invite.expiresAt && new Date(invite.expiresAt) < new Date()) {
+        return res.status(400).json({ error: "Invite has expired" });
+      }
+      
+      const group = await storage.getGroup(invite.groupId);
+      res.json({ invite, group });
+    } catch (error) {
+      console.error("Error fetching invite:", error);
+      res.status(500).json({ error: "Failed to fetch invite" });
+    }
+  });
+
+  // Accept an invite
+  app.post("/api/invites/:inviteCode/accept", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const { inviteCode } = req.params;
+      
+      const invite = await storage.getGroupInvite(inviteCode);
+      if (!invite) {
+        return res.status(404).json({ error: "Invite not found" });
+      }
+      
+      if (invite.usedAt) {
+        return res.status(400).json({ error: "Invite already used" });
+      }
+      
+      if (invite.expiresAt && new Date(invite.expiresAt) < new Date()) {
+        return res.status(400).json({ error: "Invite has expired" });
+      }
+      
+      // Check if already a member
+      const isMember = await storage.isGroupMember(invite.groupId, userId);
+      if (isMember) {
+        return res.status(400).json({ error: "Already a member of this group" });
+      }
+      
+      // Add user to group
+      await storage.addGroupMember({
+        groupId: invite.groupId,
+        userId,
+      });
+      
+      // Mark invite as used (only for email-specific invites)
+      if (invite.invitedEmail) {
+        await storage.useGroupInvite(inviteCode, userId);
+      }
+      
+      const group = await storage.getGroup(invite.groupId);
+      res.json({ success: true, group });
+    } catch (error) {
+      console.error("Error accepting invite:", error);
+      res.status(500).json({ error: "Failed to accept invite" });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }
