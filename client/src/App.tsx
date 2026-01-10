@@ -8,6 +8,7 @@ import AppShell from "@/components/app-shell";
 import Dashboard from "./pages/dashboard";
 import Library from "./pages/library";
 import Shared from "./pages/shared";
+import Join from "./pages/join";
 import ShowDetail from "./pages/show-detail";
 import EpisodeDetail from "./pages/episode-detail";
 import NotFound from "./pages/not-found";
@@ -22,6 +23,7 @@ function Router() {
       <Route path="/dashboard/:tab" component={Dashboard} />
       <Route path="/library" component={Library} />
       <Route path="/shared" component={Shared} />
+      <Route path="/join/:inviteCode" component={Join} />
       <Route path="/show/:id" component={ShowDetail} />
       <Route path="/shows/:id" component={ShowDetail} />
       <Route path="/episode/:id" component={EpisodeDetail} />
