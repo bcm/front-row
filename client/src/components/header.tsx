@@ -1,13 +1,14 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo } from "react";
 import { Search, Tv, Film, Calendar, Users, PlayCircle, Clock, Filter, Library, Sparkles } from "lucide-react";
 import { Link, useLocation } from "wouter";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import { useDebounce } from "@/hooks/use-debounce";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
+import { apiRequest } from "@/lib/queryClient";
 
 interface SearchResult {
   resultType: 'show' | 'episode';
@@ -22,6 +23,12 @@ interface SearchResult {
   number?: number;
 }
 
+interface UserSettings {
+  id: string;
+  userId: string;
+  showMode: 'personal' | 'shared';
+}
+
 interface HeaderProps {
   onSearch?: (query: string) => void;
 }
@@ -30,60 +37,55 @@ export default function Header({ onSearch }: HeaderProps) {
   const [location, setLocation] = useLocation();
   const [searchQuery, setSearchQuery] = useState("");
   const [showDropdown, setShowDropdown] = useState(false);
-  const [showMode, setShowMode] = useState<"personal" | "shared">("personal");
-  const [settingsLoaded, setSettingsLoaded] = useState(false);
   const debouncedSearch = useDebounce(searchQuery, 300);
   const queryClient = useQueryClient();
 
-  // Load show mode setting on mount
-  useEffect(() => {
-    const fetchSettings = async () => {
-      try {
-        const response = await fetch('/api/user/settings');
-        if (response.ok) {
-          const settings = await response.json();
-          if (settings.showMode === 'personal' || settings.showMode === 'shared') {
-            setShowMode(settings.showMode);
-          }
-        }
-      } catch (error) {
-        console.error('Failed to fetch user settings:', error);
-      } finally {
-        setSettingsLoaded(true);
-      }
-    };
+  // Get settings from React Query cache (same query used by dashboard)
+  const { data: userSettings, isLoading: settingsLoading } = useQuery<UserSettings>({
+    queryKey: ["/api/user/settings"],
+  });
 
-    fetchSettings();
-  }, []);
+  const showMode = userSettings?.showMode || 'personal';
+  const settingsLoaded = !settingsLoading && !!userSettings;
+
+  // Mutation to update show mode
+  const updateShowModeMutation = useMutation({
+    mutationFn: async (newMode: 'personal' | 'shared') => {
+      const response = await apiRequest('PATCH', '/api/user/settings', { showMode: newMode });
+      return response.json();
+    },
+    onMutate: async (newMode) => {
+      // Cancel any outgoing refetches
+      await queryClient.cancelQueries({ queryKey: ['/api/user/settings'] });
+      
+      // Snapshot current value
+      const previousSettings = queryClient.getQueryData<UserSettings>(['/api/user/settings']);
+      
+      // Optimistically update cache
+      queryClient.setQueryData<UserSettings>(['/api/user/settings'], (old) => ({
+        ...old!,
+        showMode: newMode,
+      }));
+      
+      return { previousSettings };
+    },
+    onError: (err, newMode, context) => {
+      // Rollback on error
+      if (context?.previousSettings) {
+        queryClient.setQueryData(['/api/user/settings'], context.previousSettings);
+      }
+    },
+    onSuccess: () => {
+      // Invalidate episode queries to trigger refetch with new showMode
+      queryClient.invalidateQueries({ queryKey: ['/api/user/episodes'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/user/episodes/upcoming'] });
+    },
+  });
 
   // Handle show mode change
-  const handleShowModeChange = async (newMode: string) => {
+  const handleShowModeChange = (newMode: string) => {
     if (newMode !== showMode && (newMode === 'personal' || newMode === 'shared')) {
-      setShowMode(newMode as 'personal' | 'shared');
-      
-      try {
-        await fetch('/api/user/settings', {
-          method: 'PATCH',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ showMode: newMode }),
-        });
-        
-        // Sync React Query cache with the new showMode value
-        queryClient.setQueryData(['/api/user/settings'], (prev: any) => ({
-          ...prev,
-          showMode: newMode
-        }));
-        
-        // Invalidate episode queries to trigger refetch with new showMode
-        queryClient.invalidateQueries({ queryKey: ['/api/user/episodes'] });
-        
-      } catch (error) {
-        console.error('Failed to update show mode:', error);
-        // Revert local state on error
-        setShowMode(showMode);
-      }
+      updateShowModeMutation.mutate(newMode);
     }
   };
 
