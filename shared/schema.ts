@@ -134,6 +134,55 @@ export const insertDismissedRecommendationSchema = createInsertSchema(dismissedR
   dismissedAt: true,
 });
 
+// Groups feature tables
+export const groups = pgTable("groups", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  description: text("description"),
+  createdBy: varchar("created_by").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const groupMembers = pgTable("group_members", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  groupId: varchar("group_id").notNull(),
+  userId: varchar("user_id").notNull(),
+  joinedAt: timestamp("joined_at").defaultNow(),
+}, (table) => ({
+  uniqueGroupMember: unique().on(table.groupId, table.userId),
+}));
+
+export const groupInvites = pgTable("group_invites", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  groupId: varchar("group_id").notNull(),
+  inviteCode: varchar("invite_code").notNull().unique(),
+  invitedEmail: varchar("invited_email"), // null for link-based invites
+  invitedBy: varchar("invited_by").notNull(),
+  expiresAt: timestamp("expires_at"),
+  usedAt: timestamp("used_at"),
+  usedBy: varchar("used_by"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertGroupSchema = createInsertSchema(groups).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertGroupMemberSchema = createInsertSchema(groupMembers).omit({
+  id: true,
+  joinedAt: true,
+});
+
+export const insertGroupInviteSchema = createInsertSchema(groupInvites).omit({
+  id: true,
+  usedAt: true,
+  usedBy: true,
+  createdAt: true,
+});
+
 // New Releases feature tables
 export const newReleasesState = pgTable("new_releases_state", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -186,3 +235,9 @@ export type InsertDismissedRecommendation = z.infer<typeof insertDismissedRecomm
 export type NewReleasesState = typeof newReleasesState.$inferSelect;
 export type DismissedNewRelease = typeof dismissedNewReleases.$inferSelect;
 export type InsertDismissedNewRelease = z.infer<typeof insertDismissedNewReleaseSchema>;
+export type Group = typeof groups.$inferSelect;
+export type InsertGroup = z.infer<typeof insertGroupSchema>;
+export type GroupMember = typeof groupMembers.$inferSelect;
+export type InsertGroupMember = z.infer<typeof insertGroupMemberSchema>;
+export type GroupInvite = typeof groupInvites.$inferSelect;
+export type InsertGroupInvite = z.infer<typeof insertGroupInviteSchema>;
