@@ -400,39 +400,33 @@ export default function Header({ onSearch }: HeaderProps) {
           {/* Show Mode Selector - Icon button with dropdown on large screens */}
           <div className="hidden lg:block ml-4 flex-shrink-0">
             {settingsLoaded ? (
-              <Tooltip delayDuration={0}>
-                <DropdownMenu>
-                  <TooltipTrigger asChild>
-                    <DropdownMenuTrigger asChild>
-                      <Button 
-                        variant="ghost" 
-                        size="sm" 
-                        className="p-3 rounded-md transition-colors" 
-                        data-testid="button-show-mode"
-                      >
-                        <Users className="w-5 h-5" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                  </TooltipTrigger>
-                  <DropdownMenuContent>
-                    <DropdownMenuItem 
-                      onClick={() => handleShowModeChange('personal')}
-                      className={showMode === 'personal' ? 'bg-accent' : ''}
-                    >
-                      Personal
-                    </DropdownMenuItem>
-                    <DropdownMenuItem 
-                      onClick={() => handleShowModeChange('shared')}
-                      className={showMode === 'shared' ? 'bg-accent' : ''}
-                    >
-                      Shared
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-                <TooltipContent>
-                  <p>Show Mode: {showMode === 'personal' ? 'Personal' : 'Shared'}</p>
-                </TooltipContent>
-              </Tooltip>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    className="p-3 rounded-md transition-colors" 
+                    data-testid="button-show-mode"
+                    title={`Show Mode: ${showMode === 'personal' ? 'Personal' : 'Shared'}`}
+                  >
+                    <Users className="w-5 h-5" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent>
+                  <DropdownMenuItem 
+                    onClick={() => handleShowModeChange('personal')}
+                    className={showMode === 'personal' ? 'bg-accent' : ''}
+                  >
+                    Personal
+                  </DropdownMenuItem>
+                  <DropdownMenuItem 
+                    onClick={() => handleShowModeChange('shared')}
+                    className={showMode === 'shared' ? 'bg-accent' : ''}
+                  >
+                    Shared
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             ) : (
               <div className="w-11 h-11 bg-muted animate-pulse rounded" />
             )}
