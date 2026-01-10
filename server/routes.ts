@@ -1512,7 +1512,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ? showMode 
         : undefined;
       
-      const episodes = await storage.getUserEpisodes(userId, status as string, parsedShowMode);
+      // Get user's group IDs for shared mode filtering
+      let groupIds: string[] | undefined;
+      if (parsedShowMode === 'shared') {
+        groupIds = await storage.getUserGroupIds(userId);
+      }
+      
+      const episodes = await storage.getUserEpisodes(userId, status as string, parsedShowMode, groupIds);
       res.json(episodes);
     } catch (error) {
       console.error("Error fetching user episodes:", error);
@@ -1531,7 +1537,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ? showMode 
         : undefined;
       
-      const upcomingEpisodes = await storage.getUpcomingEpisodes(userId, parsedShowMode);
+      // Get user's group IDs for shared mode filtering
+      let groupIds: string[] | undefined;
+      if (parsedShowMode === 'shared') {
+        groupIds = await storage.getUserGroupIds(userId);
+      }
+      
+      const upcomingEpisodes = await storage.getUpcomingEpisodes(userId, parsedShowMode, groupIds);
       res.json(upcomingEpisodes);
     } catch (error) {
       console.error("Error fetching upcoming episodes:", error);

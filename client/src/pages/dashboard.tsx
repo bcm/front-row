@@ -90,12 +90,18 @@ export default function Dashboard() {
 
   // Untriaged episodes query
   const { data: untriagedEpisodes, isLoading: untriagedLoading } = useQuery({
-    queryKey: ["/api/user/episodes", "untriaged"],
+    queryKey: ["/api/user/episodes", "untriaged", showMode],
     queryFn: async () => {
-      const response = await fetch(`/api/user/episodes?status=untriaged`);
+      const params = new URLSearchParams();
+      params.set('status', 'untriaged');
+      if (showMode) {
+        params.set('showMode', showMode);
+      }
+      const response = await fetch(`/api/user/episodes?${params.toString()}`);
       if (!response.ok) throw new Error("Failed to fetch untriaged episodes");
       return response.json() as Promise<(UserEpisode & { episode: Episode & { show: Show } })[]>;
     },
+    enabled: !!userSettings,
   });
 
   // User shows query to get sharing status

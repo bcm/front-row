@@ -35,8 +35,9 @@ export interface IStorage {
   searchUserEpisodes(userId: string, query: string): Promise<(Episode & { show: Show })[]>;
   
   // User episode methods
-  getUserEpisodes(userId: string, status?: string, showMode?: string): Promise<(UserEpisode & { episode: Episode & { show: Show } })[]>;
-  getUpcomingEpisodes(userId: string, showMode?: string): Promise<(Episode & { show: Show })[]>;
+  getUserEpisodes(userId: string, status?: string, showMode?: string, groupIds?: string[]): Promise<(UserEpisode & { episode: Episode & { show: Show } })[]>;
+  getUpcomingEpisodes(userId: string, showMode?: string, groupIds?: string[]): Promise<(Episode & { show: Show })[]>;
+  getUserGroupIds(userId: string): Promise<string[]>;
   addUserEpisode(userEpisode: InsertUserEpisode): Promise<{ episode: UserEpisode; isNew: boolean }>;
   updateUserEpisode(userId: string, episodeId: number, updates: Partial<UserEpisode>): Promise<UserEpisode | undefined>;
   getUserEpisode(userId: string, episodeId: number): Promise<UserEpisode | undefined>;
@@ -517,7 +518,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   // User episode methods
-  async getUserEpisodes(userId: string, status?: string, showMode?: string): Promise<(UserEpisode & { episode: Episode & { show: Show } })[]> {
+  async getUserEpisodes(userId: string, status?: string, showMode?: string, groupIds?: string[]): Promise<(UserEpisode & { episode: Episode & { show: Show } })[]> {
     // Get today's date in YYYY-MM-DD format for comparison
     const today = new Date().toISOString().split('T')[0];
     
@@ -528,22 +529,22 @@ export class DatabaseStorage implements IStorage {
       lte(episodes.airdate, today)
     );
     
-    // Add shared filter based on showMode
-    // "shared" = only shared shows, "personal" = only non-shared shows, "all" or undefined = no filter
-    let sharedFilter;
-    if (showMode === 'shared') {
-      sharedFilter = eq(userShows.isShared, true);
-    } else if (showMode === 'personal') {
-      sharedFilter = eq(userShows.isShared, false);
-    }
-    
     // Combine all conditions
     const allConditions = [baseConditions];
     if (status) {
       allConditions.push(eq(userEpisodes.status, status));
     }
-    if (sharedFilter) {
-      allConditions.push(sharedFilter);
+    
+    // Filter by group membership: "shared" = shows with groupId in user's groups, "personal" = shows with null groupId
+    if (showMode === 'shared') {
+      if (groupIds && groupIds.length > 0) {
+        allConditions.push(inArray(userShows.groupId, groupIds));
+      } else {
+        // User has no groups - return empty result by adding impossible condition
+        allConditions.push(sql`1=0`);
+      }
+    } else if (showMode === 'personal') {
+      allConditions.push(sql`${userShows.groupId} IS NULL`);
     }
     
     const whereClause = and(...allConditions);
@@ -585,23 +586,28 @@ export class DatabaseStorage implements IStorage {
     }));
   }
 
-  async getUpcomingEpisodes(userId: string, showMode?: string): Promise<(Episode & { show: Show })[]> {
+  async getUpcomingEpisodes(userId: string, showMode?: string, groupIds?: string[]): Promise<(Episode & { show: Show })[]> {
     const today = new Date().toISOString().split('T')[0];
     
     // Build conditions based on showMode
-    const baseConditions = and(
+    const allConditions = [
       eq(userShows.isRemoved, false),
       gt(episodes.airdate, today)
-    );
+    ];
     
-    let sharedFilter;
+    // Filter by group membership: "shared" = shows with groupId in user's groups, "personal" = shows with null groupId
     if (showMode === 'shared') {
-      sharedFilter = eq(userShows.isShared, true);
+      if (groupIds && groupIds.length > 0) {
+        allConditions.push(inArray(userShows.groupId, groupIds));
+      } else {
+        // User has no groups - return empty result by adding impossible condition
+        allConditions.push(sql`1=0`);
+      }
     } else if (showMode === 'personal') {
-      sharedFilter = eq(userShows.isShared, false);
+      allConditions.push(sql`${userShows.groupId} IS NULL`);
     }
     
-    const whereClause = sharedFilter ? and(baseConditions, sharedFilter) : baseConditions;
+    const whereClause = and(...allConditions);
     
     const results = await db
       .select({
@@ -875,6 +881,14 @@ export class DatabaseStorage implements IStorage {
         eq(userShows.isRemoved, false)
       ));
     return results.map(r => r.showId);
+  }
+
+  async getUserGroupIds(userId: string): Promise<string[]> {
+    const results = await db
+      .select({ groupId: groupMembers.groupId })
+      .from(groupMembers)
+      .where(eq(groupMembers.userId, userId));
+    return results.map(r => r.groupId);
   }
 
   // Group methods

@@ -40,9 +40,7 @@ import {
   Mail,
   Loader2,
   Link as LinkIcon,
-  Tv,
 } from "lucide-react";
-import { Link } from "wouter";
 
 interface Group {
   id: string;
@@ -77,20 +75,9 @@ interface GroupInvite {
   group?: Group;
 }
 
-interface GroupShow {
-  id: string;
-  showId: number;
-  show: {
-    id: number;
-    name: string;
-    image: { medium?: string; original?: string } | null;
-  };
-}
-
 interface GroupWithDetails extends Group {
   members: GroupMember[];
   invites: GroupInvite[];
-  shows: GroupShow[];
 }
 
 export default function Shared() {
@@ -421,37 +408,6 @@ export default function Shared() {
                       </div>
                     ))}
                   </div>
-                </div>
-
-                <div>
-                  <h4 className="text-sm font-medium mb-3 flex items-center gap-2">
-                    <Tv className="w-4 h-4" />
-                    Shows ({group.shows?.length || 0})
-                  </h4>
-                  {group.shows && group.shows.length > 0 ? (
-                    <div className="flex flex-wrap gap-2">
-                      {group.shows.map((groupShow) => (
-                        <Link key={groupShow.id} href={`/show/${groupShow.show.id}`}>
-                          <div className="flex items-center gap-2 p-2 rounded-lg bg-muted/50 hover:bg-muted transition-colors cursor-pointer">
-                            {groupShow.show.image?.medium ? (
-                              <img 
-                                src={groupShow.show.image.medium} 
-                                alt={groupShow.show.name} 
-                                className="w-8 h-12 rounded object-cover"
-                              />
-                            ) : (
-                              <div className="w-8 h-12 rounded bg-muted flex items-center justify-center">
-                                <Tv className="w-4 h-4 text-muted-foreground" />
-                              </div>
-                            )}
-                            <span className="text-sm font-medium">{groupShow.show.name}</span>
-                          </div>
-                        </Link>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-sm text-muted-foreground">No shows added yet</p>
-                  )}
                 </div>
 
                 {group.invites && group.invites[0] && (
