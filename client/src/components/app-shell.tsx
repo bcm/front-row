@@ -189,22 +189,6 @@ export default function AppShell({ children }: AppShellProps) {
               <span className="hidden sm:inline">Library</span>
             </Button>
           </Link>
-          <Link href="/shared">
-            <Button
-              variant={activeTab === "shared" ? "secondary" : "ghost"}
-              size="sm"
-              className="gap-1 sm:gap-2 px-2 sm:px-3 h-8"
-              data-testid="nav-shared"
-            >
-              <Users className="h-4 w-4" />
-              <span className="hidden sm:inline">Groups</span>
-              {pendingInviteCount > 0 && (
-                <Badge variant="default" className="ml-0.5 sm:ml-1 text-xs px-1 sm:px-1.5 py-0 bg-primary">
-                  {pendingInviteCount}
-                </Badge>
-              )}
-            </Button>
-          </Link>
         </nav>
 
         <div className="flex items-center gap-1 sm:gap-2 flex-1 min-w-0 max-w-[140px] sm:max-w-xs md:max-w-md ml-auto">
@@ -343,6 +327,18 @@ export default function AppShell({ children }: AppShellProps) {
                 {user?.email}
               </p>
             </div>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem asChild>
+              <Link href="/shared" className="w-full cursor-pointer flex items-center">
+                <Users className="mr-2 h-4 w-4" />
+                Groups
+                {pendingInviteCount > 0 && (
+                  <Badge variant="default" className="ml-auto text-xs px-1.5 py-0 bg-primary">
+                    {pendingInviteCount}
+                  </Badge>
+                )}
+              </Link>
+            </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem asChild>
               <a href="/api/logout" className="w-full cursor-pointer">
