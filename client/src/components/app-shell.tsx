@@ -153,26 +153,26 @@ export default function AppShell({ children }: AppShellProps) {
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
-      <header className="h-14 border-b border-border bg-card flex items-center px-4 gap-4">
-        <Link href="/" className="flex items-center gap-2">
-          <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
-            <Tv className="w-4 h-4 text-primary-foreground" />
+      <header className="h-14 border-b border-border bg-card flex items-center px-2 sm:px-4 gap-2 sm:gap-4">
+        <Link href="/" className="flex items-center gap-2 shrink-0">
+          <div className="w-7 h-7 sm:w-8 sm:h-8 bg-primary rounded-lg flex items-center justify-center">
+            <Tv className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-primary-foreground" />
           </div>
-          <span className="text-lg font-bold hidden sm:block">Front Row</span>
+          <span className="text-lg font-bold hidden md:block">Front Row</span>
         </Link>
 
-        <nav className="flex items-center gap-1 ml-4">
+        <nav className="flex items-center gap-0.5 sm:gap-1 shrink-0">
           <Link href="/">
             <Button
               variant={activeTab === "dashboard" ? "secondary" : "ghost"}
               size="sm"
-              className="gap-2"
+              className="gap-1 sm:gap-2 px-2 sm:px-3 h-8"
               data-testid="nav-dashboard"
             >
               <PlayCircle className="h-4 w-4" />
               <span className="hidden sm:inline">Dashboard</span>
               {untriagedCount > 0 && (
-                <Badge variant="destructive" className="ml-1 text-xs px-1.5 py-0">
+                <Badge variant="destructive" className="ml-0.5 sm:ml-1 text-xs px-1 sm:px-1.5 py-0">
                   {untriagedCount}
                 </Badge>
               )}
@@ -182,7 +182,7 @@ export default function AppShell({ children }: AppShellProps) {
             <Button
               variant={activeTab === "library" ? "secondary" : "ghost"}
               size="sm"
-              className="gap-2"
+              className="gap-1 sm:gap-2 px-2 sm:px-3 h-8"
               data-testid="nav-library"
             >
               <Library className="h-4 w-4" />
@@ -193,13 +193,13 @@ export default function AppShell({ children }: AppShellProps) {
             <Button
               variant={activeTab === "shared" ? "secondary" : "ghost"}
               size="sm"
-              className="gap-2"
+              className="gap-1 sm:gap-2 px-2 sm:px-3 h-8"
               data-testid="nav-shared"
             >
               <Users className="h-4 w-4" />
               <span className="hidden sm:inline">Groups</span>
               {pendingInviteCount > 0 && (
-                <Badge variant="default" className="ml-1 text-xs px-1.5 py-0 bg-primary">
+                <Badge variant="default" className="ml-0.5 sm:ml-1 text-xs px-1 sm:px-1.5 py-0 bg-primary">
                   {pendingInviteCount}
                 </Badge>
               )}
@@ -207,7 +207,7 @@ export default function AppShell({ children }: AppShellProps) {
           </Link>
         </nav>
 
-        <div className="flex items-center gap-2 flex-1 max-w-xs sm:max-w-md ml-auto">
+        <div className="flex items-center gap-1 sm:gap-2 flex-1 min-w-0 max-w-[140px] sm:max-w-xs md:max-w-md ml-auto">
           <div className="flex-1 relative">
             <input
               type="text"
@@ -292,15 +292,15 @@ export default function AppShell({ children }: AppShellProps) {
           </Button>
         </div>
 
-        <div className="h-6 w-px bg-border mx-2" />
+        <div className="h-6 w-px bg-border mx-0.5 sm:mx-2 hidden sm:block" />
 
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-0 shrink-0">
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
                 variant="ghost"
                 size="icon"
-                className={cn(showMode === 'personal' && "text-primary")}
+                className={cn("h-8 w-8", showMode === 'personal' && "text-primary")}
                 onClick={() => handleShowModeChange('personal')}
               >
                 <User className="h-4 w-4" />
@@ -313,7 +313,7 @@ export default function AppShell({ children }: AppShellProps) {
               <Button
                 variant="ghost"
                 size="icon"
-                className={cn(showMode === 'shared' && "text-primary")}
+                className={cn("h-8 w-8", showMode === 'shared' && "text-primary")}
                 onClick={() => handleShowModeChange('shared')}
               >
                 <Users className="h-4 w-4" />
@@ -325,10 +325,10 @@ export default function AppShell({ children }: AppShellProps) {
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" className="rounded-full">
-              <Avatar className="h-8 w-8">
+            <Button variant="ghost" size="icon" className="rounded-full h-8 w-8 shrink-0">
+              <Avatar className="h-7 w-7 sm:h-8 sm:w-8">
                 <AvatarImage src={user?.profileImageUrl || undefined} alt={user?.firstName || "User"} />
-                <AvatarFallback>
+                <AvatarFallback className="text-xs sm:text-sm">
                   {user?.firstName?.[0]?.toUpperCase() || user?.email?.[0]?.toUpperCase() || "U"}
                 </AvatarFallback>
               </Avatar>
