@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { Search, Tv, Film, Calendar, Users, PlayCircle, Clock, Filter, Library, Sparkles } from "lucide-react";
+import { Search, Tv, Film, Calendar, Users, PlayCircle, Clock, Filter, Library, Sparkles, MoreHorizontal } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
@@ -374,9 +374,10 @@ export default function Header({ onSearch }: HeaderProps) {
               ))}
             </nav>
             
-            {/* Tab Navigation - Icons only on mobile screens */}
-            <nav className="flex sm:hidden space-x-1">
-              {tabs.map((tab) => (
+            {/* Tab Navigation - Icons only on mobile screens with overflow menu */}
+            <nav className="flex sm:hidden items-center space-x-1">
+              {/* Show first 3 tabs directly */}
+              {tabs.slice(0, 3).map((tab) => (
                 <Link 
                   key={tab.id}
                   href={tab.href}
@@ -396,6 +397,36 @@ export default function Header({ onSearch }: HeaderProps) {
                   )}
                 </Link>
               ))}
+              {/* Overflow menu for remaining tabs */}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    className={cn(
+                      "p-2 rounded-md transition-colors",
+                      tabs.slice(3).some(t => t.id === activeTab)
+                        ? "bg-primary text-primary-foreground"
+                        : "text-muted-foreground hover:text-foreground"
+                    )}
+                    data-testid="button-more-menu-mobile"
+                  >
+                    <MoreHorizontal className="w-4 h-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  {tabs.slice(3).map((tab) => (
+                    <DropdownMenuItem 
+                      key={tab.id}
+                      onSelect={() => setLocation(tab.href)}
+                      className={activeTab === tab.id ? 'bg-accent' : ''}
+                    >
+                      <tab.icon className="w-4 h-4 mr-2" />
+                      {tab.label}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
             </nav>
           </TooltipProvider>
           
