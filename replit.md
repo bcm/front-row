@@ -50,26 +50,25 @@ The application uses six main entities:
 ### Authentication & Authorization
 Currently implemented with basic session-based authentication structure, though authentication routes are not fully implemented in the current codebase.
 
-## In Progress: Shared Episode Status for Groups
+## Shared Episode Status for Groups (Implemented)
 
-### Context
-When implementing multi-user groups (family/roommates), we decided that **group members should share a single episode status** rather than each person tracking their own progress. This means when one family member marks an episode as "watched", everyone in the group sees it as watched.
+### Overview
+Group members share a single episode status rather than each person tracking their own progress. When one family member marks an episode as "watched", everyone in the group sees it as watched.
 
-### Architectural Decision
+### Architecture
 - **Personal shows**: Each user has their own `user_episodes` records with their `userId`
-- **Shared shows**: Group members share `user_episodes` records identified by `groupId`
+- **Shared shows**: Group members share `user_episodes` records identified by `groupId` (userId is null)
 
-### Schema Change Required
-Add `groupId` column to `user_episodes` table:
-```typescript
-groupId: varchar("group_id"), // null = personal episode status, set = shared group status
-```
+### Schema
+The `user_episodes` table has a `groupId` column:
+- `null` = personal episode status (userId is set)
+- `set` = shared group status (groupId is set, userId is null)
 
-### Logic Changes Required
-1. **Storage layer - getUserEpisodes**: When fetching episodes for shared shows, query by `groupId` instead of `userId`
-2. **Storage layer - status mutations**: When updating episode status for shared shows, update the group's record (by `groupId`)
-3. **Episode sync**: When syncing episodes for shared shows, create records with `groupId` set (not `userId`)
-4. **API routes**: Update endpoints to detect shared vs personal context and use appropriate queries
+### Key Implementation Details
+1. **Storage layer**: Methods like `getUserEpisodes`, `addUserEpisode`, and `updateUserEpisode` check for groupId and use it as the ownership key for shared episodes
+2. **getUserEpisode**: Checks both personal episodes (by userId) and shared episodes (by user's group membership)
+3. **Episode sync**: When syncing episodes for shared shows, creates records with `groupId` set (not `userId`)
+4. **PATCH endpoint**: Uses existing user_episode record to determine if it's shared, then passes groupId to updateUserEpisode
 
 ### Production Migration SQL
 After publishing and creating user account + Family group:
@@ -93,13 +92,19 @@ WHERE episode_id IN (
 );
 ```
 
-### Key Files to Modify
-- `shared/schema.ts` - Add groupId to user_episodes
-- `server/storage.ts` - Update getUserEpisodes, updateUserEpisodeStatus, createUserEpisode
-- `server/routes.ts` - Update episode API endpoints
-- Dashboard and episode components - Should work without changes if storage layer handles correctly
+### Future Improvements
+- Add database uniqueness constraints on (episodeId, groupId) and (episodeId, userId)
+- Optimize scheduler to batch by group instead of per-user for shared shows
 
 ## Recent Changes
+
+### January 17, 2026
+- **Shared Episode Status**: Implemented shared episode tracking for groups
+  - Group members now share a single episode status (when one marks an episode watched, all see it as watched)
+  - Added `groupId` column to `user_episodes` table
+  - Updated storage layer methods to query/update by groupId for shared shows
+  - Updated PATCH endpoint to resolve ownership from existing user_episode record
+  - Updated all episode sync functions to create episodes with groupId for shared shows
 
 ### January 4, 2026
 - **Unified Dashboard**: Consolidated all six sections (Countdown Timer, Next Up, Watch Later, New in Feed, New Releases, Recommendations) into a single Dashboard page
