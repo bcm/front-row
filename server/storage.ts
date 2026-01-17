@@ -704,11 +704,33 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getUserEpisode(userId: string, episodeId: number): Promise<UserEpisode | undefined> {
-    const [userEpisode] = await db
+    // First try to find personal episode for this user
+    const [personalEpisode] = await db
       .select()
       .from(userEpisodes)
       .where(and(eq(userEpisodes.userId, userId), eq(userEpisodes.episodeId, episodeId)));
-    return userEpisode || undefined;
+    
+    if (personalEpisode) {
+      return personalEpisode;
+    }
+    
+    // If not found, check if user belongs to any groups that have this episode shared
+    const userGroupIds = await this.getUserGroupIds(userId);
+    if (userGroupIds.length > 0) {
+      const [sharedEpisode] = await db
+        .select()
+        .from(userEpisodes)
+        .where(and(
+          inArray(userEpisodes.groupId, userGroupIds),
+          eq(userEpisodes.episodeId, episodeId)
+        ));
+      
+      if (sharedEpisode) {
+        return sharedEpisode;
+      }
+    }
+    
+    return undefined;
   }
 
   async addUserEpisode(userEpisode: InsertUserEpisode): Promise<{ episode: UserEpisode; isNew: boolean }> {

@@ -1605,15 +1605,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         updates.triagedAt = new Date();
       }
 
-      // Get episode to find showId, then check if userShow is shared
-      const episode = await storage.getEpisode(parseInt(episodeId));
-      if (!episode) {
-        return res.status(404).json({ error: "Episode not found" });
+      // Get the existing user episode to determine if it's personal or shared
+      // getUserEpisode checks both personal episodes (by userId) and shared episodes (by user's group membership)
+      const existingUserEpisode = await storage.getUserEpisode(userId, parseInt(episodeId));
+      if (!existingUserEpisode) {
+        return res.status(404).json({ error: "Episode not found in your collection" });
       }
       
-      // Check if this show is shared (has groupId)
-      const userShow = await storage.getUserShow(userId, episode.showId);
-      const episodeGroupId = userShow?.groupId;
+      // Use the groupId from the existing record (if shared) or undefined (if personal)
+      const episodeGroupId = existingUserEpisode.groupId;
 
       const updatedUserEpisode = await storage.updateUserEpisode(userId, parseInt(episodeId), updates, episodeGroupId);
       if (!updatedUserEpisode) {
