@@ -68,8 +68,11 @@ async function syncEpisodesForAllUsers() {
                 
                 await storage.createEpisode(episodeToStore);
 
+                // For shared shows (with groupId), create episodes with groupId
+                // For personal shows, create episodes with userId
                 const userEpisodeData = insertUserEpisodeSchema.parse({
-                  userId: user.id,
+                  userId: userShow.groupId ? null : user.id,
+                  groupId: userShow.groupId || null,
                   episodeId: episode.id,
                   status: "untriaged",
                   addedAt: new Date()

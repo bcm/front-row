@@ -12,11 +12,11 @@ function getUserId(req: Request): string {
 }
 
 // Async sync function for adding shows with progress reporting
-async function performAsyncAddShowSync(jobId: string, showId: number, userId: string): Promise<void> {
+async function performAsyncAddShowSync(jobId: string, showId: number, userId: string, groupId?: string | null): Promise<void> {
   const reporter = syncJobManager.createReporter(jobId);
   
   try {
-    console.log(`[ADD_SHOW_SYNC] Starting async sync for show ${showId}, job ${jobId}`);
+    console.log(`[ADD_SHOW_SYNC] Starting async sync for show ${showId}, job ${jobId}, groupId: ${groupId || 'personal'}`);
     syncJobManager.markJobRunning(jobId);
     
     // Phase 1: Fetch scrobble data
@@ -127,8 +127,10 @@ async function performAsyncAddShowSync(jobId: string, showId: number, userId: st
         }
 
         // Add user episode with determined status
+        // For shared shows, use groupId; for personal shows, use userId
         const userEpisodeData = insertUserEpisodeSchema.parse({
-          userId: userId,
+          userId: groupId ? null : userId,
+          groupId: groupId || null,
           episodeId: episode.id,
           status: initialStatus
         });
@@ -140,7 +142,7 @@ async function performAsyncAddShowSync(jobId: string, showId: number, userId: st
           await storage.updateUserEpisode(userId, episode.id, {
             triagedAt: new Date(),
             ...(watchedAt && { watchedAt })
-          });
+          }, groupId);
         }
         episodesImported++;
         
@@ -1222,9 +1224,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const jobId = syncJobManager.createJob(showId);
       console.log(`[ADD_SHOW] Created sync job: ${jobId}`);
 
-      // Start async episode sync process
+      // Start async episode sync process - pass groupId for shared shows
+      const episodeGroupId = userShow?.groupId;
       setImmediate(async () => {
-        await performAsyncAddShowSync(jobId, showId, userId);
+        await performAsyncAddShowSync(jobId, showId, userId, episodeGroupId);
       });
 
       // Return 202 with job ID for progress tracking
@@ -1599,7 +1602,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         updates.triagedAt = new Date();
       }
 
-      const updatedUserEpisode = await storage.updateUserEpisode(userId, parseInt(episodeId), updates);
+      // Get episode to find showId, then check if userShow is shared
+      const episode = await storage.getEpisode(parseInt(episodeId));
+      if (!episode) {
+        return res.status(404).json({ error: "Episode not found" });
+      }
+      
+      // Check if this show is shared (has groupId)
+      const userShow = await storage.getUserShow(userId, episode.showId);
+      const episodeGroupId = userShow?.groupId;
+
+      const updatedUserEpisode = await storage.updateUserEpisode(userId, parseInt(episodeId), updates, episodeGroupId);
       if (!updatedUserEpisode) {
         return res.status(404).json({ error: "Episode not found in your collection" });
       }
