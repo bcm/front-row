@@ -497,8 +497,11 @@ async function performAsyncEpisodeImport(jobId: string, userId: string): Promise
             
             await storage.createEpisode(episodeToStore);
 
+            // For shared shows (with groupId), create episodes with groupId
+            // For personal shows, create episodes with userId
             const userEpisodeData = insertUserEpisodeSchema.parse({
-              userId,
+              userId: userShow.groupId ? null : userId,
+              groupId: userShow.groupId || null,
               episodeId: episode.id,
               status: "untriaged",
               addedAt: new Date()
