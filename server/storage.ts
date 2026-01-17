@@ -37,9 +37,10 @@ export interface IStorage {
   // User episode methods
   getUserEpisodes(userId: string, status?: string, showMode?: string, groupIds?: string[]): Promise<(UserEpisode & { episode: Episode & { show: Show }; groupId?: string | null })[]>;
   getUpcomingEpisodes(userId: string, showMode?: string, groupIds?: string[]): Promise<(Episode & { show: Show; groupId?: string | null })[]>;
+  getUserEpisodesForShow(userId: string, showId: number, groupId?: string | null): Promise<(UserEpisode & { episode: Episode })[]>;
   getUserGroupIds(userId: string): Promise<string[]>;
   addUserEpisode(userEpisode: InsertUserEpisode): Promise<{ episode: UserEpisode; isNew: boolean }>;
-  updateUserEpisode(userId: string, episodeId: number, updates: Partial<UserEpisode>): Promise<UserEpisode | undefined>;
+  updateUserEpisode(userId: string, episodeId: number, updates: Partial<UserEpisode>, groupId?: string | null): Promise<UserEpisode | undefined>;
   getUserEpisode(userId: string, episodeId: number): Promise<UserEpisode | undefined>;
   
   // User settings methods
@@ -522,46 +523,58 @@ export class DatabaseStorage implements IStorage {
     // Get today's date in YYYY-MM-DD format for comparison
     const today = new Date().toISOString().split('T')[0];
     
-    // Base conditions: user ID, only aired episodes, and only non-removed shows
-    const baseConditions = and(
-      eq(userEpisodes.userId, userId),
+    // Base conditions: only aired episodes and non-removed shows
+    const baseConditions = [
       eq(userShows.isRemoved, false),
       lte(episodes.airdate, today)
-    );
+    ];
     
-    // Combine all conditions
-    const allConditions = [baseConditions];
     if (status) {
-      allConditions.push(eq(userEpisodes.status, status));
+      baseConditions.push(eq(userEpisodes.status, status));
     }
     
-    // Filter by group membership: "shared" = shows with groupId in user's groups, "personal" = shows with null groupId
+    // For shared mode: query by userEpisodes.groupId (shared episode status)
+    // For personal mode: query by userEpisodes.userId (personal episode status)
     if (showMode === 'shared') {
       if (groupIds && groupIds.length > 0) {
-        // Use parameterized OR conditions for group filtering
-        allConditions.push(or(...groupIds.map(gid => eq(userShows.groupId, gid)))!);
+        // Shared shows: filter user_episodes by groupId, filter user_shows by groupId
+        baseConditions.push(or(...groupIds.map(gid => eq(userEpisodes.groupId, gid)))!);
+        baseConditions.push(or(...groupIds.map(gid => eq(userShows.groupId, gid)))!);
       } else {
-        // User has no groups - return empty result by adding impossible condition
-        allConditions.push(sql`1=0`);
+        // User has no groups - return empty result
+        baseConditions.push(sql`1=0`);
       }
     } else if (showMode === 'personal') {
-      allConditions.push(isNull(userShows.groupId));
+      // Personal shows: filter user_episodes by userId, filter user_shows with null groupId
+      baseConditions.push(eq(userEpisodes.userId, userId));
+      baseConditions.push(isNull(userShows.groupId));
+    } else {
+      // Default: show all user's episodes (personal + shared via group membership)
+      if (groupIds && groupIds.length > 0) {
+        baseConditions.push(or(
+          eq(userEpisodes.userId, userId),
+          or(...groupIds.map(gid => eq(userEpisodes.groupId, gid)))!
+        )!);
+      } else {
+        baseConditions.push(eq(userEpisodes.userId, userId));
+      }
     }
     
-    const whereClause = and(...allConditions);
+    const whereClause = and(...baseConditions);
 
     const results = await db
       .select({
         id: userEpisodes.id,
         userId: userEpisodes.userId,
         episodeId: userEpisodes.episodeId,
+        groupId: userEpisodes.groupId,
         status: userEpisodes.status,
         watchedAt: userEpisodes.watchedAt,
         triagedAt: userEpisodes.triagedAt,
         addedAt: userEpisodes.addedAt,
         episode: episodes,
         show: shows,
-        groupId: userShows.groupId
+        showGroupId: userShows.groupId
       })
       .from(userEpisodes)
       .innerJoin(episodes, eq(userEpisodes.episodeId, episodes.id))
@@ -577,11 +590,11 @@ export class DatabaseStorage implements IStorage {
       id: row.id,
       userId: row.userId,
       episodeId: row.episodeId,
+      groupId: row.groupId || row.showGroupId, // Return episode's groupId, fallback to show's groupId
       status: row.status,
       watchedAt: row.watchedAt,
       triagedAt: row.triagedAt,
       addedAt: row.addedAt,
-      groupId: row.groupId,
       episode: {
         ...row.episode,
         show: row.show
@@ -652,12 +665,18 @@ export class DatabaseStorage implements IStorage {
     }));
   }
 
-  async getUserEpisodesForShow(userId: string, showId: number): Promise<(UserEpisode & { episode: Episode })[]> {
+  async getUserEpisodesForShow(userId: string, showId: number, groupId?: string | null): Promise<(UserEpisode & { episode: Episode })[]> {
+    // If groupId is provided, query by groupId (shared show), otherwise by userId (personal)
+    const ownerCondition = groupId 
+      ? eq(userEpisodes.groupId, groupId)
+      : eq(userEpisodes.userId, userId);
+    
     const results = await db
       .select({
         id: userEpisodes.id,
         userId: userEpisodes.userId,
         episodeId: userEpisodes.episodeId,
+        groupId: userEpisodes.groupId,
         status: userEpisodes.status,
         watchedAt: userEpisodes.watchedAt,
         triagedAt: userEpisodes.triagedAt,
@@ -667,7 +686,7 @@ export class DatabaseStorage implements IStorage {
       .from(userEpisodes)
       .innerJoin(episodes, eq(userEpisodes.episodeId, episodes.id))
       .where(and(
-        eq(userEpisodes.userId, userId),
+        ownerCondition,
         eq(episodes.showId, showId)
       ));
 
@@ -675,6 +694,7 @@ export class DatabaseStorage implements IStorage {
       id: row.id,
       userId: row.userId,
       episodeId: row.episodeId,
+      groupId: row.groupId,
       status: row.status,
       watchedAt: row.watchedAt,
       triagedAt: row.triagedAt,
@@ -692,31 +712,42 @@ export class DatabaseStorage implements IStorage {
   }
 
   async addUserEpisode(userEpisode: InsertUserEpisode): Promise<{ episode: UserEpisode; isNew: boolean }> {
+    // For shared episodes (groupId set), check by groupId+episodeId
+    // For personal episodes (userId set), check by userId+episodeId
+    const existingCondition = userEpisode.groupId
+      ? and(eq(userEpisodes.groupId, userEpisode.groupId), eq(userEpisodes.episodeId, userEpisode.episodeId))
+      : and(eq(userEpisodes.userId, userEpisode.userId!), eq(userEpisodes.episodeId, userEpisode.episodeId));
+    
+    // Check if episode already exists
+    const [existing] = await db
+      .select()
+      .from(userEpisodes)
+      .where(existingCondition);
+    
+    if (existing) {
+      return { episode: existing, isNew: false };
+    }
+    
+    // Insert new episode
     const [newUserEpisode] = await db
       .insert(userEpisodes)
       .values([userEpisode])
-      .onConflictDoNothing({
-        target: [userEpisodes.userId, userEpisodes.episodeId],
-      })
       .returning();
-    
-    // If no row was inserted (conflict), fetch the existing one
-    if (!newUserEpisode) {
-      const [existingUserEpisode] = await db
-        .select()
-        .from(userEpisodes)
-        .where(and(eq(userEpisodes.userId, userEpisode.userId), eq(userEpisodes.episodeId, userEpisode.episodeId)));
-      return { episode: existingUserEpisode, isNew: false };
-    }
     
     return { episode: newUserEpisode, isNew: true };
   }
 
-  async updateUserEpisode(userId: string, episodeId: number, updates: Partial<UserEpisode>): Promise<UserEpisode | undefined> {
+  async updateUserEpisode(userId: string, episodeId: number, updates: Partial<UserEpisode>, groupId?: string | null): Promise<UserEpisode | undefined> {
+    // For shared episodes (groupId set), update by groupId+episodeId
+    // For personal episodes, update by userId+episodeId
+    const condition = groupId
+      ? and(eq(userEpisodes.groupId, groupId), eq(userEpisodes.episodeId, episodeId))
+      : and(eq(userEpisodes.userId, userId), eq(userEpisodes.episodeId, episodeId));
+    
     const [updatedUserEpisode] = await db
       .update(userEpisodes)
       .set(updates)
-      .where(and(eq(userEpisodes.userId, userId), eq(userEpisodes.episodeId, episodeId)))
+      .where(condition)
       .returning();
     return updatedUserEpisode || undefined;
   }
