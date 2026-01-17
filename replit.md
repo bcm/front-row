@@ -50,6 +50,55 @@ The application uses six main entities:
 ### Authentication & Authorization
 Currently implemented with basic session-based authentication structure, though authentication routes are not fully implemented in the current codebase.
 
+## In Progress: Shared Episode Status for Groups
+
+### Context
+When implementing multi-user groups (family/roommates), we decided that **group members should share a single episode status** rather than each person tracking their own progress. This means when one family member marks an episode as "watched", everyone in the group sees it as watched.
+
+### Architectural Decision
+- **Personal shows**: Each user has their own `user_episodes` records with their `userId`
+- **Shared shows**: Group members share `user_episodes` records identified by `groupId`
+
+### Schema Change Required
+Add `groupId` column to `user_episodes` table:
+```typescript
+groupId: varchar("group_id"), // null = personal episode status, set = shared group status
+```
+
+### Logic Changes Required
+1. **Storage layer - getUserEpisodes**: When fetching episodes for shared shows, query by `groupId` instead of `userId`
+2. **Storage layer - status mutations**: When updating episode status for shared shows, update the group's record (by `groupId`)
+3. **Episode sync**: When syncing episodes for shared shows, create records with `groupId` set (not `userId`)
+4. **API routes**: Update endpoints to detect shared vs personal context and use appropriate queries
+
+### Production Migration SQL
+After publishing and creating user account + Family group:
+```sql
+-- Step 1: Assign ALL orphaned data to your user account (required for anything to work)
+UPDATE user_shows SET user_id = 'YOUR_USER_ID';
+UPDATE user_episodes SET user_id = 'YOUR_USER_ID';
+UPDATE recommendations SET user_id = 'YOUR_USER_ID';
+
+-- Step 2: Assign previously-shared SHOWS to Family group
+UPDATE user_shows SET group_id = 'YOUR_FAMILY_GROUP_ID' WHERE is_shared = true;
+
+-- Step 3: Create shared episode records for Family group shows
+-- (This migrates episode status from personal to shared for shows in the group)
+UPDATE user_episodes 
+SET group_id = 'YOUR_FAMILY_GROUP_ID', user_id = NULL 
+WHERE episode_id IN (
+  SELECT e.id FROM episodes e 
+  JOIN user_shows us ON e.show_id = us.show_id 
+  WHERE us.group_id = 'YOUR_FAMILY_GROUP_ID'
+);
+```
+
+### Key Files to Modify
+- `shared/schema.ts` - Add groupId to user_episodes
+- `server/storage.ts` - Update getUserEpisodes, updateUserEpisodeStatus, createUserEpisode
+- `server/routes.ts` - Update episode API endpoints
+- Dashboard and episode components - Should work without changes if storage layer handles correctly
+
 ## Recent Changes
 
 ### January 4, 2026

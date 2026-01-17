@@ -52,15 +52,14 @@ export const episodes = pgTable("episodes", {
 
 export const userEpisodes = pgTable("user_episodes", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").notNull(),
+  userId: varchar("user_id"), // null for shared episodes (group-based)
   episodeId: integer("episode_id").notNull(),
+  groupId: varchar("group_id"), // null = personal, set = shared group status
   status: text("status").notNull(), // 'untriaged', 'later', 'next', 'watched', 'skipped'
   watchedAt: timestamp("watched_at"),
   triagedAt: timestamp("triaged_at"),
   addedAt: timestamp("added_at").defaultNow(),
-}, (table) => ({
-  uniqueUserEpisode: unique().on(table.userId, table.episodeId),
-}));
+});
 
 export const userSettings = pgTable("user_settings", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
