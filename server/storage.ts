@@ -704,7 +704,42 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getUserEpisode(userId: string, episodeId: number): Promise<UserEpisode | undefined> {
-    // First try to find personal episode for this user
+    // First, get the episode to find its showId
+    const [episode] = await db
+      .select()
+      .from(episodes)
+      .where(eq(episodes.id, episodeId));
+    
+    if (!episode) {
+      return undefined;
+    }
+    
+    // Check if this show is shared (has a groupId in user_shows)
+    const [userShow] = await db
+      .select()
+      .from(userShows)
+      .where(and(
+        eq(userShows.userId, userId),
+        eq(userShows.showId, episode.showId),
+        eq(userShows.isRemoved, false)
+      ));
+    
+    if (userShow?.groupId) {
+      // This is a shared show - look for the shared episode record
+      const [sharedEpisode] = await db
+        .select()
+        .from(userEpisodes)
+        .where(and(
+          eq(userEpisodes.groupId, userShow.groupId),
+          eq(userEpisodes.episodeId, episodeId)
+        ));
+      
+      if (sharedEpisode) {
+        return sharedEpisode;
+      }
+    }
+    
+    // Either personal show or shared episode not found - look for personal episode
     const [personalEpisode] = await db
       .select()
       .from(userEpisodes)
@@ -714,7 +749,7 @@ export class DatabaseStorage implements IStorage {
       return personalEpisode;
     }
     
-    // If not found, check if user belongs to any groups that have this episode shared
+    // Last resort: check if user belongs to any groups that have this episode shared
     const userGroupIds = await this.getUserGroupIds(userId);
     if (userGroupIds.length > 0) {
       const [sharedEpisode] = await db
