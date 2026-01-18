@@ -83,6 +83,9 @@ export interface IStorage {
   getPendingInvitesForGroup(groupId: string): Promise<GroupInvite[]>;
   useGroupInvite(inviteCode: string, userId: string): Promise<GroupInvite | undefined>;
   deleteGroupInvite(inviteId: string): Promise<boolean>;
+  
+  // Episode migration methods
+  migrateShowEpisodes(showId: number, fromGroupId: string | null, fromUserId: string | null, toGroupId: string | null, toUserId: string | null): Promise<number>;
 }
 
 
@@ -1146,6 +1149,96 @@ export class DatabaseStorage implements IStorage {
   async deleteGroupInvite(inviteId: string): Promise<boolean> {
     await db.delete(groupInvites).where(eq(groupInvites.id, inviteId));
     return true;
+  }
+
+  async migrateShowEpisodes(
+    showId: number, 
+    fromGroupId: string | null, 
+    fromUserId: string | null, 
+    toGroupId: string | null, 
+    toUserId: string | null
+  ): Promise<number> {
+    const showEpisodeIds = await db
+      .select({ id: episodes.id })
+      .from(episodes)
+      .where(eq(episodes.showId, showId));
+    
+    if (showEpisodeIds.length === 0) {
+      return 0;
+    }
+
+    const episodeIdList = showEpisodeIds.map(e => e.id);
+
+    // Get source episode records to copy from
+    let sourceRecords;
+    if (fromGroupId) {
+      sourceRecords = await db
+        .select()
+        .from(userEpisodes)
+        .where(and(
+          sql`${userEpisodes.episodeId} = ANY(${episodeIdList})`,
+          eq(userEpisodes.groupId, fromGroupId)
+        ));
+    } else if (fromUserId) {
+      sourceRecords = await db
+        .select()
+        .from(userEpisodes)
+        .where(and(
+          sql`${userEpisodes.episodeId} = ANY(${episodeIdList})`,
+          eq(userEpisodes.userId, fromUserId)
+        ));
+    } else {
+      return 0;
+    }
+
+    if (sourceRecords.length === 0) {
+      console.log(`[MIGRATE] No source episode records found for show ${showId}`);
+      return 0;
+    }
+
+    // Create new records in the target ownership (copy, don't mutate)
+    let copiedCount = 0;
+    for (const record of sourceRecords) {
+      // Check if target record already exists
+      let existingTarget;
+      if (toGroupId) {
+        [existingTarget] = await db
+          .select()
+          .from(userEpisodes)
+          .where(and(
+            eq(userEpisodes.episodeId, record.episodeId),
+            eq(userEpisodes.groupId, toGroupId)
+          ));
+      } else if (toUserId) {
+        [existingTarget] = await db
+          .select()
+          .from(userEpisodes)
+          .where(and(
+            eq(userEpisodes.episodeId, record.episodeId),
+            eq(userEpisodes.userId, toUserId)
+          ));
+      }
+
+      if (existingTarget) {
+        // Target already exists - keep existing status, don't overwrite
+        // This preserves any prior personal/group status the user may have had
+        continue;
+      }
+      
+      // Create new record with the target ownership
+      await db.insert(userEpisodes).values({
+        userId: toUserId,
+        groupId: toGroupId,
+        episodeId: record.episodeId,
+        status: record.status,
+        watchedAt: record.watchedAt,
+        triagedAt: record.triagedAt,
+      });
+      copiedCount++;
+    }
+
+    console.log(`[MIGRATE] Copied ${copiedCount} episode records for show ${showId} from ${fromGroupId ? 'group:' + fromGroupId : 'user:' + fromUserId} to ${toGroupId ? 'group:' + toGroupId : 'user:' + toUserId}`);
+    return copiedCount;
   }
 }
 

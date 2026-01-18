@@ -98,6 +98,12 @@ WHERE episode_id IN (
 
 ## Recent Changes
 
+### January 18, 2026
+- **Episode Migration on Group Switch**: Fixed bug where switching a show between personal and group ownership (e.g., Family → Personal) would cause all episodes to appear unwatched
+  - Added `migrateShowEpisodes` storage method to copy episode status records when switching ownership types
+  - Episode records are now copied (not mutated) to preserve group status for other members
+  - Existing target records are not overwritten, preserving prior personal/group status
+
 ### January 17, 2026
 - **Shared Episode Status**: Implemented shared episode tracking for groups
   - Group members now share a single episode status (when one marks an episode watched, all see it as watched)

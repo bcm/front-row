@@ -1334,6 +1334,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const userId = getUserId(req);
       const { showId } = req.params;
+      const showIdNum = parseInt(showId);
       
       // Validate request body - groupId can be null (personal) or a string (group ID)
       const groupSchema = z.object({
@@ -1350,12 +1351,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
-      const updatedUserShow = await storage.updateUserShow(userId, parseInt(showId), { 
-        groupId: validatedData.groupId,
-        isShared: validatedData.groupId !== null // Keep isShared in sync for backward compatibility
+      // Get current show to determine old ownership for episode migration
+      const currentUserShow = await storage.getUserShow(userId, showIdNum);
+      if (!currentUserShow) {
+        return res.status(404).json({ error: "Show not found in your collection" });
+      }
+
+      const oldGroupId = currentUserShow.groupId;
+      const newGroupId = validatedData.groupId;
+
+      // Update the show's group assignment
+      const updatedUserShow = await storage.updateUserShow(userId, showIdNum, { 
+        groupId: newGroupId,
+        isShared: newGroupId !== null // Keep isShared in sync for backward compatibility
       });
       if (!updatedUserShow) {
         return res.status(404).json({ error: "Show not found in your collection" });
+      }
+
+      // Migrate episode records if ownership type changed
+      if (oldGroupId !== newGroupId) {
+        const migratedCount = await storage.migrateShowEpisodes(
+          showIdNum,
+          oldGroupId,              // fromGroupId
+          oldGroupId ? null : userId,  // fromUserId (only set if was personal)
+          newGroupId,              // toGroupId
+          newGroupId ? null : userId   // toUserId (only set if becoming personal)
+        );
+        console.log(`[GROUP_SWITCH] Migrated ${migratedCount} episodes for show ${showIdNum} from ${oldGroupId ? 'group' : 'personal'} to ${newGroupId ? 'group' : 'personal'}`);
       }
 
       res.json(updatedUserShow);
