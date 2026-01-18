@@ -1875,7 +1875,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/recommendations/accept", async (req, res) => {
     try {
       const userId = getUserId(req);
-      const { tmdbId, tvmazeId } = req.body;
+      const { tmdbId, tvmazeId, groupId: requestedGroupId } = req.body;
       
       if (!tvmazeId) {
         return res.status(400).json({ error: "tvmazeId is required" });
@@ -1910,13 +1910,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.json({ userShow: existingUserShow, show });
       }
       
-      // Get user settings to determine showMode and groupId
-      const userSettings = await storage.getUserSettings(userId);
+      // Use explicitly requested groupId, or fall back to user settings
       let groupId: string | null = null;
-      if (userSettings?.showMode === 'shared') {
+      if (requestedGroupId) {
+        // Verify user is a member of the requested group
         const userGroups = await storage.getUserGroups(userId);
-        if (userGroups.length > 0) {
-          groupId = userGroups[0].id;
+        if (userGroups.some(g => g.id === requestedGroupId)) {
+          groupId = requestedGroupId;
+        }
+      } else {
+        // Fall back to user's current showMode setting
+        const userSettings = await storage.getUserSettings(userId);
+        if (userSettings?.showMode === 'shared') {
+          const userGroups = await storage.getUserGroups(userId);
+          if (userGroups.length > 0) {
+            groupId = userGroups[0].id;
+          }
         }
       }
       
@@ -1947,7 +1956,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/recommendations/accept-watched", async (req, res) => {
     try {
       const userId = getUserId(req);
-      const { tmdbId, tvmazeId } = req.body;
+      const { tmdbId, tvmazeId, groupId: requestedGroupId } = req.body;
       
       if (!tvmazeId) {
         return res.status(400).json({ error: "tvmazeId is required" });
@@ -1982,13 +1991,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.json({ userShow: existingUserShow, show });
       }
       
-      // Get user settings to determine showMode and groupId
-      const userSettings = await storage.getUserSettings(userId);
+      // Use explicitly requested groupId, or fall back to user settings
       let groupId: string | null = null;
-      if (userSettings?.showMode === 'shared') {
+      if (requestedGroupId) {
         const userGroups = await storage.getUserGroups(userId);
-        if (userGroups.length > 0) {
-          groupId = userGroups[0].id;
+        if (userGroups.some(g => g.id === requestedGroupId)) {
+          groupId = requestedGroupId;
+        }
+      } else {
+        const userSettings = await storage.getUserSettings(userId);
+        if (userSettings?.showMode === 'shared') {
+          const userGroups = await storage.getUserGroups(userId);
+          if (userGroups.length > 0) {
+            groupId = userGroups[0].id;
+          }
         }
       }
       
@@ -2080,7 +2096,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/new-releases/add", async (req, res) => {
     try {
       const userId = getUserId(req);
-      const { tvmazeId } = req.body;
+      const { tvmazeId, groupId: requestedGroupId } = req.body;
       
       if (!tvmazeId) {
         return res.status(400).json({ error: "tvmazeId is required" });
@@ -2104,13 +2120,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.json({ userShow: existingUserShow, show });
       }
       
-      // Get user settings to determine showMode and groupId
-      const userSettings = await storage.getUserSettings(userId);
+      // Use explicitly requested groupId, or fall back to user settings
       let groupId: string | null = null;
-      if (userSettings?.showMode === 'shared') {
+      if (requestedGroupId) {
         const userGroups = await storage.getUserGroups(userId);
-        if (userGroups.length > 0) {
-          groupId = userGroups[0].id;
+        if (userGroups.some(g => g.id === requestedGroupId)) {
+          groupId = requestedGroupId;
+        }
+      } else {
+        const userSettings = await storage.getUserSettings(userId);
+        if (userSettings?.showMode === 'shared') {
+          const userGroups = await storage.getUserGroups(userId);
+          if (userGroups.length > 0) {
+            groupId = userGroups[0].id;
+          }
         }
       }
       
@@ -2143,7 +2166,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/new-releases/add-watched", async (req, res) => {
     try {
       const userId = getUserId(req);
-      const { tvmazeId } = req.body;
+      const { tvmazeId, groupId: requestedGroupId } = req.body;
       
       if (!tvmazeId) {
         return res.status(400).json({ error: "tvmazeId is required" });
@@ -2167,13 +2190,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.json({ userShow: existingUserShow, show });
       }
       
-      // Get user settings to determine showMode and groupId
-      const userSettings = await storage.getUserSettings(userId);
+      // Use explicitly requested groupId, or fall back to user settings
       let groupId: string | null = null;
-      if (userSettings?.showMode === 'shared') {
+      if (requestedGroupId) {
         const userGroups = await storage.getUserGroups(userId);
-        if (userGroups.length > 0) {
-          groupId = userGroups[0].id;
+        if (userGroups.some(g => g.id === requestedGroupId)) {
+          groupId = requestedGroupId;
+        }
+      } else {
+        const userSettings = await storage.getUserSettings(userId);
+        if (userSettings?.showMode === 'shared') {
+          const userGroups = await storage.getUserGroups(userId);
+          if (userGroups.length > 0) {
+            groupId = userGroups[0].id;
+          }
         }
       }
       
