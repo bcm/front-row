@@ -31,6 +31,8 @@ export default function Dashboard() {
   const [dismissedNewReleases, setDismissedNewReleases] = useState<Set<number>>(new Set());
   const [recProcessingTmdbId, setRecProcessingTmdbId] = useState<number | null>(null);
   const [dismissedRecs, setDismissedRecs] = useState<Set<number>>(new Set());
+  const [newReleaseDestinations, setNewReleaseDestinations] = useState<Record<number, string>>({});
+  const [recDestinations, setRecDestinations] = useState<Record<number, string>>({});
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -741,22 +743,23 @@ export default function Dashboard() {
   });
 
   const newReleaseAddMutation = useMutation({
-    mutationFn: async (show: NewReleaseShow) => {
+    mutationFn: async ({ show, groupId }: { show: NewReleaseShow; groupId?: string }) => {
       setDismissedNewReleases(prev => new Set(prev).add(show.id));
       setNewReleaseProcessingId(show.id);
-      const response = await apiRequest("POST", "/api/new-releases/add", { tvmazeId: show.id });
+      const response = await apiRequest("POST", "/api/new-releases/add", { tvmazeId: show.id, groupId: groupId || null });
       return response.json();
     },
-    onSuccess: () => {
+    onSuccess: (_, { groupId }) => {
       setNewReleaseProcessingId(null);
       queryClient.invalidateQueries({ queryKey: ["/api/new-releases"] });
       queryClient.invalidateQueries({ queryKey: ["/api/user/shows"] });
+      const groupName = groupId ? getGroupName(groupId) : null;
       toast({
         title: "Added to library",
-        description: "Show added successfully. Episodes are being synced in the background.",
+        description: groupName ? `Show added to ${groupName}. Episodes are being synced.` : "Show added to your personal library. Episodes are being synced.",
       });
     },
-    onError: (error: Error, show: NewReleaseShow) => {
+    onError: (error: Error, { show }: { show: NewReleaseShow }) => {
       setNewReleaseProcessingId(null);
       setDismissedNewReleases(prev => {
         const newSet = new Set(prev);
@@ -822,7 +825,7 @@ export default function Dashboard() {
   });
 
   const recAcceptMutation = useMutation({
-    mutationFn: async ({ tmdbId, showName }: { tmdbId: number; showName: string }) => {
+    mutationFn: async ({ tmdbId, showName, groupId }: { tmdbId: number; showName: string; groupId?: string }) => {
       setDismissedRecs(prev => new Set(prev).add(tmdbId));
       setRecProcessingTmdbId(tmdbId);
       
@@ -837,16 +840,17 @@ export default function Dashboard() {
 
       const tvmazeId = tvmazeResults[0].show.id;
 
-      const response = await apiRequest("POST", "/api/recommendations/accept", { tmdbId, tvmazeId });
+      const response = await apiRequest("POST", "/api/recommendations/accept", { tmdbId, tvmazeId, groupId: groupId || null });
       return response.json();
     },
-    onSuccess: () => {
+    onSuccess: (_, { groupId }) => {
       setRecProcessingTmdbId(null);
       queryClient.invalidateQueries({ queryKey: ["/api/recommendations"] });
       queryClient.invalidateQueries({ queryKey: ["/api/user/shows"] });
+      const groupName = groupId ? getGroupName(groupId) : null;
       toast({
         title: "Added to library",
-        description: "Show added successfully. Episodes are being synced in the background.",
+        description: groupName ? `Show added to ${groupName}. Episodes are being synced.` : "Show added to your personal library. Episodes are being synced.",
       });
     },
     onError: (error: Error, { tmdbId }: { tmdbId: number; showName: string }) => {
@@ -865,7 +869,7 @@ export default function Dashboard() {
   });
 
   const recAcceptWatchedMutation = useMutation({
-    mutationFn: async ({ tmdbId, showName }: { tmdbId: number; showName: string }) => {
+    mutationFn: async ({ tmdbId, showName, groupId }: { tmdbId: number; showName: string; groupId?: string }) => {
       setDismissedRecs(prev => new Set(prev).add(tmdbId));
       setRecProcessingTmdbId(tmdbId);
       
@@ -880,16 +884,17 @@ export default function Dashboard() {
 
       const tvmazeId = tvmazeResults[0].show.id;
 
-      const response = await apiRequest("POST", "/api/recommendations/accept-watched", { tmdbId, tvmazeId });
+      const response = await apiRequest("POST", "/api/recommendations/accept-watched", { tmdbId, tvmazeId, groupId: groupId || null });
       return response.json();
     },
-    onSuccess: () => {
+    onSuccess: (_, { groupId }) => {
       setRecProcessingTmdbId(null);
       queryClient.invalidateQueries({ queryKey: ["/api/recommendations"] });
       queryClient.invalidateQueries({ queryKey: ["/api/user/shows"] });
+      const groupName = groupId ? getGroupName(groupId) : null;
       toast({
         title: "Added as watched",
-        description: "Show added successfully. All episodes are being marked as watched.",
+        description: groupName ? `Show added to ${groupName}. All episodes are being marked as watched.` : "Show added to your personal library. All episodes are being marked as watched.",
       });
     },
     onError: (error: Error, { tmdbId }: { tmdbId: number; showName: string }) => {
@@ -1377,30 +1382,60 @@ export default function Dashboard() {
                             </div>
                           )}
                         </div>
-                        <div className="flex gap-2 flex-shrink-0">
-                          <Button
-                            onClick={() => newReleaseAddMutation.mutate(show)}
-                            disabled={newReleaseProcessingId === show.id}
-                            size="sm"
-                            data-testid={`button-add-${show.id}`}
-                          >
-                            {newReleaseProcessingId === show.id ? (
-                              <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-                            ) : (
-                              <Plus className="h-4 w-4 mr-1" />
-                            )}
-                            Add
-                          </Button>
-                          <Button
-                            onClick={() => newReleaseDismissMutation.mutate(show.id)}
-                            disabled={newReleaseDismissMutation.isPending}
-                            variant="outline"
-                            size="icon"
-                            className="h-8 w-8"
-                            data-testid={`button-dismiss-${show.id}`}
-                          >
-                            <X className="h-4 w-4" />
-                          </Button>
+                        <div className="flex flex-col sm:flex-row gap-2 flex-shrink-0">
+                          {userGroups && userGroups.length > 0 && (
+                            <Select
+                              value={newReleaseDestinations[show.id] || (showMode === 'shared' && userGroups[0] ? userGroups[0].id : 'personal')}
+                              onValueChange={(value) => setNewReleaseDestinations(prev => ({ ...prev, [show.id]: value }))}
+                            >
+                              <SelectTrigger className="w-[130px] h-8 text-xs">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="personal">
+                                  <span className="flex items-center gap-1">
+                                    <User className="h-3 w-3" /> Personal
+                                  </span>
+                                </SelectItem>
+                                {userGroups.map((group) => (
+                                  <SelectItem key={group.id} value={group.id}>
+                                    <span className="flex items-center gap-1">
+                                      <Share className="h-3 w-3" /> {group.name}
+                                    </span>
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          )}
+                          <div className="flex gap-2">
+                            <Button
+                              onClick={() => {
+                                const destination = newReleaseDestinations[show.id] || (showMode === 'shared' && userGroups?.[0] ? userGroups[0].id : 'personal');
+                                const groupId = destination === 'personal' ? undefined : destination;
+                                newReleaseAddMutation.mutate({ show, groupId });
+                              }}
+                              disabled={newReleaseProcessingId === show.id}
+                              size="sm"
+                              data-testid={`button-add-${show.id}`}
+                            >
+                              {newReleaseProcessingId === show.id ? (
+                                <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                              ) : (
+                                <Plus className="h-4 w-4 mr-1" />
+                              )}
+                              Add
+                            </Button>
+                            <Button
+                              onClick={() => newReleaseDismissMutation.mutate(show.id)}
+                              disabled={newReleaseDismissMutation.isPending}
+                              variant="outline"
+                              size="icon"
+                              className="h-8 w-8"
+                              data-testid={`button-dismiss-${show.id}`}
+                            >
+                              <X className="h-4 w-4" />
+                            </Button>
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -1511,44 +1546,78 @@ export default function Dashboard() {
                             </div>
                           )}
                         </div>
-                        <div className="flex gap-2 flex-shrink-0">
-                          <Button
-                            onClick={() => recAcceptMutation.mutate({ tmdbId: rec.tmdbId, showName: rec.name })}
-                            disabled={recProcessingTmdbId === rec.tmdbId}
-                            size="sm"
-                            data-testid={`button-rec-accept-${rec.tmdbId}`}
-                          >
-                            {recProcessingTmdbId === rec.tmdbId ? (
-                              <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-                            ) : (
-                              <Plus className="h-4 w-4 mr-1" />
-                            )}
-                            Add
-                          </Button>
-                          <Button
-                            onClick={() => recAcceptWatchedMutation.mutate({ tmdbId: rec.tmdbId, showName: rec.name })}
-                            disabled={recProcessingTmdbId === rec.tmdbId}
-                            variant="secondary"
-                            size="sm"
-                            data-testid={`button-rec-accept-watched-${rec.tmdbId}`}
-                          >
-                            {recProcessingTmdbId === rec.tmdbId ? (
-                              <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-                            ) : (
-                              <CheckCheck className="h-4 w-4 mr-1" />
-                            )}
-                            Watched
-                          </Button>
-                          <Button
-                            onClick={() => recDismissMutation.mutate(rec.tmdbId)}
-                            disabled={recDismissMutation.isPending}
-                            variant="outline"
-                            size="icon"
-                            className="h-8 w-8"
-                            data-testid={`button-rec-dismiss-${rec.tmdbId}`}
-                          >
-                            <X className="h-4 w-4" />
-                          </Button>
+                        <div className="flex flex-col sm:flex-row gap-2 flex-shrink-0">
+                          {userGroups && userGroups.length > 0 && (
+                            <Select
+                              value={recDestinations[rec.tmdbId] || (showMode === 'shared' && userGroups[0] ? userGroups[0].id : 'personal')}
+                              onValueChange={(value) => setRecDestinations(prev => ({ ...prev, [rec.tmdbId]: value }))}
+                            >
+                              <SelectTrigger className="w-[130px] h-8 text-xs">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="personal">
+                                  <span className="flex items-center gap-1">
+                                    <User className="h-3 w-3" /> Personal
+                                  </span>
+                                </SelectItem>
+                                {userGroups.map((group) => (
+                                  <SelectItem key={group.id} value={group.id}>
+                                    <span className="flex items-center gap-1">
+                                      <Share className="h-3 w-3" /> {group.name}
+                                    </span>
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          )}
+                          <div className="flex gap-2">
+                            <Button
+                              onClick={() => {
+                                const destination = recDestinations[rec.tmdbId] || (showMode === 'shared' && userGroups?.[0] ? userGroups[0].id : 'personal');
+                                const groupId = destination === 'personal' ? undefined : destination;
+                                recAcceptMutation.mutate({ tmdbId: rec.tmdbId, showName: rec.name, groupId });
+                              }}
+                              disabled={recProcessingTmdbId === rec.tmdbId}
+                              size="sm"
+                              data-testid={`button-rec-accept-${rec.tmdbId}`}
+                            >
+                              {recProcessingTmdbId === rec.tmdbId ? (
+                                <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                              ) : (
+                                <Plus className="h-4 w-4 mr-1" />
+                              )}
+                              Add
+                            </Button>
+                            <Button
+                              onClick={() => {
+                                const destination = recDestinations[rec.tmdbId] || (showMode === 'shared' && userGroups?.[0] ? userGroups[0].id : 'personal');
+                                const groupId = destination === 'personal' ? undefined : destination;
+                                recAcceptWatchedMutation.mutate({ tmdbId: rec.tmdbId, showName: rec.name, groupId });
+                              }}
+                              disabled={recProcessingTmdbId === rec.tmdbId}
+                              variant="secondary"
+                              size="sm"
+                              data-testid={`button-rec-accept-watched-${rec.tmdbId}`}
+                            >
+                              {recProcessingTmdbId === rec.tmdbId ? (
+                                <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                              ) : (
+                                <CheckCheck className="h-4 w-4 mr-1" />
+                              )}
+                              Watched
+                            </Button>
+                            <Button
+                              onClick={() => recDismissMutation.mutate(rec.tmdbId)}
+                              disabled={recDismissMutation.isPending}
+                              variant="outline"
+                              size="icon"
+                              className="h-8 w-8"
+                              data-testid={`button-rec-dismiss-${rec.tmdbId}`}
+                            >
+                              <X className="h-4 w-4" />
+                            </Button>
+                          </div>
                         </div>
                       </div>
                     </div>
