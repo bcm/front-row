@@ -905,7 +905,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const showId = parseInt(id);
       const userId = getUserId(req);
       
-      const userEpisodes = await storage.getUserEpisodesForShow(userId, showId);
+      // Check if this show is shared (has groupId)
+      const userShow = await storage.getUserShow(userId, showId);
+      const groupId = userShow?.groupId;
+      
+      const userEpisodes = await storage.getUserEpisodesForShow(userId, showId, groupId);
       
       // Convert to a map for easy lookup by episode ID
       const episodeStatusMap = userEpisodes.reduce((acc, userEpisode) => {
