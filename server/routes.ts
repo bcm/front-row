@@ -718,13 +718,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   }
                 }
 
-                const userEpisodeData = insertUserEpisodeSchema.parse({
-                  userId,
-                  episodeId: episode.id,
-                  status: initialStatus,
-                  addedAt: new Date(),
-                  ...(watchedAt && { watchedAt })
-                });
+                // For shared shows, create episode with groupId; for personal shows, use userId
+                const userEpisodeData = userShow.groupId
+                  ? insertUserEpisodeSchema.parse({
+                      groupId: userShow.groupId,
+                      episodeId: episode.id,
+                      status: initialStatus,
+                      addedAt: new Date(),
+                      ...(watchedAt && { watchedAt })
+                    })
+                  : insertUserEpisodeSchema.parse({
+                      userId,
+                      episodeId: episode.id,
+                      status: initialStatus,
+                      addedAt: new Date(),
+                      ...(watchedAt && { watchedAt })
+                    });
 
                 const { episode: userEpisode } = await storage.addUserEpisode(userEpisodeData);
                 
@@ -736,7 +745,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                     if (watchedAt) {
                       updates.watchedAt = watchedAt;
                     }
-                    await storage.updateUserEpisode(userId, episode.id, updates);
+                    await storage.updateUserEpisode(userId, episode.id, updates, userShow.groupId);
                     episodesUpdated++;
                   }
                 }
