@@ -1176,7 +1176,7 @@ export class DatabaseStorage implements IStorage {
         .select()
         .from(userEpisodes)
         .where(and(
-          sql`${userEpisodes.episodeId} = ANY(${episodeIdList})`,
+          inArray(userEpisodes.episodeId, episodeIdList),
           eq(userEpisodes.groupId, fromGroupId)
         ));
     } else if (fromUserId) {
@@ -1184,7 +1184,7 @@ export class DatabaseStorage implements IStorage {
         .select()
         .from(userEpisodes)
         .where(and(
-          sql`${userEpisodes.episodeId} = ANY(${episodeIdList})`,
+          inArray(userEpisodes.episodeId, episodeIdList),
           eq(userEpisodes.userId, fromUserId)
         ));
     } else {
@@ -1256,7 +1256,7 @@ export class DatabaseStorage implements IStorage {
         const deleteResult = await db
           .delete(userEpisodes)
           .where(and(
-            sql`${userEpisodes.episodeId} = ANY(${episodeIdList})`,
+            inArray(userEpisodes.episodeId, episodeIdList),
             eq(userEpisodes.groupId, fromGroupId)
           ))
           .returning();
