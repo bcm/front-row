@@ -1910,19 +1910,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.json({ userShow: existingUserShow, show });
       }
       
+      // Get user settings to determine showMode and groupId
+      const userSettings = await storage.getUserSettings(userId);
+      let groupId: string | null = null;
+      if (userSettings?.showMode === 'shared') {
+        const userGroups = await storage.getUserGroups(userId);
+        if (userGroups.length > 0) {
+          groupId = userGroups[0].id;
+        }
+      }
+      
       // Add show to user's library
       const userShow = await storage.addUserShow({
         userId,
         showId: tvmazeId,
         isRemoved: false,
-        isShared: false,
+        isShared: !!groupId,
+        groupId,
       });
       
-      // Start async episode sync
+      // Start async episode sync - pass groupId for shared shows
       const jobId = syncJobManager.createJob(tvmazeId);
       
       // Fire and forget the async sync
-      performAsyncAddShowSync(jobId, tvmazeId, userId).catch(error => {
+      performAsyncAddShowSync(jobId, tvmazeId, userId, groupId || undefined).catch(error => {
         console.error(`[ADD_SHOW] Async sync failed for job ${jobId}:`, error);
       });
       
@@ -1971,12 +1982,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.json({ userShow: existingUserShow, show });
       }
       
+      // Get user settings to determine showMode and groupId
+      const userSettings = await storage.getUserSettings(userId);
+      let groupId: string | null = null;
+      if (userSettings?.showMode === 'shared') {
+        const userGroups = await storage.getUserGroups(userId);
+        if (userGroups.length > 0) {
+          groupId = userGroups[0].id;
+        }
+      }
+      
       // Add show to user's library
       const userShow = await storage.addUserShow({
         userId,
         showId: tvmazeId,
         isRemoved: false,
-        isShared: false,
+        isShared: !!groupId,
+        groupId,
       });
       
       // Sync episodes first
@@ -1985,18 +2007,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Sync episodes and mark all as watched
       (async () => {
         try {
-          // Perform the episode sync
-          await performAsyncAddShowSync(jobId, tvmazeId, userId);
+          // Perform the episode sync - pass groupId for shared shows
+          await performAsyncAddShowSync(jobId, tvmazeId, userId, groupId || undefined);
           
           // Get all user episodes for this show
-          const userEpisodes = await storage.getUserEpisodesForShow(userId, tvmazeId);
+          const userEpisodes = await storage.getUserEpisodesForShow(userId, tvmazeId, groupId);
           
           // Mark all episodes as watched
           for (const userEpisode of userEpisodes) {
             await storage.updateUserEpisode(userId, userEpisode.episodeId, {
               status: "watched",
               watchedAt: new Date()
-            });
+            }, groupId);
           }
           
           console.log(`[ACCEPT_WATCHED] Marked ${userEpisodes.length} episodes as watched for show ${tvmazeId}`);
@@ -2082,21 +2104,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.json({ userShow: existingUserShow, show });
       }
       
+      // Get user settings to determine showMode and groupId
+      const userSettings = await storage.getUserSettings(userId);
+      let groupId: string | null = null;
+      if (userSettings?.showMode === 'shared') {
+        const userGroups = await storage.getUserGroups(userId);
+        if (userGroups.length > 0) {
+          groupId = userGroups[0].id;
+        }
+      }
+      
       // Add show to user's library
       const userShow = await storage.addUserShow({
         userId,
         showId: tvmazeId,
         isRemoved: false,
-        isShared: false,
+        isShared: !!groupId,
+        groupId,
       });
       
       // Also dismiss from new releases
       await storage.dismissNewRelease(userId, tvmazeId);
       
-      // Start async episode sync
+      // Start async episode sync - pass groupId for shared shows
       const jobId = syncJobManager.createJob(tvmazeId);
       
-      performAsyncAddShowSync(jobId, tvmazeId, userId).catch(error => {
+      performAsyncAddShowSync(jobId, tvmazeId, userId, groupId || undefined).catch(error => {
         console.error(`[NEW_RELEASES_ADD] Async sync failed for job ${jobId}:`, error);
       });
       
@@ -2134,12 +2167,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.json({ userShow: existingUserShow, show });
       }
       
+      // Get user settings to determine showMode and groupId
+      const userSettings = await storage.getUserSettings(userId);
+      let groupId: string | null = null;
+      if (userSettings?.showMode === 'shared') {
+        const userGroups = await storage.getUserGroups(userId);
+        if (userGroups.length > 0) {
+          groupId = userGroups[0].id;
+        }
+      }
+      
       // Add show to user's library
       const userShow = await storage.addUserShow({
         userId,
         showId: tvmazeId,
         isRemoved: false,
-        isShared: false,
+        isShared: !!groupId,
+        groupId,
       });
       
       // Also dismiss from new releases
@@ -2150,15 +2194,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       (async () => {
         try {
-          await performAsyncAddShowSync(jobId, tvmazeId, userId);
+          await performAsyncAddShowSync(jobId, tvmazeId, userId, groupId || undefined);
           
-          const userEpisodes = await storage.getUserEpisodesForShow(userId, tvmazeId);
+          const userEpisodes = await storage.getUserEpisodesForShow(userId, tvmazeId, groupId);
           
           for (const userEpisode of userEpisodes) {
             await storage.updateUserEpisode(userId, userEpisode.episodeId, {
               status: "watched",
               watchedAt: new Date()
-            });
+            }, groupId);
           }
           
           console.log(`[NEW_RELEASES_ADD_WATCHED] Marked ${userEpisodes.length} episodes as watched for show ${tvmazeId}`);
