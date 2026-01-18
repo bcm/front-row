@@ -1238,6 +1238,35 @@ export class DatabaseStorage implements IStorage {
     }
 
     console.log(`[MIGRATE] Copied ${copiedCount} episode records for show ${showId} from ${fromGroupId ? 'group:' + fromGroupId : 'user:' + fromUserId} to ${toGroupId ? 'group:' + toGroupId : 'user:' + toUserId}`);
+    
+    // Clean up orphaned source records if no one else needs them
+    if (fromGroupId) {
+      // Check if anyone else still has this show in the group
+      const otherGroupMembers = await db
+        .select()
+        .from(userShows)
+        .where(and(
+          eq(userShows.showId, showId),
+          eq(userShows.groupId, fromGroupId),
+          eq(userShows.isRemoved, false)
+        ));
+      
+      if (otherGroupMembers.length === 0) {
+        // No one else has this show in the group, delete orphaned group episode records
+        const deleteResult = await db
+          .delete(userEpisodes)
+          .where(and(
+            sql`${userEpisodes.episodeId} = ANY(${episodeIdList})`,
+            eq(userEpisodes.groupId, fromGroupId)
+          ))
+          .returning();
+        console.log(`[MIGRATE] Deleted ${deleteResult.length} orphaned group episode records for show ${showId}`);
+      } else {
+        console.log(`[MIGRATE] Keeping group episode records - ${otherGroupMembers.length} other member(s) still have the show in the group`);
+      }
+    }
+    // Note: We don't delete personal records when moving to group - the user may want to switch back
+    
     return copiedCount;
   }
 }
