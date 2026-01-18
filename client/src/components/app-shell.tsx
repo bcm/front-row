@@ -89,12 +89,18 @@ export default function AppShell({ children }: AppShellProps) {
   };
 
   const { data: untriagedEpisodes } = useQuery({
-    queryKey: ["/api/user/episodes", "untriaged"],
+    queryKey: ["/api/user/episodes", "untriaged", showMode],
     queryFn: async () => {
-      const response = await fetch(`/api/user/episodes?status=untriaged`);
+      const params = new URLSearchParams();
+      params.set('status', 'untriaged');
+      if (showMode) {
+        params.set('showMode', showMode);
+      }
+      const response = await fetch(`/api/user/episodes?${params.toString()}`);
       if (!response.ok) throw new Error("Failed to fetch untriaged episodes");
       return response.json();
     },
+    enabled: !!userSettings,
   });
 
   const untriagedCount = untriagedEpisodes ? untriagedEpisodes.filter(
