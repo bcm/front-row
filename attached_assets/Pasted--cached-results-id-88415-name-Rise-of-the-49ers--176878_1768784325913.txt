@@ -1,0 +1,822 @@
+[
+  {
+    "cached_results": [
+      {
+        "id": 88415,
+        "name": "Rise of the 49ers",
+        "image": {
+          "medium": "https://static.tvmaze.com/uploads/images/medium_portrait/598/1496661.jpg",
+          "original": "https://static.tvmaze.com/uploads/images/original_untouched/598/1496661.jpg"
+        },
+        "genres": [
+          "Drama",
+          "History",
+          "Sports"
+        ],
+        "status": "In Development",
+        "network": "AMC",
+        "summary": "<p>San Francisco 49ers dynasty, during the 1980s and early 1990s, a struggling football team transforms into the sport's most dazzling and successful franchise, becoming the talk of the league.</p>",
+        "premiered": "2026-02-01",
+        "webChannel": null
+      },
+      {
+        "id": 84524,
+        "name": "Vanished",
+        "image": {
+          "medium": "https://static.tvmaze.com/uploads/images/medium_portrait/608/1521210.jpg",
+          "original": "https://static.tvmaze.com/uploads/images/original_untouched/608/1521210.jpg"
+        },
+        "genres": [
+          "Thriller",
+          "Mystery"
+        ],
+        "status": "In Development",
+        "network": null,
+        "summary": "<p>When a couple's trip to Paris takes a dark turn with the sudden disappearance of her boyfriend Tom aboard a train to the south of France, Alice is plunged into a web of intrigue and danger, uncovering shocking secrets about the man she thought she knew. </p>",
+        "premiered": "2026-02-01",
+        "webChannel": "MGM+"
+      },
+      {
+        "id": 62569,
+        "name": "Wonder Man",
+        "image": {
+          "medium": "https://static.tvmaze.com/uploads/images/medium_portrait/607/1517949.jpg",
+          "original": "https://static.tvmaze.com/uploads/images/original_untouched/607/1517949.jpg"
+        },
+        "genres": [
+          "Action",
+          "Science-Fiction"
+        ],
+        "status": "In Development",
+        "network": null,
+        "summary": "<p>A Marvel Cinematic Universe series centered on Simon Williams AKA <b>Wonder Man</b>. In the comics, Wonder Man's real name is Simon Williams, the son of a wealthy industrialist whose company falls on hard times due to competition from Tony Stark's Stark Industries. As a result, Williams accepts an offer from villain Baron Zemo that gives him ionic superpowers including super strength and durability. After fighting the Avengers several times, Wonder Man ultimately joined their ranks.</p>",
+        "premiered": "2026-01-27",
+        "webChannel": "Disney+"
+      },
+      {
+        "id": 83060,
+        "name": "History's Deadliest with Ving Rhames",
+        "image": {
+          "medium": "https://static.tvmaze.com/uploads/images/medium_portrait/608/1520103.jpg",
+          "original": "https://static.tvmaze.com/uploads/images/original_untouched/608/1520103.jpg"
+        },
+        "genres": [],
+        "status": "In Development",
+        "network": "History",
+        "summary": "<p><b>Historoy's Deadliest </b>will reveal the stranger than truth facts behind some of the world's most prolific and powerful killers.</p>",
+        "premiered": "2026-01-26",
+        "webChannel": null
+      },
+      {
+        "id": 84601,
+        "name": "Memory of a Killer",
+        "image": {
+          "medium": "https://static.tvmaze.com/uploads/images/medium_portrait/605/1513467.jpg",
+          "original": "https://static.tvmaze.com/uploads/images/original_untouched/605/1513467.jpg"
+        },
+        "genres": [
+          "Drama",
+          "Thriller"
+        ],
+        "status": "In Development",
+        "network": "FOX",
+        "summary": "<p><b>Memory of a Killer </b>is a dramatic thriller about a hitman who develops early onset Alzheimer's. Angelo lives a double life as an assassin and a family man - which all worked out well until he was hit with early onset Alzheimer's. Now his worlds are colliding, putting his family in danger.</p>",
+        "premiered": "2026-01-25",
+        "webChannel": null
+      },
+      {
+        "id": 80978,
+        "name": "It's Not Like That",
+        "image": {
+          "medium": "https://static.tvmaze.com/uploads/images/medium_portrait/607/1519809.jpg",
+          "original": "https://static.tvmaze.com/uploads/images/original_untouched/607/1519809.jpg"
+        },
+        "genres": [
+          "Drama"
+        ],
+        "status": "In Development",
+        "network": null,
+        "summary": "<p><b>It's Not Like That</b> follows Lori, who is freshly divorced with two teens. Malcolm's a minister and recently widowed dad of three. Their families once did everything together, but now Lori and Malcolm must navigate their newly minted singledom, parenthood and the complexities of Malcolm being a modern-day minister. Is this the beginning of a love story? It's not like that. Or is it? </p>",
+        "premiered": "2026-01-25",
+        "webChannel": "Prime Video"
+      },
+      {
+        "id": 89799,
+        "name": "Mel Brooks: The 99 Year Old Man!",
+        "image": {
+          "medium": "https://static.tvmaze.com/uploads/images/medium_portrait/608/1520487.jpg",
+          "original": "https://static.tvmaze.com/uploads/images/original_untouched/608/1520487.jpg"
+        },
+        "genres": [],
+        "status": "In Development",
+        "network": "HBO",
+        "summary": "<p><b>Mel Brooks: The 99 Year Old Man! </b>explores the life, career, friendships, and loves of legendary writer, director, producer, and performer, Mel Brooks. One of Hollywood's most daring satirists from the early years of television sketch comedy through his film and stage hits, Brooks has held a funhouse mirror up to the human condition and used laughter as a path to resilience, connection, and joy for nearly a century.</p>",
+        "premiered": "2026-01-22",
+        "webChannel": null
+      },
+      {
+        "id": 88897,
+        "name": "Finding Her Edge",
+        "image": {
+          "medium": "https://static.tvmaze.com/uploads/images/medium_portrait/607/1518855.jpg",
+          "original": "https://static.tvmaze.com/uploads/images/original_untouched/607/1518855.jpg"
+        },
+        "genres": [
+          "Drama",
+          "Children",
+          "Romance"
+        ],
+        "status": "In Development",
+        "network": null,
+        "summary": "<p>The series follows the three Russo sisters, heirs to a struggling figure skating dynasty. As middle sister, seventeen-year-old Adriana trains for the World Championships with new partner Brayden, while still harbouring feelings for her first love and former partner, Freddie. Her life becomes complicated when she and Brayden pretend to be a couple off the ice so they can land a sponsorship to keep the financially struggling Russo rink afloat.</p>",
+        "premiered": "2026-01-22",
+        "webChannel": "Netflix"
+      },
+      {
+        "id": 89153,
+        "name": "Free Bert",
+        "image": {
+          "medium": "https://static.tvmaze.com/uploads/images/medium_portrait/604/1511088.jpg",
+          "original": "https://static.tvmaze.com/uploads/images/original_untouched/604/1511088.jpg"
+        },
+        "genres": [
+          "Comedy"
+        ],
+        "status": "In Development",
+        "network": null,
+        "summary": "<p>A gloriously messy dad and his equally unfiltered family cause chaos when they try to fit in with the snobby families at their fancy new school.</p>",
+        "premiered": "2026-01-22",
+        "webChannel": "Netflix"
+      },
+      {
+        "id": 72503,
+        "name": "The Pendragon Cycle: Rise of the Merlin",
+        "image": {
+          "medium": "https://static.tvmaze.com/uploads/images/medium_portrait/600/1500843.jpg",
+          "original": "https://static.tvmaze.com/uploads/images/original_untouched/600/1500843.jpg"
+        },
+        "genres": [
+          "Fantasy",
+          "History"
+        ],
+        "status": "In Development",
+        "network": null,
+        "summary": "<p>Based on the series by acclaimed Christian novelist Stephen R. Lawhead, <b>The Pendragon Cycle: Rise of the Merlin</b> is a unique retelling of the Arthurian legend, not set in the Medieval age of knights in shining armor, but in an earlier time — the end of Roman Britain when pagan tribes warred with Saxon and Pict invaders, and with each other, and the idea of a unified Britain was only a dream. In this tumultuous world Merlin, the son of an Atlantean princess and the bard, Taliesen, pursues his father's vision of a Kingdom of Summer — a Britain unified in peace. But to achieve this dream, Merlin will have to overcome ancient evils and navigate both the fall of the Roman occupation and the rise of Christianity in search of a king who can unite the Island of the Mighty.</p>",
+        "premiered": "2026-01-22",
+        "webChannel": "DailyWire+"
+      },
+      {
+        "id": 79916,
+        "name": "The Beauty",
+        "image": {
+          "medium": "https://static.tvmaze.com/uploads/images/medium_portrait/608/1520444.jpg",
+          "original": "https://static.tvmaze.com/uploads/images/original_untouched/608/1520444.jpg"
+        },
+        "genres": [
+          "Horror",
+          "Science-Fiction",
+          "Thriller"
+        ],
+        "status": "In Development",
+        "network": "FX",
+        "summary": "<p>The world of high fashion turns dark when international supermodels begin dying in gruesome and mysterious ways. FBI Agents Cooper Madsen and Jordan Bennett are sent to Paris to uncover the truth, but as they delve deeper into the case, they uncover a sexually transmitted virus that transforms ordinary people into visions of physical perfection, but with terrifying consequences.</p><p>Their path leads them directly into the crosshairs of \"The Corporation\", a shadowy tech billionaire who has secretly engineered a miracle drug dubbed \"The Beauty,\" who will do anything to protect his trillion-dollar empire - including unleashing his lethal enforcer, \"The Assassin.\" As the epidemic spreads, Jeremy, a desperate outsider, is caught in the chaos, searching for purpose as the agents race across Paris, Venice, Rome, and New York to stop a threat that could alter the future of humanity. <b>The Beauty </b>is a global thriller that asks: what would you sacrifice for perfection?</p>",
+        "premiered": "2026-01-21",
+        "webChannel": null
+      },
+      {
+        "id": 88441,
+        "name": "Steal",
+        "image": {
+          "medium": "https://static.tvmaze.com/uploads/images/medium_portrait/607/1518853.jpg",
+          "original": "https://static.tvmaze.com/uploads/images/original_untouched/607/1518853.jpg"
+        },
+        "genres": [
+          "Action",
+          "Crime",
+          "Thriller"
+        ],
+        "status": "In Development",
+        "network": null,
+        "summary": "<p><b>Steal </b>is a contemporary, high-octane thriller about the heist of the century and the ordinary office worker, Zara, who finds herself at the heart of it. A typical work day at a pension fund investment company, Lochmill Capital, is upended when a gang of violent thieves burst in and force Zara and her best mate Luke to execute their demands. But who would steal billions of pounds of ordinary people's pensions and why? DCI Rhys is determined to find out, but as a recently relapsed gambling addict, Rhys must keep his own money problems at bay while dealing with the secret agendas and competing interests at the center of this far-reaching crime.</p>",
+        "premiered": "2026-01-21",
+        "webChannel": "Prime Video"
+      },
+      {
+        "id": 89970,
+        "name": "120 Hours Behind Bars",
+        "image": {
+          "medium": "https://static.tvmaze.com/uploads/images/medium_portrait/609/1523210.jpg",
+          "original": "https://static.tvmaze.com/uploads/images/original_untouched/609/1523210.jpg"
+        },
+        "genres": [],
+        "status": "In Development",
+        "network": "Discovery",
+        "summary": "<p>Over five intense days, <b>120 Hours Behind Bars</b> delivers an unfiltered look inside America's toughest jails, where officers are outnumbered, cellblocks are overcrowded, and violence erupts without warning.  </p>",
+        "premiered": "2026-01-19",
+        "webChannel": null
+      },
+      {
+        "id": 89065,
+        "name": "Compass Points from PBS News",
+        "image": {
+          "medium": "https://static.tvmaze.com/uploads/images/medium_portrait/609/1522965.jpg",
+          "original": "https://static.tvmaze.com/uploads/images/original_untouched/609/1522965.jpg"
+        },
+        "genres": [],
+        "status": "Running",
+        "network": "PBS",
+        "summary": "<p><b>Compass Points</b> will address one international topic per episode, featuring analysis from a panel of experts that may include journalists and former government officials.</p>",
+        "premiered": "2026-01-18",
+        "webChannel": null
+      },
+      {
+        "id": 87999,
+        "name": "The Hillside Strangler",
+        "image": {
+          "medium": "https://static.tvmaze.com/uploads/images/medium_portrait/608/1521969.jpg",
+          "original": "https://static.tvmaze.com/uploads/images/original_untouched/608/1521969.jpg"
+        },
+        "genres": [
+          "Crime"
+        ],
+        "status": "Running",
+        "network": null,
+        "summary": "<p><b>The Hillside Strangler </b>explores the infamous murders that gripped Los Angeles in the late 1970s and the exhaustive investigation that followed. </p><p>In the late 1970s, Los Angeles was the serial murder capital of the world. The Freeway Killers. The Toolbox Killers. The Dating Game Killer. The Skid Row Slasher. But none terrorized this city of millions more than the Hillside Strangler, a phantom who struck without warning, abducting, raping, and murdering a dozen women and girls and leaving their bodies displayed on the hillsides like grim trophies. These crimes sparked the largest manhunt in LA's blood-soaked history, led by a relentless homicide detective named Frank Salerno. His dogged pursuit led to the strangler's capture and the revelation that these vicious acts were perpetrated by two men, Kenneth Bianchi and his cousin Angelo Buono.</p>",
+        "premiered": "2026-01-18",
+        "webChannel": "MGM+"
+      },
+      {
+        "id": 84605,
+        "name": "The Fall and Rise of Reggie Dinkins",
+        "image": {
+          "medium": "https://static.tvmaze.com/uploads/images/medium_portrait/608/1522237.jpg",
+          "original": "https://static.tvmaze.com/uploads/images/original_untouched/608/1522237.jpg"
+        },
+        "genres": [
+          "Comedy"
+        ],
+        "status": "Running",
+        "network": "NBC",
+        "summary": "<p><b>The Fall and Rise of Reggie Dinkins</b> focuses on a disgraced former football player, who is on a mission to rehabilitate his image.  </p>",
+        "premiered": "2026-01-18",
+        "webChannel": null
+      },
+      {
+        "id": 53063,
+        "name": "A Knight of the Seven Kingdoms",
+        "image": {
+          "medium": "https://static.tvmaze.com/uploads/images/medium_portrait/608/1521912.jpg",
+          "original": "https://static.tvmaze.com/uploads/images/original_untouched/608/1521912.jpg"
+        },
+        "genres": [
+          "Drama",
+          "Action",
+          "Fantasy"
+        ],
+        "status": "Running",
+        "network": "HBO",
+        "summary": "<p>A century before the events of <i>Game of Thrones</i>, two unlikely heroes wandered Westeros: a young, naive but courageous knight, Ser Duncan the Tall, and his diminutive squire, Egg. Set in an age when the Targaryen line still holds the Iron Throne and the last dragon has not yet passed from living memory, great destinies, powerful foes, and dangerous exploits await these improbable and incomparable friends.</p>",
+        "premiered": "2026-01-18",
+        "webChannel": null
+      },
+      {
+        "id": 89064,
+        "name": "Horizons from PBS News",
+        "image": {
+          "medium": "https://static.tvmaze.com/uploads/images/medium_portrait/608/1521961.jpg",
+          "original": "https://static.tvmaze.com/uploads/images/original_untouched/608/1521961.jpg"
+        },
+        "genres": [],
+        "status": "Running",
+        "network": "PBS",
+        "summary": "<p><b>Horizons</b> will explore a single science, health, technology or environmental topic each week.</p>",
+        "premiered": "2026-01-17",
+        "webChannel": null
+      },
+      {
+        "id": 88446,
+        "name": "Iyanla: The Inside Fix",
+        "image": {
+          "medium": "https://static.tvmaze.com/uploads/images/medium_portrait/608/1521965.jpg",
+          "original": "https://static.tvmaze.com/uploads/images/original_untouched/608/1521965.jpg"
+        },
+        "genres": [],
+        "status": "Running",
+        "network": "Oprah Winfrey Network",
+        "summary": "<p><b>Iyanla: The Inside Fix </b>will bring Iyanla's fresh perspective to twelve of the most impactful episodes, exploring how the challenges we face and the ways we heal have evolved in today's fast-changing world. This new series invites viewers to reflect, reframe and reconnect with the lessons that still matter most.  </p>",
+        "premiered": "2026-01-17",
+        "webChannel": null
+      },
+      {
+        "id": 60302,
+        "name": "Star Trek: Starfleet Academy",
+        "image": {
+          "medium": "https://static.tvmaze.com/uploads/images/medium_portrait/608/1521221.jpg",
+          "original": "https://static.tvmaze.com/uploads/images/original_untouched/608/1521221.jpg"
+        },
+        "genres": [
+          "Drama",
+          "Science-Fiction"
+        ],
+        "status": "Running",
+        "network": null,
+        "summary": "<p><b>Star Trek: Starfleet Academy</b> is set in the 32nd century, a time period in the far-future of the <i>Star Trek</i> franchise where Starfleet and the United Federation of Planets are recovering from a cataclysmic event, as depicted in <i>Star Trek: Discovery</i>. It introduces viewers to a young group of cadets who come together to pursue a common dream of hope and optimism. Under the watchful and demanding eyes of their instructors, they discover what it takes to become Starfleet officers as they navigate blossoming friendships, explosive rivalries, first loves and a new enemy that threatens both the Academy and the Federation itself.</p>",
+        "premiered": "2026-01-15",
+        "webChannel": "Paramount+"
+      },
+      {
+        "id": 77725,
+        "name": "Agatha Christie's Seven Dials",
+        "image": {
+          "medium": "https://static.tvmaze.com/uploads/images/medium_portrait/608/1521771.jpg",
+          "original": "https://static.tvmaze.com/uploads/images/original_untouched/608/1521771.jpg"
+        },
+        "genres": [
+          "Drama",
+          "Crime",
+          "Mystery"
+        ],
+        "status": "Ended",
+        "network": null,
+        "summary": "<p>England. 1925. At a lavish country house party, a practical joke appears to have gone horribly, murderously wrong. It will be up to the unlikeliest of sleuths — the fizzingly inquisitive Lady Eileen 'Bundle' Brent — to unravel a chilling plot that will change her life, cracking wide open the country house mystery.</p>",
+        "premiered": "2026-01-15",
+        "webChannel": "Netflix"
+      },
+      {
+        "id": 79185,
+        "name": "Ponies",
+        "image": {
+          "medium": "https://static.tvmaze.com/uploads/images/medium_portrait/608/1521711.jpg",
+          "original": "https://static.tvmaze.com/uploads/images/original_untouched/608/1521711.jpg"
+        },
+        "genres": [
+          "Thriller",
+          "Espionage"
+        ],
+        "status": "To Be Determined",
+        "network": null,
+        "summary": "<p>Moscow, 1977. Two \"PONIES\" (\"persons of no interest\" in intelligence speak) work anonymously as secretaries in the American Embassy. That is until their husbands are killed under mysterious circumstances in the USSR, and the pair become CIA operatives. Bea is an over-educated, Russian-speaking child of Soviet immigrants. Her cohort, Twila, is a small-town girl who is as abrasive as she is fearless. Together, they work to uncover a vast Cold War conspiracy and solve the mystery that made them widows in the first place.</p>",
+        "premiered": "2026-01-15",
+        "webChannel": "Peacock"
+      },
+      {
+        "id": 89872,
+        "name": "Dirty Talk: When Daytime Talk Shows Ruled TV",
+        "image": {
+          "medium": "https://static.tvmaze.com/uploads/images/medium_portrait/608/1521699.jpg",
+          "original": "https://static.tvmaze.com/uploads/images/original_untouched/608/1521699.jpg"
+        },
+        "genres": [],
+        "status": "Running",
+        "network": "ABC",
+        "summary": "<p>A look back at the rise, fall and lasting impact of the most sensational era in TV talk show history. By exploring the psychological forces that shaped the talk TV genre, the series reveals how these shows transformed from trusted confessional spaces into lightning rods of controversy, leaving a lasting impact on culture, media and the people caught in the chaos.</p>",
+        "premiered": "2026-01-14",
+        "webChannel": null
+      },
+      {
+        "id": 88955,
+        "name": "Pole to Pole with Will Smith",
+        "image": {
+          "medium": "https://static.tvmaze.com/uploads/images/medium_portrait/608/1520434.jpg",
+          "original": "https://static.tvmaze.com/uploads/images/original_untouched/608/1520434.jpg"
+        },
+        "genres": [
+          "Adventure",
+          "Nature"
+        ],
+        "status": "Running",
+        "network": null,
+        "summary": "<p>Inspired by his late mentor to explore life's big questions, Will throws himself into incredible challenges for 100 days: skiing to the South Pole, catching a giant anaconda, milking a venomous tarantula, climbing mountains, and diving under the ice of the North Pole. He will venture from pole to pole in the company of scientists, explorers and local experts.<br /> <br />Told with a cinematic scale, access, and authenticity only National Geographic can deliver, this once-in-a-lifetime adventure blends cutting-edge science, environmental storytelling, and bold exploration. Guided by experts, scientists and explorers, Will helps make world-first scientific discoveries and forges profound human connections — from the Amazon's Waorani community to the Kalahari's San people,whose knowledge and resilience offer powerful lessons about our future on the planet. <b>Pole to Pole with Will Smith </b>is an epic global undertaking defined by endurance, wonder and hope.</p>",
+        "premiered": "2026-01-14",
+        "webChannel": "Disney+"
+      },
+      {
+        "id": 67550,
+        "name": "Hey A.J.!",
+        "image": {
+          "medium": "https://static.tvmaze.com/uploads/images/medium_portrait/607/1519910.jpg",
+          "original": "https://static.tvmaze.com/uploads/images/original_untouched/607/1519910.jpg"
+        },
+        "genres": [
+          "Comedy",
+          "Children",
+          "Family"
+        ],
+        "status": "Running",
+        "network": "Disney Junior",
+        "summary": "<p>Inspired by former Super Bowl champion and children's book author Martellus Bennett, the upcoming new family comedy series <b>\"Hey A.J.!\"</b> is a whimsical and music-filled family comedy about an imaginative young girl who, along with her stuffed bunny sidekick, uses her big imagination to make ordinary life moments extraordinary. </p>",
+        "premiered": "2026-01-13",
+        "webChannel": null
+      },
+      {
+        "id": 88916,
+        "name": "Suddenly Amish",
+        "image": {
+          "medium": "https://static.tvmaze.com/uploads/images/medium_portrait/608/1520102.jpg",
+          "original": "https://static.tvmaze.com/uploads/images/original_untouched/608/1520102.jpg"
+        },
+        "genres": [],
+        "status": "Running",
+        "network": "TLC",
+        "summary": "<p><b>Suddenly Amish </b>follows six non-Amish individuals on a rare journey as they leave behind their modern \"English\" lifestyle and step into a deeply traditional Amish community in Lancaster, Pennsylvania. Seeking a profound change from their present way of modern life, each participant contemplates the possibility of converting into Amish society, as they navigate drastically different routines and a culture defined by faith, discipline, simplicity and community. </p>",
+        "premiered": "2026-01-13",
+        "webChannel": null
+      },
+      {
+        "id": 89245,
+        "name": "Killer Confessions: Case Files of a Texas Ranger",
+        "image": {
+          "medium": "https://static.tvmaze.com/uploads/images/medium_portrait/608/1520816.jpg",
+          "original": "https://static.tvmaze.com/uploads/images/original_untouched/608/1520816.jpg"
+        },
+        "genres": [
+          "Crime"
+        ],
+        "status": "Running",
+        "network": "Investigation Discovery",
+        "summary": "<p>Texas Ranger James Holland doesn't play by the rules. He's known as a serial killer whisperer because of his unique brand of interrogation tactics in cases once considered unsolvable. Watch as killers reveal the disturbing truth behind their crimes.</p>",
+        "premiered": "2026-01-13",
+        "webChannel": null
+      },
+      {
+        "id": 88879,
+        "name": "TODAY with Jenna & Sheinelle",
+        "image": {
+          "medium": "https://static.tvmaze.com/uploads/images/medium_portrait/608/1520440.jpg",
+          "original": "https://static.tvmaze.com/uploads/images/original_untouched/608/1520440.jpg"
+        },
+        "genres": [],
+        "status": "Running",
+        "network": "NBC",
+        "summary": "<p>America's feel-good morning show with big stars and sweet surprises; Jenna Bush Hager and Sheinelle Jones host an hour of heartfelt connection, inspirational stories, fun and laughs.</p>",
+        "premiered": "2026-01-12",
+        "webChannel": null
+      },
+      {
+        "id": 84630,
+        "name": "Fear Factor: House of Fear",
+        "image": {
+          "medium": "https://static.tvmaze.com/uploads/images/medium_portrait/607/1518740.jpg",
+          "original": "https://static.tvmaze.com/uploads/images/original_untouched/607/1518740.jpg"
+        },
+        "genres": [],
+        "status": "Running",
+        "network": "FOX",
+        "summary": "<p><b>Fear Factor: House of Fear</b> is coming back bigger, bolder and more daring. Dropped into an unforgiving, remote location, a group of strangers will live together under one roof, and face mind-blowing stunts, harrowing challenges and a twisted game of social strategy where trust is fleeting - and fear is a weapon.</p>",
+        "premiered": "2026-01-11",
+        "webChannel": null
+      },
+      {
+        "id": 88882,
+        "name": "Maxxed Out",
+        "image": {
+          "medium": "https://static.tvmaze.com/uploads/images/medium_portrait/607/1518731.jpg",
+          "original": "https://static.tvmaze.com/uploads/images/original_untouched/607/1518731.jpg"
+        },
+        "genres": [],
+        "status": "Running",
+        "network": "Oprah Winfrey Network",
+        "summary": "<p><b>Maxxed Out </b>reveals how money (and mismanaged money) can strain even the strongest relationships. Each episode uncovers the \"What were you thinking?\" moments behind financial disasters and the tough love it takes to turn things around. </p>",
+        "premiered": "2026-01-10",
+        "webChannel": null
+      },
+      {
+        "id": 88427,
+        "name": "The Valley: Persian Style",
+        "image": {
+          "medium": "https://static.tvmaze.com/uploads/images/medium_portrait/598/1496976.jpg",
+          "original": "https://static.tvmaze.com/uploads/images/original_untouched/598/1496976.jpg"
+        },
+        "genres": [],
+        "status": "Running",
+        "network": "Bravo",
+        "summary": "<p>This series follows a tight-knit group of Persian friends who have traded Beverly Hills for suburban life in the Valley. Rooted in their culture that values family, friendships and loyalty above everything else, emotions often take over as these fiery personalities navigate their highs, lows and everything in between.\u202f\u202f\u202f</p>",
+        "premiered": "2026-01-08",
+        "webChannel": null
+      },
+      {
+        "id": 78610,
+        "name": "His & Hers",
+        "image": {
+          "medium": "https://static.tvmaze.com/uploads/images/medium_portrait/607/1518202.jpg",
+          "original": "https://static.tvmaze.com/uploads/images/original_untouched/607/1518202.jpg"
+        },
+        "genres": [
+          "Drama",
+          "Crime",
+          "Thriller"
+        ],
+        "status": "Ended",
+        "network": null,
+        "summary": "<p>Set in the sweltering heat of Atlanta, Anna lives in haunting reclusion, fading away from her friends and career as a journalist. But when she overhears talk about a murder in Dahlonega — the sleepy north Georgia town where she grew up — Anna is snapped back to life, pouncing on the case and searching for answers. Detective Jack Harper is strangely suspicious of her involvement, chasing her into the crosshairs of his own investigation.</p>",
+        "premiered": "2026-01-08",
+        "webChannel": "Netflix"
+      },
+      {
+        "id": 85602,
+        "name": "Girl Taken",
+        "image": {
+          "medium": "https://static.tvmaze.com/uploads/images/medium_portrait/607/1518335.jpg",
+          "original": "https://static.tvmaze.com/uploads/images/original_untouched/607/1518335.jpg"
+        },
+        "genres": [
+          "Drama",
+          "Crime",
+          "Thriller"
+        ],
+        "status": "Ended",
+        "network": null,
+        "summary": "<p>The story follows twin sisters Lily and Abby, whose lives are shattered when Lily is abducted from their quiet rural English town by beloved local teacher Rick Hansen. After years of abuse in captivity, Lily escapes – only to discover that freedom brings its own challenges. The world she longed to return to has moved on without her. As Abby, Lily and their mother Eve struggle to rebuild their family, they must confront the lasting damage and the terrifying reality that Rick is still out there, determined to control the narrative and evade justice.</p>",
+        "premiered": "2026-01-08",
+        "webChannel": "Paramount+"
+      },
+      {
+        "id": 89698,
+        "name": "Trainer Games",
+        "image": {
+          "medium": "https://static.tvmaze.com/uploads/images/medium_portrait/607/1518150.jpg",
+          "original": "https://static.tvmaze.com/uploads/images/original_untouched/607/1518150.jpg"
+        },
+        "genres": [
+          "Adventure",
+          "Sports"
+        ],
+        "status": "Running",
+        "network": null,
+        "summary": "<p><b>Trainer Games</b> chronicles ten elite competitors as they fight their way through treacherous challenges set against stunning backdrops of Mauritius, an island in the Indian Ocean known for its adventure landscapes.</p>",
+        "premiered": "2026-01-08",
+        "webChannel": "Prime Video"
+      },
+      {
+        "id": 88035,
+        "name": "Neighborhood Watch",
+        "image": {
+          "medium": "https://static.tvmaze.com/uploads/images/medium_portrait/607/1519311.jpg",
+          "original": "https://static.tvmaze.com/uploads/images/original_untouched/607/1519311.jpg"
+        },
+        "genres": [],
+        "status": "Running",
+        "network": "HGTV",
+        "summary": "<p><b>Neighborhood Watch</b>, revealing the raw, unfiltered and sometimes shocking footage straight from security cameras, smart doorbells, nanny cams and baby monitors across America. From neighbors and postal workers to uninvited guests and animal visitors, the network will tap into the hilarious, outrageous and downright bizarre moments caught on home surveillance video.</p>",
+        "premiered": "2026-01-07",
+        "webChannel": null
+      },
+      {
+        "id": 87566,
+        "name": "Harlan Coben's Final Twist",
+        "image": {
+          "medium": "https://static.tvmaze.com/uploads/images/medium_portrait/607/1518169.jpg",
+          "original": "https://static.tvmaze.com/uploads/images/original_untouched/607/1518169.jpg"
+        },
+        "genres": [
+          "Crime"
+        ],
+        "status": "Running",
+        "network": "CBS",
+        "summary": "<p><b>Harlan Coben's Final Twist </b>brings the top selling mystery author to true crime as he unravels murder cases to expose hidden truths.</p>",
+        "premiered": "2026-01-07",
+        "webChannel": null
+      },
+      {
+        "id": 89182,
+        "name": "Desert Law",
+        "image": {
+          "medium": "https://static.tvmaze.com/uploads/images/medium_portrait/604/1511480.jpg",
+          "original": "https://static.tvmaze.com/uploads/images/original_untouched/604/1511480.jpg"
+        },
+        "genres": [
+          "Crime",
+          "Legal"
+        ],
+        "status": "Running",
+        "network": "A&E",
+        "summary": "<p>When the blistering Arizona sun finally sets over Tucson's Sonoran Desert, the temperature drops—and the crime rises. With elite access to the Pima County Sheriff's Department serving the seventh-largest county in the nation, \"Desert Law\" follows the high-intensity work of its patrol deputies, DUI unit, and night detectives as they cover more than 9,000 square miles of unforgiving rugged terrain. Taking on the trouble that thrives after dark, the series immerses viewers in the pressure and danger of policing the desert night, capturing a world where the spirit of the Old West still lingers and the fight for order never ends.</p>",
+        "premiered": "2026-01-07",
+        "webChannel": null
+      },
+      {
+        "id": 89244,
+        "name": "The Cult Behind the Killer: The Andrea Yates Story",
+        "image": {
+          "medium": "https://static.tvmaze.com/uploads/images/medium_portrait/605/1514308.jpg",
+          "original": "https://static.tvmaze.com/uploads/images/original_untouched/605/1514308.jpg"
+        },
+        "genres": [
+          "Crime"
+        ],
+        "status": "Running",
+        "network": "Investigation Discovery",
+        "summary": "<p>When Andrea Yates drowned her five children in the family bathtub one June morning in 2001, the world was left shocked – what could make a young mother do something like that to her own children? In the wake of her confession, it was established Yates was suffering from postpartum depression and psychosis. But while understanding of her mental illness helped illuminate Andrea's struggle prior to the incident, now 25 years later, ID unravels the deeply tangled layers in which a cult can influence vulnerable individuals through manipulation and control by offering unprecedented insight into Michael Woroniecki, a rogue street preacher turned cult leader, and his connection to Andrea Yates.</p>",
+        "premiered": "2026-01-06",
+        "webChannel": null
+      },
+      {
+        "id": 89068,
+        "name": "Don't Call It a Comeback",
+        "image": {
+          "medium": "https://static.tvmaze.com/uploads/images/medium_portrait/605/1514309.jpg",
+          "original": "https://static.tvmaze.com/uploads/images/original_untouched/605/1514309.jpg"
+        },
+        "genres": [
+          "Sports"
+        ],
+        "status": "Running",
+        "network": "Vice TV",
+        "summary": "<p>From last-second heroics to gut-wrenching collapses, the most legendary comebacks in sports.</p>",
+        "premiered": "2026-01-06",
+        "webChannel": null
+      },
+      {
+        "id": 88778,
+        "name": "Baking Championship: Next Gen",
+        "image": {
+          "medium": "https://static.tvmaze.com/uploads/images/medium_portrait/607/1517684.jpg",
+          "original": "https://static.tvmaze.com/uploads/images/original_untouched/607/1517684.jpg"
+        },
+        "genres": [
+          "Food"
+        ],
+        "status": "Running",
+        "network": "Food Network",
+        "summary": "<p><b>Baking Championship: Next Gen </b>with hosts and judges, Duff Goldman<b> </b>and<b> </b>Kardea Brown. The pair of culinary experts helm the jam-packed pastry journey that will give a whole new meaning to sibling rivalry when 12 teams of siblings aged 8-14 compete to win $25,000 and become the next generation of Baking Champions. The wholesome and delightful confectionary competition will launch with a supersized two-hour qualifying round to determine who will continue across the eight subsequent episodes to clinch the prize. Once the competition begins, the sibling collaborators will take on tricky challenges like \"breakfast dessert imposters,\" \"cream puff friendship bracelets,\" and \"animated cakes.</p>",
+        "premiered": "2026-01-05",
+        "webChannel": null
+      },
+      {
+        "id": 84556,
+        "name": "Best Medicine",
+        "image": {
+          "medium": "https://static.tvmaze.com/uploads/images/medium_portrait/606/1516737.jpg",
+          "original": "https://static.tvmaze.com/uploads/images/original_untouched/606/1516737.jpg"
+        },
+        "genres": [
+          "Drama",
+          "Comedy",
+          "Medical"
+        ],
+        "status": "Running",
+        "network": "FOX",
+        "summary": "<p>In <b>Best Medicine </b>a brilliant surgeon leaves Boston to become a small-town doctor where he spent childhood summers. Despite his medical skills, his rude manner alienates locals as he battles hidden phobias and struggles with personal connections.</p>",
+        "premiered": "2026-01-04",
+        "webChannel": null
+      },
+      {
+        "id": 88352,
+        "name": "The Cult of the Real Housewife",
+        "image": {
+          "medium": "https://static.tvmaze.com/uploads/images/medium_portrait/604/1511485.jpg",
+          "original": "https://static.tvmaze.com/uploads/images/original_untouched/604/1511485.jpg"
+        },
+        "genres": [],
+        "status": "Running",
+        "network": "TLC",
+        "summary": "<p><b>The Cult of the Real Housewife </b>traces the dramatic rise of Faith Temple from its founding by the beloved Rosemary ‘Mama' Cosby, grandmother of Mary Crosby, to her passing, the controversial transfer of leadership, and her husband's marriage to Mary. This hotly contested bequeathment pushed Faith Temple into a controversial, new era. In addition to exploring the church and the allegations against it, the docuseries will elevate the voices of ex-congregants speaking out for the first time, including long-standing pillars of Faith Temple, the Enoch family, and provide deeply personal and disturbing accounts from family members such as Mary's sister, Denise Jefferson Odinaka, and Mary's cousin, Dan Cosby, along with his wife, Kim. The docuseries also features investigative journalists and bloggers who have been tracking this story from the beginning, as well as a leading cult expert who can offer insight around a playbook designed to enforce loyalty in mind-control cults.  </p>",
+        "premiered": "2026-01-01",
+        "webChannel": null
+      },
+      {
+        "id": 88994,
+        "name": "Crime in Progress",
+        "image": {
+          "medium": "https://static.tvmaze.com/uploads/images/medium_portrait/605/1514305.jpg",
+          "original": "https://static.tvmaze.com/uploads/images/original_untouched/605/1514305.jpg"
+        },
+        "genres": [
+          "Crime"
+        ],
+        "status": "Running",
+        "network": "A&E",
+        "summary": "<p>The story of each crime is woven together through raw, unfiltered video from the point of view of officer body cam and surveillance footage for a first-hand look at justice in action. </p>",
+        "premiered": "2026-01-01",
+        "webChannel": null
+      },
+      {
+        "id": 74210,
+        "name": "Harlan Coben's Run Away",
+        "image": {
+          "medium": "https://static.tvmaze.com/uploads/images/medium_portrait/606/1516903.jpg",
+          "original": "https://static.tvmaze.com/uploads/images/original_untouched/606/1516903.jpg"
+        },
+        "genres": [
+          "Drama",
+          "Thriller",
+          "Mystery"
+        ],
+        "status": "Ended",
+        "network": null,
+        "summary": "<p>Simon had the perfect life: loving wife and kids, great job, beautiful home. But then his eldest daughter Paige ran away and everything fell apart. So now when he finds her, vulnerable and strung out on drugs in a city park, he finally has the chance to bring his little girl home. But it turns out she's not alone and an argument escalates into shocking violence that will shatter Simon's life all over again. His search for his daughter will take him into a dangerous underworld, revealing deep secrets that could tear his family apart forever.</p>",
+        "premiered": "2026-01-01",
+        "webChannel": "Netflix"
+      },
+      {
+        "id": 89783,
+        "name": "MrBeast: Extreme Survival!",
+        "image": {
+          "medium": "https://static.tvmaze.com/uploads/images/medium_portrait/608/1520267.jpg",
+          "original": "https://static.tvmaze.com/uploads/images/original_untouched/608/1520267.jpg"
+        },
+        "genres": [],
+        "status": "To Be Determined",
+        "network": null,
+        "summary": "<p>In this season, MrBeast pushes contestants and himself into the toughest survival experiments imaginable, from one hundred days in bunkers and circles to freezing expeditions and isolation tests. Every scenario is designed to strip life to its basics and reveal who has the strength, patience, and ingenuity to endure.</p>",
+        "premiered": "2026-01-01",
+        "webChannel": "Prime Video"
+      },
+      {
+        "id": 88794,
+        "name": "Second Chance Love",
+        "image": {
+          "medium": "https://static.tvmaze.com/uploads/images/medium_portrait/607/1518208.jpg",
+          "original": "https://static.tvmaze.com/uploads/images/original_untouched/607/1518208.jpg"
+        },
+        "genres": [
+          "Romance"
+        ],
+        "status": "Running",
+        "network": null,
+        "summary": "<p>In <b>Second Chance Love</b>, five pairs of first loves reunite for a two-week journey filled with nostalgia, emotional reflection, and intimate dates. Led by our hosts, they revisit their pasts, confront unfinished business, and rediscover what once brought them together. As they build new memories and lean on each other for support, one big question remains: will they rekindle the spark they once had or discover that love belongs in the past? Told only in the way Hallmark can, with heartfelt emotion, authentic connection, and just a touch of magic, this new, original  series is a celebration of second chances and the enduring power of love.  </p>",
+        "premiered": "2026-01-01",
+        "webChannel": "Hallmark+"
+      },
+      {
+        "id": 88500,
+        "name": "Members Only: Palm Beach",
+        "image": {
+          "medium": "https://static.tvmaze.com/uploads/images/medium_portrait/605/1514058.jpg",
+          "original": "https://static.tvmaze.com/uploads/images/original_untouched/605/1514058.jpg"
+        },
+        "genres": [],
+        "status": "To Be Determined",
+        "network": null,
+        "summary": "<p>Private clubs, luxurious couture and charity galas mean everything in this soapy reality series, set in a posh paradise with a wealth of drama.</p>",
+        "premiered": "2025-12-29",
+        "webChannel": "Netflix"
+      },
+      {
+        "id": 89058,
+        "name": "Adventure in Wonder",
+        "image": {
+          "medium": "https://static.tvmaze.com/uploads/images/medium_portrait/605/1513829.jpg",
+          "original": "https://static.tvmaze.com/uploads/images/original_untouched/605/1513829.jpg"
+        },
+        "genres": [
+          "Adventure",
+          "Travel"
+        ],
+        "status": "Running",
+        "network": null,
+        "summary": "<p>This docu-series follows a Texas family who abandons their comfort zone for the Croatian seas, they discover that the most profound adventures and deepest connections happen when you're brave enough to navigate the unknown together.</p>",
+        "premiered": "2025-12-28",
+        "webChannel": "Wonder Project"
+      },
+      {
+        "id": 89050,
+        "name": "Home Reimagined",
+        "image": {
+          "medium": "https://static.tvmaze.com/uploads/images/medium_portrait/605/1513501.jpg",
+          "original": "https://static.tvmaze.com/uploads/images/original_untouched/605/1513501.jpg"
+        },
+        "genres": [
+          "DIY"
+        ],
+        "status": "Running",
+        "network": "Magnolia Network",
+        "summary": "<p><b>Home Reimagined </b>travels across the country to mentor brave renovators who have taken on the task of converting unusual commercial and industrial spaces into one-of-a-kind family homes. </p>",
+        "premiered": "2025-12-27",
+        "webChannel": null
+      },
+      {
+        "id": 82738,
+        "name": "The Copenhagen Test",
+        "image": {
+          "medium": "https://static.tvmaze.com/uploads/images/medium_portrait/605/1513760.jpg",
+          "original": "https://static.tvmaze.com/uploads/images/original_untouched/605/1513760.jpg"
+        },
+        "genres": [
+          "Science-Fiction",
+          "Thriller",
+          "Espionage"
+        ],
+        "status": "To Be Determined",
+        "network": null,
+        "summary": "<p>Five minutes in the future, a first-generation-American intelligence analyst Alexander Hale realizes his brain has been hacked, giving the perpetrators access to everything he sees and hears. Caught between his shadowy agency and the unknown hackers, he must maintain a performance 24/7 to flush out who's responsible and prove where his allegiance lies.</p>",
+        "premiered": "2025-12-27",
+        "webChannel": "Peacock"
+      },
+      {
+        "id": 85886,
+        "name": "Junk or Jackpot?",
+        "image": {
+          "medium": "https://static.tvmaze.com/uploads/images/medium_portrait/605/1513125.jpg",
+          "original": "https://static.tvmaze.com/uploads/images/original_untouched/605/1513125.jpg"
+        },
+        "genres": [],
+        "status": "Running",
+        "network": "HGTV",
+        "summary": "<p>The show follows collectors as they discover the true monetary value of their massive and unusual collections. From an overwhelming stash of superhero figurines to cramped spaces stuffed with rare puppets and dolls and miniature sets that leave no room for actual, life-size furniture – these homes are begging for professional help, and the collectors must decide whether they are willing to sell some of their items to pay for the much-needed renovation. With a combination of humor, compassion and a celebration of the passionate collector in all of us, Bobby will support the homeowners through the process of sorting through, appraising and letting go of their stockpile, discovering the ‘found money' along the way to achieving their dream makeover.  </p>",
+        "premiered": "2025-12-26",
+        "webChannel": null
+      }
+    ]
+  }
+]
