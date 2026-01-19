@@ -278,7 +278,21 @@ export class DatabaseStorage implements IStorage {
 
   // User show methods
   async getUserShows(userId: string, includeRemoved: boolean = false): Promise<(UserShow & { show: Show })[]> {
-    const whereConditions = [eq(userShows.userId, userId)];
+    // Get user's group IDs to include shared shows
+    const userGroupIds = await this.getUserGroupIds(userId);
+    
+    // Build condition: personal shows (userId matches) OR shared shows (groupId in user's groups)
+    let ownershipCondition;
+    if (userGroupIds.length > 0) {
+      ownershipCondition = or(
+        eq(userShows.userId, userId),
+        inArray(userShows.groupId, userGroupIds)
+      );
+    } else {
+      ownershipCondition = eq(userShows.userId, userId);
+    }
+    
+    const whereConditions = [ownershipCondition];
     
     if (!includeRemoved) {
       whereConditions.push(eq(userShows.isRemoved, false));
@@ -313,11 +327,28 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getUserShow(userId: string, showId: number): Promise<UserShow | undefined> {
-    const [userShow] = await db
+    // First check for personal show
+    const [personalShow] = await db
       .select()
       .from(userShows)
       .where(and(eq(userShows.userId, userId), eq(userShows.showId, showId)));
-    return userShow || undefined;
+    
+    if (personalShow) return personalShow;
+    
+    // Check for shared show in user's groups
+    const userGroupIds = await this.getUserGroupIds(userId);
+    if (userGroupIds.length > 0) {
+      const [sharedShow] = await db
+        .select()
+        .from(userShows)
+        .where(and(
+          eq(userShows.showId, showId),
+          inArray(userShows.groupId, userGroupIds)
+        ));
+      if (sharedShow) return sharedShow;
+    }
+    
+    return undefined;
   }
 
   async addUserShow(userShow: InsertUserShow): Promise<UserShow> {
@@ -479,6 +510,37 @@ export class DatabaseStorage implements IStorage {
   }
 
   async searchUserEpisodes(userId: string, query: string): Promise<(Episode & { show: Show })[]> {
+    // Get user's group IDs to include shared episodes
+    const groupIds = await this.getUserGroupIds(userId);
+    
+    // Build join condition for userShows: personal shows (userId) OR shared shows (groupId)
+    let userShowsJoinCondition;
+    if (groupIds.length > 0) {
+      userShowsJoinCondition = and(
+        eq(userShows.showId, shows.id),
+        or(
+          eq(userShows.userId, userId),
+          inArray(userShows.groupId, groupIds)
+        )
+      );
+    } else {
+      userShowsJoinCondition = and(
+        eq(userShows.showId, shows.id),
+        eq(userShows.userId, userId)
+      );
+    }
+    
+    // Build episode ownership condition: personal episodes (userId) OR shared episodes (groupId)
+    let episodeOwnershipCondition;
+    if (groupIds.length > 0) {
+      episodeOwnershipCondition = or(
+        eq(userEpisodes.userId, userId),
+        inArray(userEpisodes.groupId, groupIds)
+      );
+    } else {
+      episodeOwnershipCondition = eq(userEpisodes.userId, userId);
+    }
+    
     const results = await db
       .select({
         id: episodes.id,
@@ -495,12 +557,9 @@ export class DatabaseStorage implements IStorage {
       .from(userEpisodes)
       .innerJoin(episodes, eq(userEpisodes.episodeId, episodes.id))
       .innerJoin(shows, eq(episodes.showId, shows.id))
-      .innerJoin(userShows, and(
-        eq(userShows.showId, shows.id),
-        eq(userShows.userId, userId)
-      ))
+      .innerJoin(userShows, userShowsJoinCondition)
       .where(and(
-        eq(userEpisodes.userId, userId),
+        episodeOwnershipCondition,
         eq(userShows.isRemoved, false),
         ilike(episodes.name, `%${query}%`)
       ))
@@ -565,6 +624,23 @@ export class DatabaseStorage implements IStorage {
     
     const whereClause = and(...baseConditions);
 
+    // Build join condition for userShows: personal shows (userId) OR shared shows (groupId)
+    let userShowsJoinCondition;
+    if (groupIds && groupIds.length > 0) {
+      userShowsJoinCondition = and(
+        eq(userShows.showId, shows.id),
+        or(
+          eq(userShows.userId, userId),
+          inArray(userShows.groupId, groupIds)
+        )
+      );
+    } else {
+      userShowsJoinCondition = and(
+        eq(userShows.showId, shows.id),
+        eq(userShows.userId, userId)
+      );
+    }
+    
     const results = await db
       .select({
         id: userEpisodes.id,
@@ -582,10 +658,7 @@ export class DatabaseStorage implements IStorage {
       .from(userEpisodes)
       .innerJoin(episodes, eq(userEpisodes.episodeId, episodes.id))
       .innerJoin(shows, eq(episodes.showId, shows.id))
-      .innerJoin(userShows, and(
-        eq(userShows.showId, shows.id),
-        eq(userShows.userId, userId)
-      ))
+      .innerJoin(userShows, userShowsJoinCondition)
       .where(whereClause)
       .orderBy(desc(episodes.airdate));
 
@@ -629,6 +702,23 @@ export class DatabaseStorage implements IStorage {
     
     const whereClause = and(...allConditions);
     
+    // Build join condition for userShows: personal shows (userId) OR shared shows (groupId)
+    let userShowsJoinCondition;
+    if (groupIds && groupIds.length > 0) {
+      userShowsJoinCondition = and(
+        eq(userShows.showId, shows.id),
+        or(
+          eq(userShows.userId, userId),
+          inArray(userShows.groupId, groupIds)
+        )
+      );
+    } else {
+      userShowsJoinCondition = and(
+        eq(userShows.showId, shows.id),
+        eq(userShows.userId, userId)
+      );
+    }
+    
     const results = await db
       .select({
         id: episodes.id,
@@ -645,10 +735,7 @@ export class DatabaseStorage implements IStorage {
       })
       .from(episodes)
       .innerJoin(shows, eq(episodes.showId, shows.id))
-      .innerJoin(userShows, and(
-        eq(userShows.showId, shows.id),
-        eq(userShows.userId, userId)
-      ))
+      .innerJoin(userShows, userShowsJoinCondition)
       .where(whereClause)
       .orderBy(asc(episodes.airdate))
       .limit(20);
