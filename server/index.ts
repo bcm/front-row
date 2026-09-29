@@ -6,6 +6,7 @@ import { initializeRecommendationScheduler } from "./recommendation-scheduler";
 import { initNewReleasesScheduler } from "./new-releases-scheduler";
 import { setupAuth, registerAuthRoutes } from "./replit_integrations/auth";
 import { registerOAuthRoutes } from "./oauth";
+import { registerMcpRoutes } from "./mcp";
 
 const app = express();
 app.use(express.json());
@@ -46,6 +47,7 @@ app.use((req, res, next) => {
   await setupAuth(app);
   registerAuthRoutes(app);
   registerOAuthRoutes(app);
+  registerMcpRoutes(app);
   
   const server = await registerRoutes(app);
 

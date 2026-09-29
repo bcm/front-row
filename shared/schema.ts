@@ -254,6 +254,16 @@ export const outboxEvents = pgTable("events", {
   drainOrder: index("events_drain_idx").on(table.processedAt, table.createdAt),
 }));
 
+// MCP rate limiting: per-client+user token buckets for TVMaze-proxied tools
+// (design §11.6). Backed by Postgres so it is stateless-safe across replicas.
+export const mcpRateLimits = pgTable("mcp_rate_limits", {
+  id: text("id").primaryKey(), // e.g. "catalog:<clientId>:<userId>"
+  windowStart: timestamp("window_start").notNull(),
+  count: integer("count").notNull().default(0),
+});
+
+export const insertMcpRateLimitSchema = createInsertSchema(mcpRateLimits);
+
 export const insertOauthClientSchema = createInsertSchema(oauthClients).omit({
   createdAt: true,
 });
@@ -310,6 +320,8 @@ export type GroupMember = typeof groupMembers.$inferSelect;
 export type InsertGroupMember = z.infer<typeof insertGroupMemberSchema>;
 export type GroupInvite = typeof groupInvites.$inferSelect;
 export type InsertGroupInvite = z.infer<typeof insertGroupInviteSchema>;
+export type McpRateLimit = typeof mcpRateLimits.$inferSelect;
+export type InsertMcpRateLimit = z.infer<typeof insertMcpRateLimitSchema>;
 export type OauthClient = typeof oauthClients.$inferSelect;
 export type InsertOauthClient = z.infer<typeof insertOauthClientSchema>;
 export type OauthDeviceCode = typeof oauthDeviceCodes.$inferSelect;
