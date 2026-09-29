@@ -1,2 +1,3 @@
 - [Public GitHub history](public-github-snapshots.md) — active branches track screenshot-free public history; never push unfiltered backups.
 - [Dependency upgrades](dependency-upgrades.md) — scope transitive overrides and restart the dev app after lockfile installs.
+- [TypeScript incremental cache](typescript-incremental-cache.md) — after changing compiler targets, stale incremental output can retain errors; verify with a clean cache.
