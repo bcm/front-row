@@ -1,0 +1,1 @@
+- [Public GitHub snapshots](public-github-snapshots.md) — publish reviewed source snapshots, not old Replit commit history or uploaded assets, when opening this project to the public.
