@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, timestamp, jsonb, boolean, unique } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, timestamp, jsonb, boolean, unique, index } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -205,6 +205,73 @@ export const insertDismissedNewReleaseSchema = createInsertSchema(dismissedNewRe
   dismissedAt: true,
 });
 
+// Agent interface (MCP + OAuth device flow) tables.
+// See docs/agent-interface-design.md §§4–6.
+export const oauthClients = pgTable("oauth_clients", {
+  clientId: text("client_id").primaryKey(), // e.g. "ghost"; pre-registered, no dynamic registration in v1
+  name: text("name").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const oauthDeviceCodes = pgTable("oauth_device_codes", {
+  // SHA-256 hash of the device code (the code itself is shown to the agent once)
+  deviceCodeHash: text("device_code_hash").primaryKey(),
+  userCode: text("user_code").notNull().unique(), // human-typable, from an unambiguous alphabet
+  clientId: text("client_id").notNull(),
+  scopes: text("scopes").array().notNull(),
+  status: text("status").notNull().default("pending"), // pending | approved | denied | expired
+  approvedByUserId: varchar("approved_by_user_id"), // set on approval: the approver's Replit sub
+  expiresAt: timestamp("expires_at").notNull(), // ~10 minutes after creation
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const oauthTokens = pgTable("oauth_tokens", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  clientId: text("client_id").notNull(),
+  userId: varchar("user_id").notNull(), // bound to the approver's claims.sub at grant time
+  scopes: text("scopes").array().notNull(),
+  accessTokenHash: text("access_token_hash").notNull().unique(),
+  refreshTokenHash: text("refresh_token_hash").notNull().unique(),
+  accessExpiresAt: timestamp("access_expires_at").notNull(), // 1 hour
+  refreshExpiresAt: timestamp("refresh_expires_at").notNull(), // 90 days, rotating
+  revokedAt: timestamp("revoked_at"), // set on revocation; null = active
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Outbox for agent-visible events (episode imports, premieres, sync results).
+// Drained by events_drain with SELECT ... FOR UPDATE SKIP LOCKED.
+export const outboxEvents = pgTable("events", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  type: text("type").notNull(), // episode.imported | sync.completed | sync.failed | premiere.flagged | recommendations.refreshed
+  payload: jsonb("payload").$type<Record<string, unknown>>(),
+  dedupeKey: text("dedupe_key").unique(), // idempotent producers: insert-on-conflict-do-nothing
+  createdAt: timestamp("created_at").defaultNow(),
+  processedAt: timestamp("processed_at"), // null = not yet drained
+  processedBy: varchar("processed_by"), // client id that drained it
+}, (table) => ({
+  drainOrder: index("events_drain_idx").on(table.processedAt, table.createdAt),
+}));
+
+export const insertOauthClientSchema = createInsertSchema(oauthClients).omit({
+  createdAt: true,
+});
+
+export const insertOauthDeviceCodeSchema = createInsertSchema(oauthDeviceCodes).omit({
+  createdAt: true,
+});
+
+export const insertOauthTokenSchema = createInsertSchema(oauthTokens).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertOutboxEventSchema = createInsertSchema(outboxEvents).omit({
+  id: true,
+  createdAt: true,
+  processedAt: true,
+  processedBy: true,
+});
+
 // Type for cached new release shows
 export type NewReleaseShow = {
   id: number;
@@ -241,3 +308,11 @@ export type GroupMember = typeof groupMembers.$inferSelect;
 export type InsertGroupMember = z.infer<typeof insertGroupMemberSchema>;
 export type GroupInvite = typeof groupInvites.$inferSelect;
 export type InsertGroupInvite = z.infer<typeof insertGroupInviteSchema>;
+export type OauthClient = typeof oauthClients.$inferSelect;
+export type InsertOauthClient = z.infer<typeof insertOauthClientSchema>;
+export type OauthDeviceCode = typeof oauthDeviceCodes.$inferSelect;
+export type InsertOauthDeviceCode = z.infer<typeof insertOauthDeviceCodeSchema>;
+export type OauthToken = typeof oauthTokens.$inferSelect;
+export type InsertOauthToken = z.infer<typeof insertOauthTokenSchema>;
+export type OutboxEvent = typeof outboxEvents.$inferSelect;
+export type InsertOutboxEvent = z.infer<typeof insertOutboxEventSchema>;
