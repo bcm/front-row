@@ -4,7 +4,10 @@ import { registerLibraryTools } from "./library";
 import { toolRegistrar } from "../register";
 import { mockStorage, testAuth, callTool, showFixture, userShowFixture, episodeFixture } from "../test-utils/tools";
 
-vi.mock("../../storage", () => ({ storage: mockStorage() }));
+vi.mock("../../storage", async () => {
+  const { mockStorage } = await import("../test-utils/tools");
+  return { storage: mockStorage() };
+});
 
 import { storage } from "../../storage";
 
@@ -103,7 +106,7 @@ describe("library_search", () => {
     mocked.searchUserEpisodes.mockResolvedValue([futureEp]);
     const { body } = await callTool(server(), "library_search", { view: "family", query: "pilot" });
     expect(body.episodes).toHaveLength(1);
-    expect(body.episodes[0].episode.airdate).toBe("2026-12-01");
+    expect(body.episodes[0].airdate).toBe("2026-12-01");
     expect(body.episodes[0].group_id).toBe("g1");
   });
 

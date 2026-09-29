@@ -4,7 +4,10 @@ import { registerCatalogTools } from "./catalog";
 import { toolRegistrar } from "../register";
 import { mockStorage, testAuth, callTool, showFixture, userShowFixture } from "../test-utils/tools";
 
-vi.mock("../../storage", () => ({ storage: mockStorage() }));
+vi.mock("../../storage", async () => {
+  const { mockStorage } = await import("../test-utils/tools");
+  return { storage: mockStorage() };
+});
 vi.mock("../rate-limit", () => ({ checkRateLimit: vi.fn(), rateLimitKey: vi.fn(() => "k") }));
 
 import { storage } from "../../storage";

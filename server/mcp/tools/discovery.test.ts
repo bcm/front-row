@@ -4,7 +4,10 @@ import { registerDiscoveryTools } from "./discovery";
 import { toolRegistrar } from "../register";
 import { mockStorage, testAuth, callTool } from "../test-utils/tools";
 
-vi.mock("../../storage", () => ({ storage: mockStorage() }));
+vi.mock("../../storage", async () => {
+  const { mockStorage } = await import("../test-utils/tools");
+  return { storage: mockStorage() };
+});
 vi.mock("../../new-releases-service", () => ({ getNewReleases: vi.fn() }));
 
 import { storage } from "../../storage";

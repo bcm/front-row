@@ -28,6 +28,7 @@ export function registerEpisodeTools(tools: ToolRegistrar, auth: McpAuthContext)
       const cutoff = new Date(Date.now() + (days ?? 7) * 24 * 3600 * 1000).toISOString().split("T")[0];
       const upcoming = episodes
         .filter((ep) => (ep.airdate ?? "") >= today && (ep.airdate ?? "") <= cutoff)
+        .sort((a, b) => (a.airdate ?? "").localeCompare(b.airdate ?? ""))
         .map((ep) => ({
           show: trimShow(ep.show),
           episode: trimEpisode(ep),

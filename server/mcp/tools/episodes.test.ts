@@ -4,7 +4,10 @@ import { registerEpisodeTools } from "./episodes";
 import { toolRegistrar } from "../register";
 import { mockStorage, testAuth, callTool, showFixture, episodeFixture } from "../test-utils/tools";
 
-vi.mock("../../storage", () => ({ storage: mockStorage() }));
+vi.mock("../../storage", async () => {
+  const { mockStorage } = await import("../test-utils/tools");
+  return { storage: mockStorage() };
+});
 
 import { storage } from "../../storage";
 
