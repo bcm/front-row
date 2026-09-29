@@ -59,17 +59,24 @@ export function registerShowTools(tools: ToolRegistrar, auth: McpAuthContext): v
   tools.registerReadTool(
     "queue_next_up",
     "The next unwatched episode per followed show, ordered by airdate — 'what's next in the queue', computed server-side. " +
-      "Removed shows are excluded; shows with no unwatched aired episodes do not appear.",
+      "Removed shows are excluded, and shows whose status is Ended are excluded when the user's hide-finished-shows setting is on (the default); " +
+      "shows with no unwatched aired episodes do not appear.",
     {
       view: viewSchema,
       limit: z.number().int().min(1).max(50).optional().describe("Max shows. Default 20."),
     },
     async ({ view, limit }) => {
       const resolved = await resolveView(auth.userId, view);
-      const records = await storage.getUserEpisodes(auth.userId, undefined, resolved.showMode, resolved.groupIds);
+      const [records, settings] = await Promise.all([
+        storage.getUserEpisodes(auth.userId, undefined, resolved.showMode, resolved.groupIds),
+        storage.getUserSettings(auth.userId),
+      ]);
+      // Default on, matching the app's settings default.
+      const hideFinished = settings?.hideFinishedShows ?? true;
       const nextByShow = new Map<number, (typeof records)[number]>();
       for (const r of records) {
         if (!ACTIONABLE.has(r.status)) continue;
+        if (hideFinished && r.episode.show.status === "Ended") continue;
         const cur = nextByShow.get(r.episode.show.id);
         if (!cur || (r.episode.airdate ?? "") < (cur.episode.airdate ?? "")) {
           nextByShow.set(r.episode.show.id, r);

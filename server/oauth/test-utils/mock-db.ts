@@ -17,6 +17,8 @@ const CHAIN_METHODS = [
   "where",
   "insert",
   "values",
+  "onConflictDoUpdate",
+  "returning",
   "update",
   "set",
   "delete",

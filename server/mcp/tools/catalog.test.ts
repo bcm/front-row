@@ -2,7 +2,7 @@ import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { registerCatalogTools } from "./catalog";
 import { toolRegistrar } from "../register";
-import { mockStorage, testAuth, callTool } from "../test-utils/tools";
+import { mockStorage, testAuth, callTool, showFixture, userShowFixture } from "../test-utils/tools";
 
 vi.mock("../../storage", () => ({ storage: mockStorage() }));
 vi.mock("../rate-limit", () => ({ checkRateLimit: vi.fn(), rateLimitKey: vi.fn(() => "k") }));
@@ -28,7 +28,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   mockedCheck.mockResolvedValue({ allowed: true });
   mockedStorage.getUserGroupIds.mockResolvedValue([]);
-  mockedStorage.getUserShowIds.mockResolvedValue([1]);
+  mockedStorage.getUserShows.mockResolvedValue([userShowFixture({ show: showFixture({ id: 1 }) })]);
   vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve(tvmazeHits) }));
 });
 
@@ -57,5 +57,13 @@ describe("catalog_search", () => {
     const { isError, body } = await callTool(server(), "catalog_search", { view: "personal", query: "test" });
     expect(isError).toBe(true);
     expect(body.error).toMatch(/503/);
+  });
+
+  it("does not mark group-shared shows as in_library in the personal view", async () => {
+    mockedStorage.getUserShows.mockResolvedValue([
+      userShowFixture({ show: showFixture({ id: 99 }), groupId: "g1", isShared: true }),
+    ]);
+    const { body } = await callTool(server(), "catalog_search", { view: "personal", query: "test" });
+    expect(body.results.find((r: any) => r.tvmaze_id === 99).in_library).toBe(false);
   });
 });

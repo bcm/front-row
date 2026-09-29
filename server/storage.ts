@@ -36,7 +36,7 @@ export interface IStorage {
   
   // User episode methods
   getUserEpisodes(userId: string, status?: string, showMode?: string, groupIds?: string[]): Promise<(UserEpisode & { episode: Episode & { show: Show }; groupId?: string | null })[]>;
-  getUpcomingEpisodes(userId: string, showMode?: string, groupIds?: string[]): Promise<(Episode & { show: Show; groupId?: string | null })[]>;
+  getUpcomingEpisodes(userId: string, showMode?: string, groupIds?: string[], limit?: number): Promise<(Episode & { show: Show; groupId?: string | null })[]>;
   getUserEpisodesForShow(userId: string, showId: number, groupId?: string | null): Promise<(UserEpisode & { episode: Episode })[]>;
   getUserGroupIds(userId: string): Promise<string[]>;
   addUserEpisode(userEpisode: InsertUserEpisode): Promise<{ episode: UserEpisode; isNew: boolean }>;
@@ -678,7 +678,7 @@ export class DatabaseStorage implements IStorage {
     }));
   }
 
-  async getUpcomingEpisodes(userId: string, showMode?: string, groupIds?: string[]): Promise<(Episode & { show: Show; groupId?: string | null })[]> {
+  async getUpcomingEpisodes(userId: string, showMode?: string, groupIds?: string[], limit?: number): Promise<(Episode & { show: Show; groupId?: string | null })[]> {
     const today = new Date().toISOString().split('T')[0];
     
     // Build conditions based on showMode
@@ -738,7 +738,7 @@ export class DatabaseStorage implements IStorage {
       .innerJoin(userShows, userShowsJoinCondition)
       .where(whereClause)
       .orderBy(asc(episodes.airdate))
-      .limit(20);
+      .limit(limit ?? 20);
 
     return results.map(row => ({
       id: row.id,

@@ -44,9 +44,16 @@ export function registerCatalogTools(tools: ToolRegistrar, auth: McpAuthContext)
       const resolved = await resolveView(auth.userId, view);
       const [response, libraryIds] = await Promise.all([
         fetch(`https://api.tvmaze.com/search/shows?q=${encodeURIComponent(query)}`),
-        resolved.view === "personal"
-          ? storage.getUserShowIds(auth.userId)
-          : storage.getUserShows(auth.userId).then((rows) => rows.filter((us) => resolved.groupIds.includes(us.groupId ?? "")).map((us) => us.showId)),
+        // Personal membership only: groupId == null, same as library_list.
+        // getUserShowIds alone would also match shows this user added to a group.
+        storage.getUserShows(auth.userId).then((rows) =>
+          rows
+            .filter((us) =>
+              !us.isRemoved &&
+              (resolved.view === "personal" ? us.groupId == null : resolved.groupIds.includes(us.groupId ?? ""))
+            )
+            .map((us) => us.showId)
+        ),
       ]);
       if (!response.ok) {
         return err(`TVMaze catalog search failed (HTTP ${response.status})`);

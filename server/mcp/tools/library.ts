@@ -37,38 +37,47 @@ export function registerLibraryTools(tools: ToolRegistrar, auth: McpAuthContext)
 
   tools.registerReadTool(
     "library_search",
-    "Search the user's library by show or episode title, within an explicit view. Same composition as the app's search.",
+    "Search the user's library by show or episode title, within an explicit view. 'personal' matches only the user's own shows; 'family' matches shows shared with the user's groups.",
     {
       view: viewSchema,
       query: z.string().min(1).describe("Text matched against show and episode titles."),
     },
     async ({ view, query }) => {
       const resolved = await resolveView(auth.userId, view);
-      if (resolved.view === "personal") {
-        const [shows, episodes] = await Promise.all([
-          storage.searchUserShows(auth.userId, query),
-          storage.searchUserEpisodes(auth.userId, query),
-        ]);
-        return ok({
-          view,
-          shows: shows.map(trimShow),
-          episodes: episodes.map((e) => ({ ...trimEpisode(e), show: trimShow(e.show) })),
-        });
+      // View membership, same rule as library_list: personal means no group,
+      // family means one of the user's groups. The storage search methods are
+      // view-unaware (searchUserEpisodes unions group records; neither
+      // filters on groupId), so enforcement happens here.
+      const library = await storage.getUserShows(auth.userId, false);
+      const inView = (us: (typeof library)[number]) =>
+        !us.isRemoved &&
+        (resolved.view === "personal" ? us.groupId == null : resolved.groupIds.includes(us.groupId ?? ""));
+      const viewRows = library.filter(inView);
+      const viewShowIds = new Set(viewRows.map((us) => us.showId));
+      const groupByShow = new Map<number, string | null>();
+      for (const us of viewRows) {
+        if (!groupByShow.has(us.showId)) groupByShow.set(us.showId, us.groupId ?? null);
       }
-      // Storage search is personal-only; filter the family library/episodes here.
-      const [library, epRecords] = await Promise.all([
-        storage.getUserShows(auth.userId),
-        storage.getUserEpisodes(auth.userId, undefined, "shared", resolved.groupIds),
+      // searchUserEpisodes has no airdate restriction, so unlike the old
+      // family path (getUserEpisodes, aired-only) future episodes are
+      // searchable in both views.
+      const [shows, episodes] = await Promise.all([
+        storage.searchUserShows(auth.userId, query),
+        storage.searchUserEpisodes(auth.userId, query),
       ]);
-      const q = query.toLowerCase();
       return ok({
         view,
-        shows: library
-          .filter((us) => resolved.groupIds.includes(us.groupId ?? "") && us.show.name.toLowerCase().includes(q))
-          .map(trimLibraryEntry),
-        episodes: epRecords
-          .filter((r) => (r.episode.name ?? "").toLowerCase().includes(q))
-          .map((r) => ({ ...trimEpisode(r.episode), show: trimShow(r.episode.show), group_id: r.groupId ?? null })),
+        shows: shows.filter((s) => viewShowIds.has(s.id)).map(trimShow),
+        episodes: episodes
+          .filter((e) => viewShowIds.has(e.show.id))
+          .map((e) => ({
+            ...trimEpisode(e),
+            show: trimShow(e.show),
+            group_id: groupByShow.get(e.show.id) ?? null,
+          })),
+        ...(resolved.view === "family" && resolved.groupIds.length === 0
+          ? { note: "family view requested but the user is not a member of any group" }
+          : {}),
       });
     }
   );

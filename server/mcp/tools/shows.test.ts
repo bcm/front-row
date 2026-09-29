@@ -90,4 +90,23 @@ describe("queue_next_up", () => {
     await callTool(server(), "queue_next_up", { view: "family" });
     expect(mocked.getUserEpisodes).toHaveBeenCalledWith("user-1", undefined, "shared", ["g1"]);
   });
+
+  it("excludes ended shows when hide-finished-shows is on", async () => {
+    mocked.getUserSettings.mockResolvedValue({ hideFinishedShows: true });
+    const ended = { status: "next", groupId: null, episode: { ...episodeFixture({ showId: 9, airdate: "2024-01-01" }), show: showFixture({ id: 9, name: "Over", status: "Ended" }) } };
+    mocked.getUserEpisodes.mockResolvedValue([
+      { status: "next", groupId: null, episode: { ...episodeFixture({ showId: 1, airdate: "2024-05-01" }), show: showFixture({ id: 1, name: "Alpha" }) } },
+      ended,
+    ]);
+    const { body } = await callTool(server(), "queue_next_up", { view: "personal" });
+    expect(body.queue.map((q: any) => q.show.name)).toEqual(["Alpha"]);
+  });
+
+  it("includes ended shows when hide-finished-shows is off", async () => {
+    mocked.getUserSettings.mockResolvedValue({ hideFinishedShows: false });
+    const ended = { status: "next", groupId: null, episode: { ...episodeFixture({ showId: 9, airdate: "2024-01-01" }), show: showFixture({ id: 9, name: "Over", status: "Ended" }) } };
+    mocked.getUserEpisodes.mockResolvedValue([ended]);
+    const { body } = await callTool(server(), "queue_next_up", { view: "personal" });
+    expect(body.queue.map((q: any) => q.show.name)).toEqual(["Over"]);
+  });
 });

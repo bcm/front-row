@@ -43,6 +43,20 @@ describe("upcoming_episodes", () => {
   it("passes the resolved view through to storage", async () => {
     mocked.getUpcomingEpisodes.mockResolvedValue([]);
     await callTool(server(), "upcoming_episodes", { view: "family" });
-    expect(mocked.getUpcomingEpisodes).toHaveBeenCalledWith("user-1", "shared", ["g1"]);
+    expect(mocked.getUpcomingEpisodes).toHaveBeenCalledWith("user-1", "shared", ["g1"], 200);
+  });
+
+  it("flags truncation when the fetch cap fills up", async () => {
+    mocked.getUpcomingEpisodes.mockResolvedValue(
+      Array.from({ length: 200 }, (_, i) => upcoming(1000 + i, "2026-10-01"))
+    );
+    const { body } = await callTool(server(), "upcoming_episodes", { view: "personal", days: 30 });
+    expect(body.truncated).toBe(true);
+  });
+
+  it("omits the truncation flag when the page is not full", async () => {
+    mocked.getUpcomingEpisodes.mockResolvedValue([upcoming(1, "2026-10-01")]);
+    const { body } = await callTool(server(), "upcoming_episodes", { view: "personal", days: 30 });
+    expect(body.truncated).toBeUndefined();
   });
 });
