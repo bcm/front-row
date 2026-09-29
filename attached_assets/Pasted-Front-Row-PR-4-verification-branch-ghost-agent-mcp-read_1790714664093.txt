@@ -1,0 +1,46 @@
+Front Row PR #4 verification — branch `ghost/agent-mcp-read-tools`
+
+This branch implements the in-app MCP server at POST /mcp with 8 read-only
+tools (PR bcm/front-row#4). The latest commit (83af478) addresses all 7
+Copilot review findings. Work through these steps in order; stop and report
+if any step fails.
+
+1. Check out `ghost/agent-mcp-read-tools` and pull latest (should include
+   commit 83af478 "Address Copilot review...").
+
+2. Run `npm install`. This regenerates package-lock.json to include the
+   pinned `@modelcontextprotocol/sdk` 1.31.0 — the PR adds it to
+   package.json but the lockfile couldn't be regenerated in the author's
+   sandbox. Commit the updated package-lock.json to THIS branch and push.
+   Do not push to main.
+
+3. `npm test` — the entire suite must pass. It includes new regression
+   tests for the Copilot fixes: atomic rate limit, personal/family view
+   isolation in catalog_search and library_search, the upcoming_episodes
+   truncation flag, and queue_next_up honoring hideFinishedShows.
+
+4. `npm run check` — typecheck. Known pre-existing issue: a missing
+   `vite/client` type-definition error that predates this PR. Don't chase
+   it; just confirm nothing new appears.
+
+5. Full production build (`npm run build`) — must succeed.
+
+6. Endpoint checks against the running dev server:
+   - POST /mcp with no/invalid bearer token → 401
+   - POST /mcp with a valid token lacking `library:read` scope → 403
+   - GET /mcp and DELETE /mcp → 405
+   - POST /mcp with a valid `library:read` token → valid MCP response
+     (e.g. tools/list returns the 8 read tools)
+
+7. Regression spot-checks: existing app behavior (library views, queue,
+   search endpoints) should be unchanged for the UI.
+
+8. Database: this PR adds one table, `mcp_rate_limits`. If `npm run db:push`
+   proposes anything beyond creating that table — especially touching
+   `group_invites` (known pre-existing dev-database drift, tracked as
+   issue #7) — do NOT accept it. Create only the new table and report
+   the diff.
+
+Do NOT merge the PR. Brian merges explicitly. Report back: test, typecheck,
+and build results; endpoint check results; and whether the lockfile commit
+pushed cleanly.
