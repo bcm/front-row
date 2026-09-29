@@ -18,7 +18,6 @@ export const READ_TOOL_NAMES = [
   "upcoming_episodes",
   "releases_new",
   "recommendations_list",
-  "sync_status",
 ] as const;
 
 export function registerReadTools(tools: ToolRegistrar, auth: McpAuthContext): void {

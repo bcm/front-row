@@ -1,4 +1,4 @@
-// Discovery read tools: new releases, recommendations, sync-job status.
+// Discovery read tools: new releases and recommendations.
 //
 // releases_new and recommendations_list are view-independent in the data
 // model (global releases, per-user recommendations); they still take the
@@ -8,10 +8,9 @@ import type { ToolRegistrar } from "../register";
 import { z } from "zod";
 import { storage } from "../../storage";
 import { getNewReleases } from "../../new-releases-service";
-import { syncJobManager } from "../../sync-job-manager";
 import type { McpAuthContext } from "../../oauth/middleware";
 import { viewSchema } from "../view";
-import { ok, err } from "../format";
+import { ok } from "../format";
 
 export function registerDiscoveryTools(tools: ToolRegistrar, auth: McpAuthContext): void {
   tools.registerReadTool(
@@ -56,34 +55,4 @@ export function registerDiscoveryTools(tools: ToolRegistrar, auth: McpAuthContex
     }
   );
 
-  tools.registerReadTool(
-    "sync_status",
-    "Status of an async library sync job (started by show_add in the write phase). " +
-      "Job state is local to this server replica.",
-    {
-      view: viewSchema,
-      job_id: z.string().min(1).describe("Sync job id returned by show_add."),
-    },
-    async ({ view, job_id }) => {
-      const job = syncJobManager.getJob(job_id);
-      if (!job) {
-        return err(`unknown sync job: ${job_id}`);
-      }
-      return ok({
-        view,
-        job: {
-          id: job.id,
-          show_id: job.showId,
-          status: job.status,
-          phase: job.phase,
-          percent: job.percent,
-          episodes_imported: job.episodesImported,
-          episodes_updated: job.episodesUpdated,
-          errors: job.errors,
-          last_message: job.lastMessage,
-          updated_at: job.updatedAt.toISOString(),
-        },
-      });
-    }
-  );
 }
