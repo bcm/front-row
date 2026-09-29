@@ -759,7 +759,7 @@ export default function Dashboard() {
         description: groupName ? `Show added to ${groupName}. Episodes are being synced.` : "Show added to your personal library. Episodes are being synced.",
       });
     },
-    onError: (error: Error, { show }: { show: NewReleaseShow }) => {
+    onError: (error: Error, { show }) => {
       setNewReleaseProcessingId(null);
       setDismissedNewReleases(prev => {
         const newSet = new Set(prev);
@@ -853,7 +853,7 @@ export default function Dashboard() {
         description: groupName ? `Show added to ${groupName}. Episodes are being synced.` : "Show added to your personal library. Episodes are being synced.",
       });
     },
-    onError: (error: Error, { tmdbId }: { tmdbId: number; showName: string }) => {
+    onError: (error: Error, { tmdbId }) => {
       setRecProcessingTmdbId(null);
       setDismissedRecs(prev => {
         const newSet = new Set(prev);
@@ -897,7 +897,7 @@ export default function Dashboard() {
         description: groupName ? `Show added to ${groupName}. All episodes are being marked as watched.` : "Show added to your personal library. All episodes are being marked as watched.",
       });
     },
-    onError: (error: Error, { tmdbId }: { tmdbId: number; showName: string }) => {
+    onError: (error: Error, { tmdbId }) => {
       setRecProcessingTmdbId(null);
       setDismissedRecs(prev => {
         const newSet = new Set(prev);

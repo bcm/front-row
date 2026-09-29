@@ -1,1 +1,2 @@
 - [Public GitHub history](public-github-snapshots.md) — active branches track screenshot-free public history; never push unfiltered backups.
+- [Dependency upgrades](dependency-upgrades.md) — keep transitive security overrides scoped when different toolchains require incompatible major versions.
