@@ -68,11 +68,14 @@ export function registerLibraryTools(tools: ToolRegistrar, auth: McpAuthContext)
           matchedShows.set(us.showId, us.show);
         }
       }
-      // searchUserEpisodes already unions group records and has no airdate
-      // restriction (so future episodes are searchable in both views); fetch
-      // wide and filter to the view here so the storage cap can't displace
-      // in-view matches.
-      const episodes = await storage.searchUserEpisodes(auth.userId, query, 200);
+      // searchUserEpisodes unions group records and has no airdate
+      // restriction (so future episodes are searchable in both views). The
+      // view predicate applies in SQL before the limit, so out-of-view rows
+      // can't displace in-view matches; the filter below stays as a backstop.
+      const episodes = await storage.searchUserEpisodes(auth.userId, query, 200, {
+        mode: resolved.showMode,
+        groupIds: resolved.groupIds,
+      });
       return ok({
         view,
         shows: [...matchedShows.values()].map(trimShow),

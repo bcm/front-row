@@ -32,7 +32,7 @@ export interface IStorage {
   getEpisodeWithShowAndUserData(userId: string, episodeId: number): Promise<(Episode & { show: Show; userEpisode?: UserEpisode }) | undefined>;
   createEpisode(episode: InsertEpisode): Promise<Episode>;
   getLatestEpisodes(showIds: number[]): Promise<Episode[]>;
-  searchUserEpisodes(userId: string, query: string, limit?: number): Promise<(Episode & { show: Show })[]>;
+  searchUserEpisodes(userId: string, query: string, limit?: number, view?: { mode: "personal" | "shared"; groupIds: string[] }): Promise<(Episode & { show: Show })[]>;
   
   // User episode methods
   getUserEpisodes(userId: string, status?: string, showMode?: string, groupIds?: string[]): Promise<(UserEpisode & { episode: Episode & { show: Show }; groupId?: string | null })[]>;
@@ -122,7 +122,10 @@ export class DatabaseStorage implements IStorage {
       network: show.network as { name?: string; country?: { name?: string } } | null,
       webChannel: show.webChannel as { name?: string; country?: { name?: string }; officialSite?: string } | null,
       rating: show.rating as { average?: number } | null,
-      schedule: show.schedule as { time?: string; days?: string[] } | null
+      schedule: show.schedule as { time?: string; days?: string[] } | null,
+      // Local sync time, per the agent-interface design doc; stamped on every
+      // write path (syncShowFromTVMaze stamps its upsert separately).
+      lastSyncedAt: new Date()
     };
     const [newShow] = await db
       .insert(shows)
@@ -511,13 +514,26 @@ export class DatabaseStorage implements IStorage {
     return Array.from(latestByShow.values());
   }
 
-  async searchUserEpisodes(userId: string, query: string, limit: number = 20): Promise<(Episode & { show: Show })[]> {
+  async searchUserEpisodes(
+    userId: string,
+    query: string,
+    limit: number = 20,
+    view?: { mode: "personal" | "shared"; groupIds: string[] },
+  ): Promise<(Episode & { show: Show })[]> {
     // Get user's group IDs to include shared episodes
     const groupIds = await this.getUserGroupIds(userId);
-    
-    // Build join condition for userShows: personal shows (userId) OR shared shows (groupId)
+
+    // Build join condition for userShows. With an explicit view the predicate
+    // applies in SQL before the limit, so out-of-view rows can't displace
+    // in-view matches; without one keep the old union behavior (app route).
+    // Predicates mirror the MCP tool's inView rule exactly.
     let userShowsJoinCondition;
-    if (groupIds.length > 0) {
+    if (view) {
+      userShowsJoinCondition =
+        view.mode === "personal"
+          ? and(eq(userShows.showId, shows.id), eq(userShows.userId, userId), isNull(userShows.groupId))
+          : and(eq(userShows.showId, shows.id), inArray(userShows.groupId, view.groupIds));
+    } else if (groupIds.length > 0) {
       userShowsJoinCondition = and(
         eq(userShows.showId, shows.id),
         or(

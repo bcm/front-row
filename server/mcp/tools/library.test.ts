@@ -70,8 +70,12 @@ describe("library_search", () => {
     expect(body.shows).toHaveLength(1);
     expect(body.episodes).toHaveLength(1);
     expect(body.episodes[0].show.tvmaze_id).toBe(1);
-    // Episode search fetches wide so the storage cap can't displace in-view matches.
-    expect(mocked.searchUserEpisodes).toHaveBeenCalledWith("user-1", "test", 200);
+    // Episode search fetches wide with the view predicate applied in SQL
+    // before the limit, so out-of-view rows can't displace in-view matches.
+    expect(mocked.searchUserEpisodes).toHaveBeenCalledWith("user-1", "test", 200, {
+      mode: "personal",
+      groupIds: [],
+    });
   });
 
   it("personal view excludes shows shared with a group", async () => {
@@ -95,6 +99,11 @@ describe("library_search", () => {
     mocked.searchUserEpisodes.mockResolvedValue([]);
     const { body } = await callTool(server(), "library_search", { view: "family", query: "drama" });
     expect(body.shows.map((s: any) => s.name)).toEqual(["Family Drama"]);
+    // Family view passes the shared predicate (with group ids) to storage.
+    expect(mocked.searchUserEpisodes).toHaveBeenCalledWith("user-1", "drama", 200, {
+      mode: "shared",
+      groupIds: ["g1"],
+    });
   });
 
   it("family view finds shows added by another group member", async () => {
