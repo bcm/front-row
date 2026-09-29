@@ -149,7 +149,8 @@ export class DatabaseStorage implements IStorage {
           officialSite: showData.officialSite,
           language: showData.language,
           type: showData.type,
-          updated: showData.updated
+          updated: showData.updated,
+          lastSyncedAt: showData.lastSyncedAt
         }
       })
       .returning();
