@@ -5,6 +5,7 @@ import { startEpisodeScheduler } from "./episode-scheduler";
 import { initializeRecommendationScheduler } from "./recommendation-scheduler";
 import { initNewReleasesScheduler } from "./new-releases-scheduler";
 import { setupAuth, registerAuthRoutes } from "./replit_integrations/auth";
+import { registerOAuthRoutes } from "./oauth";
 
 const app = express();
 app.use(express.json());
@@ -44,6 +45,7 @@ app.use((req, res, next) => {
   // Setup auth BEFORE registering routes
   await setupAuth(app);
   registerAuthRoutes(app);
+  registerOAuthRoutes(app);
   
   const server = await registerRoutes(app);
 

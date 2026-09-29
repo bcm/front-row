@@ -210,6 +210,7 @@ export const insertDismissedNewReleaseSchema = createInsertSchema(dismissedNewRe
 export const oauthClients = pgTable("oauth_clients", {
   clientId: text("client_id").primaryKey(), // e.g. "ghost"; pre-registered, no dynamic registration in v1
   name: text("name").notNull(),
+  allowedScopes: text("allowed_scopes").array().notNull(), // scopes this client may request
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -234,6 +235,7 @@ export const oauthTokens = pgTable("oauth_tokens", {
   refreshTokenHash: text("refresh_token_hash").notNull().unique(),
   accessExpiresAt: timestamp("access_expires_at").notNull(), // 1 hour
   refreshExpiresAt: timestamp("refresh_expires_at").notNull(), // 90 days, rotating
+  rotatedAt: timestamp("rotated_at"), // set when this row is superseded by rotation (vs revokedAt = manual revoke)
   revokedAt: timestamp("revoked_at"), // set on revocation; null = active
   createdAt: timestamp("created_at").defaultNow(),
 });
