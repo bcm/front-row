@@ -45,9 +45,7 @@ export function registerLibraryTools(tools: ToolRegistrar, auth: McpAuthContext)
     async ({ view, query }) => {
       const resolved = await resolveView(auth.userId, view);
       // View membership, same rule as library_list: personal means no group,
-      // family means one of the user's groups. The storage search methods are
-      // view-unaware (searchUserEpisodes unions group records; neither
-      // filters on groupId), so enforcement happens here.
+      // family means one of the user's groups.
       const library = await storage.getUserShows(auth.userId, false);
       const inView = (us: (typeof library)[number]) =>
         !us.isRemoved &&
@@ -58,16 +56,26 @@ export function registerLibraryTools(tools: ToolRegistrar, auth: McpAuthContext)
       for (const us of viewRows) {
         if (!groupByShow.has(us.showId)) groupByShow.set(us.showId, us.groupId ?? null);
       }
-      // searchUserEpisodes has no airdate restriction, so unlike the old
-      // family path (getUserEpisodes, aired-only) future episodes are
-      // searchable in both views.
-      const [shows, episodes] = await Promise.all([
-        storage.searchUserShows(auth.userId, query),
-        storage.searchUserEpisodes(auth.userId, query),
-      ]);
+      // Show title matching runs over the already-loaded view rows instead of
+      // storage.searchUserShows: that query only matches the token user's own
+      // rows (missing shows another member added to a shared group) and caps
+      // at 20 before any view filtering, either of which can displace
+      // in-view matches. The library is small; filter it directly.
+      const q = query.toLowerCase();
+      const matchedShows = new Map<number, (typeof viewRows)[number]["show"]>();
+      for (const us of viewRows) {
+        if (!matchedShows.has(us.showId) && us.show.name.toLowerCase().includes(q)) {
+          matchedShows.set(us.showId, us.show);
+        }
+      }
+      // searchUserEpisodes already unions group records and has no airdate
+      // restriction (so future episodes are searchable in both views); fetch
+      // wide and filter to the view here so the storage cap can't displace
+      // in-view matches.
+      const episodes = await storage.searchUserEpisodes(auth.userId, query, 200);
       return ok({
         view,
-        shows: shows.filter((s) => viewShowIds.has(s.id)).map(trimShow),
+        shows: [...matchedShows.values()].map(trimShow),
         episodes: episodes
           .filter((e) => viewShowIds.has(e.show.id))
           .map((e) => ({

@@ -49,12 +49,21 @@ describe("upcoming_episodes", () => {
     expect(mocked.getUpcomingEpisodes).toHaveBeenCalledWith("user-1", "shared", ["g1"], 200);
   });
 
-  it("flags truncation when the fetch cap fills up", async () => {
+  it("flags truncation when the fetch cap fills up inside the window", async () => {
     mocked.getUpcomingEpisodes.mockResolvedValue(
       Array.from({ length: 200 }, (_, i) => upcoming(1000 + i, "2026-10-01"))
     );
     const { body } = await callTool(server(), "upcoming_episodes", { view: "personal", days: 30 });
     expect(body.truncated).toBe(true);
+  });
+
+  it("does not flag truncation when a full page ends past the cutoff", async () => {
+    mocked.getUpcomingEpisodes.mockResolvedValue(
+      Array.from({ length: 200 }, (_, i) => upcoming(1000 + i, "2026-12-01"))
+    );
+    const { body } = await callTool(server(), "upcoming_episodes", { view: "personal", days: 7 });
+    expect(body.truncated).toBeUndefined();
+    expect(body.upcoming).toEqual([]);
   });
 
   it("omits the truncation flag when the page is not full", async () => {

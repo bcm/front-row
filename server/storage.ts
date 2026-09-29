@@ -32,7 +32,7 @@ export interface IStorage {
   getEpisodeWithShowAndUserData(userId: string, episodeId: number): Promise<(Episode & { show: Show; userEpisode?: UserEpisode }) | undefined>;
   createEpisode(episode: InsertEpisode): Promise<Episode>;
   getLatestEpisodes(showIds: number[]): Promise<Episode[]>;
-  searchUserEpisodes(userId: string, query: string): Promise<(Episode & { show: Show })[]>;
+  searchUserEpisodes(userId: string, query: string, limit?: number): Promise<(Episode & { show: Show })[]>;
   
   // User episode methods
   getUserEpisodes(userId: string, status?: string, showMode?: string, groupIds?: string[]): Promise<(UserEpisode & { episode: Episode & { show: Show }; groupId?: string | null })[]>;
@@ -209,6 +209,7 @@ export class DatabaseStorage implements IStorage {
         language: tvmazeShow.language,
         type: tvmazeShow.type,
         updated: tvmazeShow.updated,
+        lastSyncedAt: new Date(),
       };
 
       // Use INSERT ... ON CONFLICT to upsert the show
@@ -266,6 +267,7 @@ export class DatabaseStorage implements IStorage {
         type: shows.type,
         updated: shows.updated,
         tmdbId: shows.tmdbId,
+        lastSyncedAt: shows.lastSyncedAt,
         createdAt: shows.createdAt
       })
       .from(userShows)
@@ -509,7 +511,7 @@ export class DatabaseStorage implements IStorage {
     return Array.from(latestByShow.values());
   }
 
-  async searchUserEpisodes(userId: string, query: string): Promise<(Episode & { show: Show })[]> {
+  async searchUserEpisodes(userId: string, query: string, limit: number = 20): Promise<(Episode & { show: Show })[]> {
     // Get user's group IDs to include shared episodes
     const groupIds = await this.getUserGroupIds(userId);
     
@@ -564,7 +566,7 @@ export class DatabaseStorage implements IStorage {
         ilike(episodes.name, `%${query}%`)
       ))
       .orderBy(asc(episodes.airdate))
-      .limit(20);
+      .limit(limit);
 
     return results.map(row => ({
       id: row.id,

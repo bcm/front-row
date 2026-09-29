@@ -24,6 +24,7 @@ export const shows = pgTable("shows", {
   language: text("language"),
   type: text("type"),
   updated: integer("updated"),
+  lastSyncedAt: timestamp("last_synced_at"), // local sync time, per the agent-interface design doc
   tmdbId: integer("tmdb_id"), // TMDB show ID for recommendations
   createdAt: timestamp("created_at").defaultNow(),
 });

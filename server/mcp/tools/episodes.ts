@@ -9,8 +9,8 @@ import { ok } from "../format";
 import { trimShow, trimEpisode } from "../trim";
 
 // Storage returns the soonest-first page of upcoming episodes; fetch wide
-// enough that a 30-day window is complete for any realistic library, and say
-// so explicitly when the page fills up.
+// enough that a 30-day window is complete for any realistic library, and flag
+// it explicitly when the cap may have cut off in-window episodes.
 const FETCH_LIMIT = 200;
 
 export function registerEpisodeTools(tools: ToolRegistrar, auth: McpAuthContext): void {
@@ -34,11 +34,21 @@ export function registerEpisodeTools(tools: ToolRegistrar, auth: McpAuthContext)
           episode: trimEpisode(ep),
           group_id: ep.groupId ?? null,
         }));
+      // Truncation means the fetch cap may have cut off in-window episodes:
+      // the fetched page is airdate-ordered, so that holds exactly when the
+      // latest fetched airdate is still inside the requested window. A full
+      // page whose tail is past the cutoff already contains every in-window
+      // episode and must not raise the flag.
+      let latestFetched = "";
+      for (const ep of episodes) {
+        if ((ep.airdate ?? "") > latestFetched) latestFetched = ep.airdate ?? "";
+      }
+      const truncated = episodes.length >= FETCH_LIMIT && latestFetched <= cutoff;
       return ok({
         view,
         days: days ?? 7,
         upcoming,
-        ...(episodes.length >= FETCH_LIMIT ? { truncated: true, note: "result hit the fetch cap; narrow the window" } : {}),
+        ...(truncated ? { truncated: true, note: "result hit the fetch cap; in-window results may be incomplete" } : {}),
         ...(resolved.view === "family" && resolved.groupIds.length === 0
           ? { note: "family view requested but the user is not a member of any group" }
           : {}),

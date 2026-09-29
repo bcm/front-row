@@ -7,15 +7,21 @@ import type { McpAuthContext } from "../../oauth/middleware";
 import { viewSchema, resolveView } from "../view";
 import { ok, err } from "../format";
 import { trimShow, trimEpisode } from "../trim";
+import type { Show } from "@shared/schema";
 
 // Episode statuses that mean "still to watch".
 const ACTIONABLE = new Set(["untriaged", "later", "next"]);
+
+/** Show summary plus the local sync timestamp, so the agent can qualify staleness. */
+function showWithSync(show: Show) {
+  return { ...trimShow(show), last_synced_at: show.lastSyncedAt?.toISOString() ?? null };
+}
 
 export function registerShowTools(tools: ToolRegistrar, auth: McpAuthContext): void {
   tools.registerReadTool(
     "show_get",
     "Show details plus its episode list with the user's watch statuses for an explicit view. " +
-      "tvmaze_updated_at lets the caller qualify staleness.",
+      "last_synced_at is when this database last synced the show from TVMaze, so the caller can qualify staleness.",
     {
       view: viewSchema,
       show_id: z.number().int().describe("TVMaze show ID."),
@@ -50,7 +56,7 @@ export function registerShowTools(tools: ToolRegistrar, auth: McpAuthContext): v
       const episodes = await storage.getEpisodes(show_id);
       return ok({
         view,
-        show: { ...trimShow(show), tvmaze_updated_at: show.updated ?? null },
+        show: showWithSync(show),
         episodes: episodes.map((ep) => ({ ...trimEpisode(ep), statuses: statusByEpisode.get(ep.id) ?? [] })),
       });
     }
@@ -86,7 +92,7 @@ export function registerShowTools(tools: ToolRegistrar, auth: McpAuthContext): v
         .sort((a, b) => (a.episode.airdate ?? "").localeCompare(b.episode.airdate ?? ""))
         .slice(0, limit ?? 20)
         .map((r) => ({
-          show: trimShow(r.episode.show),
+          show: showWithSync(r.episode.show),
           episode: trimEpisode(r.episode),
           status: r.status,
           group_id: r.groupId ?? null,

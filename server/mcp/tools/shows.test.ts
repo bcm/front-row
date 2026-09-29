@@ -26,7 +26,7 @@ beforeEach(() => {
 
 describe("show_get", () => {
   it("returns show details with per-episode statuses for the personal view", async () => {
-    const show = showFixture();
+    const show = showFixture({ lastSyncedAt: new Date("2026-09-20T12:00:00.000Z") });
     mocked.getShow.mockResolvedValue(show);
     mocked.getUserShows.mockResolvedValue([userShowFixture({ show })]);
     mocked.getEpisodes.mockResolvedValue([episodeFixture()]);
@@ -36,7 +36,8 @@ describe("show_get", () => {
     const { isError, body } = await callTool(server(), "show_get", { view: "personal", show_id: 1 });
     expect(isError).toBe(false);
     expect(body.show.tvmaze_id).toBe(1);
-    expect(body.show.tvmaze_updated_at).toBe(1700000000);
+    expect(body.show.last_synced_at).toBe("2026-09-20T12:00:00.000Z");
+    expect(body.show).not.toHaveProperty("tvmaze_updated_at");
     expect(body.episodes[0].statuses).toEqual([
       { group_id: null, status: "watched", watched_at: expect.any(String) },
     ]);
@@ -77,6 +78,17 @@ describe("queue_next_up", () => {
     // Beta (2024-03-15) before Alpha (2024-05-01); Gamma excluded (all skipped).
     expect(body.queue.map((q: any) => q.show.name)).toEqual(["Beta", "Alpha"]);
     expect(body.queue[0].episode.airdate).toBe("2024-03-15");
+  });
+
+  it("exposes last_synced_at on each queued show", async () => {
+    const syncedAt = new Date("2026-09-15T08:00:00.000Z");
+    mocked.getUserEpisodes.mockResolvedValue([
+      { status: "next", groupId: null, episode: { ...episodeFixture({ showId: 1, airdate: "2024-05-01" }), show: showFixture({ id: 1, name: "Alpha", lastSyncedAt: syncedAt }) } },
+      { status: "next", groupId: null, episode: { ...episodeFixture({ showId: 2, airdate: "2024-06-01" }), show: showFixture({ id: 2, name: "Beta" }) } },
+    ]);
+    const { body } = await callTool(server(), "queue_next_up", { view: "personal" });
+    expect(body.queue[0].show.last_synced_at).toBe("2026-09-15T08:00:00.000Z");
+    expect(body.queue[1].show.last_synced_at).toBeNull();
   });
 
   it("respects the limit", async () => {

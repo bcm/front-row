@@ -64,24 +64,24 @@ describe("library_search", () => {
 
   it("personal view composes show and episode search", async () => {
     mocked.getUserShows.mockResolvedValue([userShowFixture({ show })]);
-    mocked.searchUserShows.mockResolvedValue([show]);
     mocked.searchUserEpisodes.mockResolvedValue([ep]);
     const { isError, body } = await callTool(server(), "library_search", { view: "personal", query: "test" });
     expect(isError).toBe(false);
     expect(body.shows).toHaveLength(1);
     expect(body.episodes).toHaveLength(1);
     expect(body.episodes[0].show.tvmaze_id).toBe(1);
+    // Episode search fetches wide so the storage cap can't displace in-view matches.
+    expect(mocked.searchUserEpisodes).toHaveBeenCalledWith("user-1", "test", 200);
   });
 
   it("personal view excludes shows shared with a group", async () => {
-    const familyShow = showFixture({ id: 2, name: "Family Drama" });
+    const familyShow = showFixture({ id: 2, name: "Test Drama" });
     mocked.getUserShows.mockResolvedValue([
       userShowFixture({ show }),
       userShowFixture({ show: familyShow, groupId: "g1", isShared: true }),
     ]);
-    mocked.searchUserShows.mockResolvedValue([show, familyShow]);
     mocked.searchUserEpisodes.mockResolvedValue([{ ...episodeFixture(), show: familyShow }]);
-    const { body } = await callTool(server(), "library_search", { view: "personal", query: "drama" });
+    const { body } = await callTool(server(), "library_search", { view: "personal", query: "test" });
     expect(body.shows.map((s: any) => s.name)).toEqual(["Test Show"]);
     expect(body.episodes).toEqual([]);
   });
@@ -92,7 +92,16 @@ describe("library_search", () => {
       userShowFixture({ show }),
       userShowFixture({ show: familyShow, groupId: "g1", isShared: true }),
     ]);
-    mocked.searchUserShows.mockResolvedValue([familyShow]);
+    mocked.searchUserEpisodes.mockResolvedValue([]);
+    const { body } = await callTool(server(), "library_search", { view: "family", query: "drama" });
+    expect(body.shows.map((s: any) => s.name)).toEqual(["Family Drama"]);
+  });
+
+  it("family view finds shows added by another group member", async () => {
+    const familyShow = showFixture({ id: 2, name: "Family Drama" });
+    mocked.getUserShows.mockResolvedValue([
+      userShowFixture({ show: familyShow, userId: "user-2", groupId: "g1", isShared: true }),
+    ]);
     mocked.searchUserEpisodes.mockResolvedValue([]);
     const { body } = await callTool(server(), "library_search", { view: "family", query: "drama" });
     expect(body.shows.map((s: any) => s.name)).toEqual(["Family Drama"]);
@@ -102,7 +111,6 @@ describe("library_search", () => {
     const familyShow = showFixture({ id: 2, name: "Family Drama" });
     const futureEp = { ...episodeFixture({ id: 202, airdate: "2026-12-01" }), show: familyShow };
     mocked.getUserShows.mockResolvedValue([userShowFixture({ show: familyShow, groupId: "g1", isShared: true })]);
-    mocked.searchUserShows.mockResolvedValue([]);
     mocked.searchUserEpisodes.mockResolvedValue([futureEp]);
     const { body } = await callTool(server(), "library_search", { view: "family", query: "pilot" });
     expect(body.episodes).toHaveLength(1);
@@ -113,7 +121,6 @@ describe("library_search", () => {
   it("family view with no groups returns empty results with a note", async () => {
     mocked.getUserGroupIds.mockResolvedValue([]);
     mocked.getUserShows.mockResolvedValue([userShowFixture({ show })]);
-    mocked.searchUserShows.mockResolvedValue([show]);
     mocked.searchUserEpisodes.mockResolvedValue([]);
     const { body } = await callTool(server(), "library_search", { view: "family", query: "test" });
     expect(body.shows).toEqual([]);
