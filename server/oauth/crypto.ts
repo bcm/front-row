@@ -13,6 +13,16 @@ export function pkceS256Challenge(verifier: string): string {
   return createHash("sha256").update(verifier, "utf8").digest("base64url");
 }
 
+// RFC 7636 §4.1: code_challenge and code_verifier share the same syntax —
+// 43–128 characters from the unreserved alphabet. Validated at authorize
+// time (a short plain challenge could never be redeemed) and at exchange
+// time (the exchange request is independently attacker-controlled).
+const PKCE_SYNTAX = /^[A-Za-z0-9\-._~]{43,128}$/;
+
+export function pkceSyntaxOk(value: string): boolean {
+  return PKCE_SYNTAX.test(value);
+}
+
 export function newOpaqueToken(): string {
   return randomBytes(32).toString("base64url");
 }

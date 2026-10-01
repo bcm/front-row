@@ -10,22 +10,19 @@ import type { Request, Response } from "express";
 import { and, eq, gt } from "drizzle-orm";
 import { db } from "../db";
 import { oauthAuthorizationCodes } from "@shared/schema";
-import { pkceS256Challenge, sha256Hex } from "./crypto";
-import { mintTokenGrant, tokenResponse } from "./tokens";
+import { pkceS256Challenge, pkceSyntaxOk, sha256Hex } from "./crypto";
+import { mintTokenGrant, sendTokenResponse, tokenResponse } from "./tokens";
 
 function str(value: unknown): string {
   return typeof value === "string" ? value : "";
 }
 
-// RFC 7636 §4.1: the verifier is 43–128 characters from the unreserved
-// alphabet. Enforced here because the exchange request is independently
-// attacker-controlled: for "plain" the verifier IS the challenge, so a
-// short or malformed verifier equal to the stored challenge would succeed
-// without this check.
-const VERIFIER_SYNTAX = /^[A-Za-z0-9\-._~]{43,128}$/;
-
+// PKCE (RFC 7636) is required: the verifier must match the stored challenge
+// and both must use the §4.1 syntax. For "plain" the verifier IS the
+// challenge, so a short or malformed verifier equal to the stored challenge
+// would succeed without the syntax check.
 function pkceValid(challenge: string, method: string | null, verifier: string): boolean {
-  if (!VERIFIER_SYNTAX.test(verifier)) return false;
+  if (!pkceSyntaxOk(verifier)) return false;
   if (method === "S256") return pkceS256Challenge(verifier) === challenge;
   // "plain" (or no recorded method): the verifier is the challenge.
   return verifier === challenge;
@@ -67,5 +64,5 @@ export async function handleAuthorizationCodeGrant(req: Request, res: Response):
     return;
   }
   const tokens = await mintTokenGrant(row.clientId, row.userId, row.scopes);
-  res.json(tokenResponse(tokens, row.scopes));
+  sendTokenResponse(res, tokenResponse(tokens, row.scopes));
 }

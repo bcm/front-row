@@ -13,6 +13,7 @@ import {
   mintTokenGrant,
   rotateRow,
   revokeGrantFamily,
+  sendTokenResponse,
   tokenResponse,
 } from "./tokens";
 
@@ -87,7 +88,7 @@ async function handleDeviceCodeGrant(req: Request, res: Response): Promise<void>
   // Single-use: the code row is consumed by the exchange.
   const tokens = await mintTokenGrant(row.clientId, row.approvedByUserId, row.scopes);
   await db.delete(oauthDeviceCodes).where(eq(oauthDeviceCodes.deviceCodeHash, row.deviceCodeHash));
-  res.json(tokenResponse(tokens, row.scopes));
+  sendTokenResponse(res, tokenResponse(tokens, row.scopes));
 }
 
 async function handleRefreshGrant(req: Request, res: Response): Promise<void> {

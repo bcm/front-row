@@ -5,6 +5,7 @@ import {
   newUserCode,
   normalizeUserCode,
   pkceS256Challenge,
+  pkceSyntaxOk,
   sha256Hex,
 } from "./crypto";
 
@@ -59,5 +60,17 @@ describe("pkceS256Challenge", () => {
     expect(pkceS256Challenge("dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk")).toBe(
       "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM"
     );
+  });
+});
+
+describe("pkceSyntaxOk", () => {
+  it("enforces the RFC 7636 §4.1 43–128 char unreserved syntax", () => {
+    expect(pkceSyntaxOk("v".repeat(42))).toBe(false);
+    expect(pkceSyntaxOk("v".repeat(43))).toBe(true);
+    expect(pkceSyntaxOk("v".repeat(128))).toBe(true);
+    expect(pkceSyntaxOk("v".repeat(129))).toBe(false);
+    expect(pkceSyntaxOk("")).toBe(false);
+    expect(pkceSyntaxOk("dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjX!")).toBe(false);
+    expect(pkceSyntaxOk("E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM")).toBe(true);
   });
 });

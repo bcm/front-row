@@ -34,7 +34,7 @@ function authorizeQuery(overrides: Record<string, any> = {}): any {
       redirect_uri: CALLBACK,
       scope: "library:read",
       state: "xyz",
-      code_challenge: "challenge-abc",
+      code_challenge: PLAIN_VERIFIER,
       code_challenge_method: "plain",
       ...overrides,
     },
@@ -115,6 +115,28 @@ describe("handleAuthorize", () => {
     expect(redirectUrl(res).searchParams.get("error")).toBe("invalid_request");
   });
 
+  it("redirects with invalid_request for a short PKCE challenge", async () => {
+    db.select.mockReturnValue(chainable([clientRow()]));
+    const res = mockRes();
+    // 13 chars: passes the old nonempty check, but no plain verifier could
+    // ever redeem it at exchange, so it must be rejected up front.
+    await handleAuthorize(
+      authorizeQuery({ code_challenge: "challenge-abc", code_challenge_method: "plain" }),
+      res
+    );
+    expect(redirectUrl(res).searchParams.get("error")).toBe("invalid_request");
+  });
+
+  it("redirects with invalid_request for a PKCE challenge outside the unreserved alphabet", async () => {
+    db.select.mockReturnValue(chainable([clientRow()]));
+    const res = mockRes();
+    await handleAuthorize(
+      authorizeQuery({ code_challenge: `${PLAIN_VERIFIER}!`, code_challenge_method: "plain" }),
+      res
+    );
+    expect(redirectUrl(res).searchParams.get("error")).toBe("invalid_request");
+  });
+
   it("renders the consent page for a valid request", async () => {
     db.select.mockReturnValue(chainable([clientRow()]));
     const res = mockRes();
@@ -137,7 +159,7 @@ function decisionBody(overrides: Record<string, any> = {}): any {
       redirect_uri: CALLBACK,
       scope: "library:read",
       state: "xyz",
-      code_challenge: "challenge-abc",
+      code_challenge: PLAIN_VERIFIER,
       code_challenge_method: "plain",
       decision: "approve",
       ...overrides,
@@ -189,6 +211,14 @@ describe("handleDecision", () => {
     expect(res.redirect).not.toHaveBeenCalled();
   });
 
+  it("rejects a decision with a short PKCE challenge", async () => {
+    db.select.mockReturnValue(chainable([clientRow()]));
+    const res = mockRes();
+    await handleDecision(decisionBody({ code_challenge: "challenge-abc" }), res);
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.redirect).not.toHaveBeenCalled();
+  });
+
   it("denies with a redirect carrying access_denied and state", async () => {
     db.select.mockReturnValue(chainable([clientRow()]));
     const res = mockRes();
@@ -231,11 +261,11 @@ describe("handleDecision", () => {
     db.insert.mockReturnValue(insertChain);
     const res = mockRes();
     await handleDecision(
-      decisionBody({ code_challenge: "challenge-abc", code_challenge_method: "S256" }),
+      decisionBody({ code_challenge: PLAIN_VERIFIER, code_challenge_method: "S256" }),
       res
     );
     const values = insertChain.values.mock.calls[0][0];
-    expect(values.codeChallenge).toBe("challenge-abc");
+    expect(values.codeChallenge).toBe(PLAIN_VERIFIER);
     expect(values.codeChallengeMethod).toBe("S256");
     expect(res.redirect).toHaveBeenCalledTimes(1);
   });
@@ -289,6 +319,9 @@ describe("handleToken authorization_code grant", () => {
     expect(body.scope).toBe("library:read");
     expect(db.delete).toHaveBeenCalledWith(oauthAuthorizationCodes);
     expect(deleteChain.returning).toHaveBeenCalledTimes(1);
+    // RFC 6749 §5.1: token responses must not be stored.
+    expect(res.set).toHaveBeenCalledWith("Cache-Control", "no-store");
+    expect(res.set).toHaveBeenCalledWith("Pragma", "no-cache");
   });
 
   it("rejects an unknown code", async () => {

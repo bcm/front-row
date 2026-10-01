@@ -135,6 +135,9 @@ describe("handleToken device_code grant", () => {
     // Single-use: the code row is gone after exchange.
     expect(db.delete).toHaveBeenCalledWith(oauthDeviceCodes);
     expect(deleteChain.where).toHaveBeenCalledTimes(1);
+    // RFC 6749 §5.1: token responses must not be stored.
+    expect(res.set).toHaveBeenCalledWith("Cache-Control", "no-store");
+    expect(res.set).toHaveBeenCalledWith("Pragma", "no-cache");
   });
 });
 

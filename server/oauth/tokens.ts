@@ -35,6 +35,14 @@ export async function mintTokenGrant(clientId: string, userId: string, scopes: s
   return { accessToken, refreshToken };
 }
 
+// RFC 6749 §5.1: token responses carry credentials, so they must not be
+// stored by clients or intermediaries.
+export function sendTokenResponse(res: Response, body: Record<string, unknown>): void {
+  res.set("Cache-Control", "no-store");
+  res.set("Pragma", "no-cache");
+  res.json(body);
+}
+
 export function tokenResponse(tokens: IssuedTokens, scopes: string[]): Record<string, unknown> {
   return {
     access_token: tokens.accessToken,
@@ -57,7 +65,7 @@ export async function rotateRow(
     .update(oauthTokens)
     .set({ rotatedAt: now, revokedAt: now })
     .where(eq(oauthTokens.id, row.id));
-  res.json(tokenResponse(tokens, row.scopes));
+  sendTokenResponse(res, tokenResponse(tokens, row.scopes));
 }
 
 export async function revokeGrantFamily(clientId: string, userId: string): Promise<void> {
