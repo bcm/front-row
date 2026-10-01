@@ -235,7 +235,7 @@ export const oauthAuthorizationCodes = pgTable("oauth_authorization_codes", {
   userId: varchar("user_id").notNull(), // approver's Replit sub, bound at approval
   redirectUri: text("redirect_uri").notNull(), // exact redirect_uri from the authorize request; must match at exchange
   scopes: text("scopes").array().notNull(),
-  codeChallenge: text("code_challenge"), // PKCE (RFC 7636); null when the client sent no challenge
+  codeChallenge: text("code_challenge"), // PKCE (RFC 7636); required by the implementation, so never null for issued codes
   codeChallengeMethod: text("code_challenge_method"), // "S256" | "plain"
   expiresAt: timestamp("expires_at").notNull(), // ~10 minutes after issuance
   createdAt: timestamp("created_at").defaultNow(),

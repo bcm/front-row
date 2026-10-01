@@ -13,6 +13,8 @@ beforeEach(() => resetDbMocks());
 
 const CALLBACK = "https://vault.example/callback";
 const PKCE_VERIFIER = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk";
+// 43 chars from the RFC 7636 unreserved alphabet, for plain-method tests.
+const PLAIN_VERIFIER = "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM";
 
 function loggedIn(overrides: Record<string, any> = {}): any {
   return mockReq({
@@ -47,6 +49,17 @@ describe("handleAuthorize", () => {
   it("redirects to /api/login when not logged in", async () => {
     const res = mockRes();
     await handleAuthorize(mockReq({ query: { client_id: "ghost" } }), res);
+    expect(res.redirect).toHaveBeenCalledWith("/api/login");
+  });
+
+  it("stashes the authorize URL in the session before redirecting to login", async () => {
+    const req = mockReq({
+      query: { client_id: "ghost" },
+      originalUrl: "/oauth/authorize?client_id=ghost&response_type=code",
+    });
+    const res = mockRes();
+    await handleAuthorize(req, res);
+    expect(req.session.returnTo).toBe("/oauth/authorize?client_id=ghost&response_type=code");
     expect(res.redirect).toHaveBeenCalledWith("/api/login");
   });
 
@@ -139,6 +152,29 @@ describe("handleDecision", () => {
     expect(res.redirect).toHaveBeenCalledWith("/api/login");
   });
 
+  it("stashes a rebuilt authorize URL in the session before redirecting to login", async () => {
+    const req = mockReq({
+      body: {
+        client_id: "ghost",
+        redirect_uri: CALLBACK,
+        scope: "library:read",
+        state: "xyz",
+        code_challenge: "challenge-abc",
+        code_challenge_method: "plain",
+        decision: "approve",
+      },
+    });
+    const res = mockRes();
+    await handleDecision(req, res);
+    const returnTo = new URL(req.session.returnTo, "https://frontrow.maz.org");
+    expect(returnTo.pathname).toBe("/oauth/authorize");
+    expect(returnTo.searchParams.get("response_type")).toBe("code");
+    expect(returnTo.searchParams.get("client_id")).toBe("ghost");
+    expect(returnTo.searchParams.get("redirect_uri")).toBe(CALLBACK);
+    expect(returnTo.searchParams.get("code_challenge")).toBe("challenge-abc");
+    expect(res.redirect).toHaveBeenCalledWith("/api/login");
+  });
+
   it("403s on a CSRF mismatch", async () => {
     const res = mockRes();
     await handleDecision(decisionBody({ csrf: "wrong" }), res);
@@ -185,6 +221,8 @@ describe("handleDecision", () => {
     expect(values.redirectUri).toBe(CALLBACK);
     expect(values.scopes).toEqual(["library:read"]);
     expect(values.expiresAt.getTime() - Date.now()).toBeGreaterThan(590_000);
+    // Issuance-time sweep of expired codes bounds table growth.
+    expect(db.delete).toHaveBeenCalledWith(oauthAuthorizationCodes);
   });
 
   it("stores the PKCE challenge on approval", async () => {
@@ -295,11 +333,11 @@ describe("handleToken authorization_code grant", () => {
   });
 
   it("verifies a PKCE plain challenge", async () => {
-    const row = authCodeRow({ codeChallenge: "plain-verifier-value", codeChallengeMethod: "plain" });
+    const row = authCodeRow({ codeChallenge: PLAIN_VERIFIER, codeChallengeMethod: "plain" });
     db.select.mockReturnValue(chainable([row]));
     db.delete.mockReturnValue(chainable([row]));
     const res = mockRes();
-    await handleToken(grantBody({ code_verifier: "plain-verifier-value" }), res);
+    await handleToken(grantBody({ code_verifier: PLAIN_VERIFIER }), res);
     expect(res.json.mock.calls[0][0].access_token).toBeDefined();
   });
 
@@ -309,8 +347,46 @@ describe("handleToken authorization_code grant", () => {
       chainable([authCodeRow({ codeChallenge: pkceS256Challenge(verifier), codeChallengeMethod: "S256" })])
     );
     const res = mockRes();
-    await handleToken(grantBody({ code_verifier: "wrong-verifier" }), res);
+    // Valid syntax but wrong value: exercises the mismatch branch, not the syntax check.
+    await handleToken(grantBody({ code_verifier: "0".repeat(43) }), res);
     expect(res.json.mock.calls[0][0].error).toBe("invalid_grant");
+  });
+
+  it("rejects a verifier shorter than 43 chars even when it matches a plain challenge", async () => {
+    const short = "short-verifier";
+    const row = authCodeRow({ codeChallenge: short, codeChallengeMethod: "plain" });
+    db.select.mockReturnValue(chainable([row]));
+    const res = mockRes();
+    await handleToken(grantBody({ code_verifier: short }), res);
+    expect(res.json.mock.calls[0][0].error).toBe("invalid_grant");
+  });
+
+  it("rejects a verifier with characters outside the unreserved alphabet", async () => {
+    const bad = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjX!"; // "!" is illegal
+    const row = authCodeRow({ codeChallenge: bad, codeChallengeMethod: "plain" });
+    db.select.mockReturnValue(chainable([row]));
+    const res = mockRes();
+    await handleToken(grantBody({ code_verifier: bad }), res);
+    expect(res.json.mock.calls[0][0].error).toBe("invalid_grant");
+  });
+
+  it("enforces the 43–128 char verifier length at exchange", async () => {
+    for (const [len, ok] of [[42, false], [43, true], [128, true], [129, false]] as const) {
+      const verifier = "v".repeat(len);
+      const row = authCodeRow({
+        codeChallenge: pkceS256Challenge(verifier),
+        codeChallengeMethod: "S256",
+      });
+      db.select.mockReturnValue(chainable([row]));
+      db.delete.mockReturnValue(chainable([row]));
+      const res = mockRes();
+      await handleToken(grantBody({ code_verifier: verifier }), res);
+      if (ok) {
+        expect(res.json.mock.calls[0][0].access_token).toBeDefined();
+      } else {
+        expect(res.json.mock.calls[0][0].error).toBe("invalid_grant");
+      }
+    }
   });
 
   it("rejects a missing verifier when a challenge is stored", async () => {
@@ -318,7 +394,7 @@ describe("handleToken authorization_code grant", () => {
       chainable([authCodeRow({ codeChallenge: "some-challenge", codeChallengeMethod: "plain" })])
     );
     const res = mockRes();
-    await handleToken(grantBody(), res);
+    await handleToken(grantBody({ code_verifier: "" }), res);
     expect(res.json.mock.calls[0][0].error).toBe("invalid_grant");
   });
 

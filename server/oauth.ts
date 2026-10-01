@@ -9,7 +9,7 @@
 // (server/replit_integrations/auth). The Authorization Code Grant
 // (RFC 6749 §4.1, server/oauth/authorize.ts) exists for clients that can
 // drive a browser redirect — e.g. the Secure Vault's OAuth connector — with
-// optional PKCE (RFC 7636) and a per-client redirect-URI allow-list.
+// required PKCE (RFC 7636) and a per-client redirect-URI allow-list.
 //
 // Security invariants:
 // - Token values are shown once and stored as SHA-256 hashes. Token material

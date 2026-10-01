@@ -11,11 +11,11 @@
 // client's allow-list.
 
 import type { Request, Response } from "express";
-import { eq } from "drizzle-orm";
+import { eq, lt } from "drizzle-orm";
 import { db } from "../db";
 import { oauthAuthorizationCodes, oauthClients } from "@shared/schema";
 import { newOpaqueToken, sha256Hex } from "./crypto";
-import { isLoggedIn, sessionUserId } from "./request";
+import { isLoggedIn, sessionUserId, stashReturnTo } from "./request";
 import { esc, page } from "./page";
 import { checkCsrf, csrfToken } from "./verify";
 
@@ -57,8 +57,21 @@ function redirectWithParams(redirectUri: string, params: Record<string, string>)
   return url.toString();
 }
 
+// Rebuild the GET /oauth/authorize URL from a decision form's body so a
+// logged-out POST can resume at the consent page after login. handleAuthorize
+// re-validates everything, so tampered fields can't bypass the allow-list.
+function decisionReturnTo(body: Record<string, unknown>): string {
+  const params = new URLSearchParams({ response_type: "code" });
+  for (const key of ["client_id", "redirect_uri", "scope", "state", "code_challenge", "code_challenge_method"]) {
+    const value = str(body[key]);
+    if (value) params.set(key, value);
+  }
+  return `/oauth/authorize?${params.toString()}`;
+}
+
 export async function handleAuthorize(req: Request, res: Response): Promise<void> {
   if (!isLoggedIn(req)) {
+    stashReturnTo(req, req.originalUrl ?? "");
     res.redirect("/api/login");
     return;
   }
@@ -129,6 +142,7 @@ export async function handleAuthorize(req: Request, res: Response): Promise<void
 
 export async function handleDecision(req: Request, res: Response): Promise<void> {
   if (!isLoggedIn(req)) {
+    stashReturnTo(req, decisionReturnTo(req.body ?? {}));
     res.redirect("/api/login");
     return;
   }
@@ -148,6 +162,7 @@ export async function handleDecision(req: Request, res: Response): Promise<void>
     }
     const userId = sessionUserId(req);
     if (!userId) {
+      stashReturnTo(req, decisionReturnTo(body));
       res.redirect("/api/login");
       return;
     }
@@ -159,6 +174,9 @@ export async function handleDecision(req: Request, res: Response): Promise<void>
     }
     const code = newOpaqueToken();
     const now = new Date();
+    // Opportunistic cleanup: abandoned codes are otherwise only deleted on
+    // exchange, so sweep expired rows at issuance to bound table growth.
+    await db.delete(oauthAuthorizationCodes).where(lt(oauthAuthorizationCodes.expiresAt, now));
     await db.insert(oauthAuthorizationCodes).values({
       codeHash: sha256Hex(code),
       clientId: client.clientId,

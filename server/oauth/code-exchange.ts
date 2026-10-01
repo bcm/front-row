@@ -17,8 +17,15 @@ function str(value: unknown): string {
   return typeof value === "string" ? value : "";
 }
 
+// RFC 7636 §4.1: the verifier is 43–128 characters from the unreserved
+// alphabet. Enforced here because the exchange request is independently
+// attacker-controlled: for "plain" the verifier IS the challenge, so a
+// short or malformed verifier equal to the stored challenge would succeed
+// without this check.
+const VERIFIER_SYNTAX = /^[A-Za-z0-9\-._~]{43,128}$/;
+
 function pkceValid(challenge: string, method: string | null, verifier: string): boolean {
-  if (!verifier) return false;
+  if (!VERIFIER_SYNTAX.test(verifier)) return false;
   if (method === "S256") return pkceS256Challenge(verifier) === challenge;
   // "plain" (or no recorded method): the verifier is the challenge.
   return verifier === challenge;
