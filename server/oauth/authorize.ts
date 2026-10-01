@@ -87,7 +87,7 @@ export async function handleAuthorize(req: Request, res: Response): Promise<void
     }
     const codeChallenge = str(req.query.code_challenge);
     const codeChallengeMethod = str(req.query.code_challenge_method) || (codeChallenge ? "plain" : "");
-    if (codeChallengeMethod && !PKCE_METHODS.includes(codeChallengeMethod)) {
+    if (!codeChallenge || !PKCE_METHODS.includes(codeChallengeMethod)) {
       redirectError("invalid_request");
       return;
     }
@@ -142,7 +142,7 @@ export async function handleDecision(req: Request, res: Response): Promise<void>
     const scopes = client ? validatedScopes(client, str(body.scope)) : null;
     const codeChallenge = str(body.code_challenge);
     const codeChallengeMethod = str(body.code_challenge_method) || (codeChallenge ? "plain" : "");
-    if (!client || !scopes || (codeChallengeMethod && !PKCE_METHODS.includes(codeChallengeMethod))) {
+    if (!client || !scopes || !codeChallenge || !PKCE_METHODS.includes(codeChallengeMethod)) {
       res.status(400).send(errorPage("Invalid authorization request", "Unknown client, redirect URI, scope, or PKCE method."));
       return;
     }

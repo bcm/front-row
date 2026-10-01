@@ -12,6 +12,7 @@ vi.mock("../db", () => ({ db }));
 beforeEach(() => resetDbMocks());
 
 const CALLBACK = "https://vault.example/callback";
+const PKCE_VERIFIER = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk";
 
 function loggedIn(overrides: Record<string, any> = {}): any {
   return mockReq({
@@ -31,6 +32,8 @@ function authorizeQuery(overrides: Record<string, any> = {}): any {
       redirect_uri: CALLBACK,
       scope: "library:read",
       state: "xyz",
+      code_challenge: "challenge-abc",
+      code_challenge_method: "plain",
       ...overrides,
     },
   });
@@ -92,6 +95,13 @@ describe("handleAuthorize", () => {
     expect(redirectUrl(res).searchParams.get("error")).toBe("invalid_request");
   });
 
+  it("redirects with invalid_request when PKCE is missing", async () => {
+    db.select.mockReturnValue(chainable([clientRow()]));
+    const res = mockRes();
+    await handleAuthorize(authorizeQuery({ code_challenge: "", code_challenge_method: "" }), res);
+    expect(redirectUrl(res).searchParams.get("error")).toBe("invalid_request");
+  });
+
   it("renders the consent page for a valid request", async () => {
     db.select.mockReturnValue(chainable([clientRow()]));
     const res = mockRes();
@@ -114,8 +124,8 @@ function decisionBody(overrides: Record<string, any> = {}): any {
       redirect_uri: CALLBACK,
       scope: "library:read",
       state: "xyz",
-      code_challenge: "",
-      code_challenge_method: "",
+      code_challenge: "challenge-abc",
+      code_challenge_method: "plain",
       decision: "approve",
       ...overrides,
     },
@@ -133,6 +143,14 @@ describe("handleDecision", () => {
     const res = mockRes();
     await handleDecision(decisionBody({ csrf: "wrong" }), res);
     expect(res.status).toHaveBeenCalledWith(403);
+  });
+
+  it("rejects a decision with PKCE removed", async () => {
+    db.select.mockReturnValue(chainable([clientRow()]));
+    const res = mockRes();
+    await handleDecision(decisionBody({ code_challenge: "", code_challenge_method: "" }), res);
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.redirect).not.toHaveBeenCalled();
   });
 
   it("denies with a redirect carrying access_denied and state", async () => {
@@ -208,6 +226,7 @@ function grantBody(overrides: Record<string, any> = {}): any {
       code: "auth-code",
       client_id: "ghost",
       redirect_uri: CALLBACK,
+      code_verifier: PKCE_VERIFIER,
       ...overrides,
     },
   });
@@ -215,7 +234,13 @@ function grantBody(overrides: Record<string, any> = {}): any {
 
 describe("handleToken authorization_code grant", () => {
   it("exchanges a valid code for tokens and consumes it (single-use)", async () => {
-    db.select.mockReturnValue(chainable([authCodeRow()]));
+    const row = authCodeRow({
+      codeChallenge: pkceS256Challenge(PKCE_VERIFIER),
+      codeChallengeMethod: "S256",
+    });
+    db.select.mockReturnValue(chainable([row]));
+    const deleteChain = chainable([row]);
+    db.delete.mockReturnValue(deleteChain);
     const res = mockRes();
     await handleToken(grantBody(), res);
     expect(res.json).toHaveBeenCalledTimes(1);
@@ -225,6 +250,7 @@ describe("handleToken authorization_code grant", () => {
     expect(body.token_type).toBe("Bearer");
     expect(body.scope).toBe("library:read");
     expect(db.delete).toHaveBeenCalledWith(oauthAuthorizationCodes);
+    expect(deleteChain.returning).toHaveBeenCalledTimes(1);
   });
 
   it("rejects an unknown code", async () => {
@@ -259,9 +285,9 @@ describe("handleToken authorization_code grant", () => {
 
   it("verifies a PKCE S256 challenge", async () => {
     const verifier = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk";
-    db.select.mockReturnValue(
-      chainable([authCodeRow({ codeChallenge: pkceS256Challenge(verifier), codeChallengeMethod: "S256" })])
-    );
+    const row = authCodeRow({ codeChallenge: pkceS256Challenge(verifier), codeChallengeMethod: "S256" });
+    db.select.mockReturnValue(chainable([row]));
+    db.delete.mockReturnValue(chainable([row]));
     const res = mockRes();
     await handleToken(grantBody({ code_verifier: verifier }), res);
     expect(res.json).toHaveBeenCalledTimes(1);
@@ -269,9 +295,9 @@ describe("handleToken authorization_code grant", () => {
   });
 
   it("verifies a PKCE plain challenge", async () => {
-    db.select.mockReturnValue(
-      chainable([authCodeRow({ codeChallenge: "plain-verifier-value", codeChallengeMethod: "plain" })])
-    );
+    const row = authCodeRow({ codeChallenge: "plain-verifier-value", codeChallengeMethod: "plain" });
+    db.select.mockReturnValue(chainable([row]));
+    db.delete.mockReturnValue(chainable([row]));
     const res = mockRes();
     await handleToken(grantBody({ code_verifier: "plain-verifier-value" }), res);
     expect(res.json.mock.calls[0][0].access_token).toBeDefined();
@@ -296,8 +322,34 @@ describe("handleToken authorization_code grant", () => {
     expect(res.json.mock.calls[0][0].error).toBe("invalid_grant");
   });
 
-  it("rejects a replayed code", async () => {
+  it("rejects an authorization code without PKCE", async () => {
     db.select.mockReturnValue(chainable([authCodeRow()]));
+    const res = mockRes();
+    await handleToken(grantBody(), res);
+    expect(res.json.mock.calls[0][0].error).toBe("invalid_grant");
+    expect(db.delete).not.toHaveBeenCalled();
+  });
+
+  it("rejects an exchange when another request already consumed the code", async () => {
+    const row = authCodeRow({
+      codeChallenge: pkceS256Challenge(PKCE_VERIFIER),
+      codeChallengeMethod: "S256",
+    });
+    db.select.mockReturnValue(chainable([row]));
+    db.delete.mockReturnValue(chainable([]));
+    const res = mockRes();
+    await handleToken(grantBody(), res);
+    expect(res.json.mock.calls[0][0].error).toBe("invalid_grant");
+    expect(db.insert).not.toHaveBeenCalled();
+  });
+
+  it("rejects a replayed code", async () => {
+    const row = authCodeRow({
+      codeChallenge: pkceS256Challenge(PKCE_VERIFIER),
+      codeChallengeMethod: "S256",
+    });
+    db.select.mockReturnValue(chainable([row]));
+    db.delete.mockReturnValue(chainable([row]));
     const first = mockRes();
     await handleToken(grantBody(), first);
     expect(first.json.mock.calls[0][0].access_token).toBeDefined();

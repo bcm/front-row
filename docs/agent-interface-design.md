@@ -62,7 +62,7 @@ no expiry, no scopes, no per-client revocation.
 
 A second grant exists for clients that *can* drive a browser redirect: the
 **Authorization Code Grant (RFC 6749 §4.1)** at `GET /oauth/authorize`, with
-optional PKCE (RFC 7636) and a per-client `allowed_redirect_uris`
+required PKCE (RFC 7636) and a per-client `allowed_redirect_uris`
 allow-list (exact match; never redirect to an unlisted URI). It was added
 so the Secure Vault's OAuth connector — which only speaks the
 authorization-code flow — can hold a Front Row connection. The token
