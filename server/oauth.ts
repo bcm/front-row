@@ -69,7 +69,7 @@ function protectedResourceMetadata(req: Request, res: Response): void {
   });
 }
 
-function authorizationServerMetadata(req: Request, res: Response): void {
+export function authorizationServerMetadata(req: Request, res: Response): void {
   const url = baseUrl(req);
   res.json({
     issuer: url,
@@ -83,6 +83,11 @@ function authorizationServerMetadata(req: Request, res: Response): void {
       "urn:ietf:params:oauth:grant-type:device_code",
       "refresh_token",
     ],
+    // Public clients authenticate with no secret (client_id in the body);
+    // RFC 8414 defaults an omitted field to client_secret_basic, so the
+    // supported method must be explicit or discovery consumers will try
+    // Basic auth the token endpoint does not accept.
+    token_endpoint_auth_methods_supported: ["none"],
     code_challenge_methods_supported: ["S256", "plain"],
   });
 }

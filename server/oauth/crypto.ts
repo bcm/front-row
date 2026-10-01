@@ -23,15 +23,31 @@ export function pkceSyntaxOk(value: string): boolean {
   return PKCE_SYNTAX.test(value);
 }
 
+// An S256 challenge must be exactly what a real client can produce:
+// base64url(sha256(verifier)) — the unpadded base64url encoding of 32
+// bytes, always exactly 43 characters. The RFC 7636 unreserved alphabet is
+// wider than base64url (it also allows "." and "~"), and not every 43-char
+// base64url string is canonical: the final character carries 4 data bits,
+// so its 2 trailing bits must be zero. Anything else passes authorization
+// but can never equal base64url(sha256(verifier)) at exchange time, leaving
+// the issued code unredeemable — reject it here instead.
+const PKCE_S256_ALPHABET = /^[A-Za-z0-9_-]{43}$/;
+
+export function pkceS256ChallengeOk(challenge: string): boolean {
+  if (!PKCE_S256_ALPHABET.test(challenge)) return false;
+  const bytes = Buffer.from(challenge, "base64url");
+  // Round-trip through the decoder: canonical encodings re-encode to
+  // themselves, non-canonical ones (nonzero trailing bits) do not.
+  return bytes.length === 32 && bytes.toString("base64url") === challenge;
+}
+
 // A code_challenge must be redeemable: plain shares the verifier syntax
-// (43–128 unreserved chars), while S256 is base64url(sha256(verifier)),
-// which is always exactly 43 characters. A longer S256 challenge can never
-// match pkceS256Challenge(verifier), so reject it at authorize time instead
-// of issuing a dead code.
+// (43–128 unreserved chars), while S256 must be a canonical unpadded
+// base64url encoding of 32 bytes (see above). Reject anything else at
+// authorize time instead of issuing a dead code.
 export function pkceChallengeOk(challenge: string, method: string): boolean {
-  if (!pkceSyntaxOk(challenge)) return false;
-  if (method === "S256") return challenge.length === 43;
-  return true;
+  if (method === "S256") return pkceS256ChallengeOk(challenge);
+  return pkceSyntaxOk(challenge);
 }
 
 export function newOpaqueToken(): string {
