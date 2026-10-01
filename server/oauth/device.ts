@@ -7,6 +7,7 @@ import { db } from "../db";
 import { oauthClients, oauthDeviceCodes, oauthTokens } from "@shared/schema";
 import { formatUserCode, newOpaqueToken, newUserCode, sha256Hex } from "./crypto";
 import { baseUrl } from "./request";
+import { handleAuthorizationCodeGrant } from "./code-exchange";
 import {
   ROTATION_GRACE_SEC,
   mintTokenGrant,
@@ -151,6 +152,8 @@ export async function handleToken(req: Request, res: Response): Promise<void> {
     const grantType = req.body?.grant_type;
     if (grantType === "urn:ietf:params:oauth:grant-type:device_code") {
       await handleDeviceCodeGrant(req, res);
+    } else if (grantType === "authorization_code") {
+      await handleAuthorizationCodeGrant(req, res);
     } else if (grantType === "refresh_token") {
       await handleRefreshGrant(req, res);
     } else {

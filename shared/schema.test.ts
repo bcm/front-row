@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { getTableConfig } from "drizzle-orm/pg-core";
 import {
+  insertOauthAuthorizationCodeSchema,
   insertOauthClientSchema,
   insertOauthDeviceCodeSchema,
   insertOauthTokenSchema,
   insertOutboxEventSchema,
+  oauthAuthorizationCodes,
   oauthClients,
   oauthDeviceCodes,
   oauthTokens,
@@ -22,6 +24,7 @@ describe("oauthClients", () => {
       "client_id",
       "name",
       "allowed_scopes",
+      "allowed_redirect_uris",
       "created_at",
     ]);
   });
@@ -64,6 +67,38 @@ describe("oauthDeviceCodes", () => {
     expect(parsed.userCode).toBe("ABCD1234");
     expect(() =>
       insertOauthDeviceCodeSchema.parse({ deviceCodeHash: "abc" })
+    ).toThrow();
+  });
+});
+
+describe("oauthAuthorizationCodes", () => {
+  it("maps to oauth_authorization_codes with the expected columns", () => {
+    expect(getTableConfig(oauthAuthorizationCodes).name).toBe("oauth_authorization_codes");
+    expect(columnNames(oauthAuthorizationCodes)).toEqual([
+      "code_hash",
+      "client_id",
+      "user_id",
+      "redirect_uri",
+      "scopes",
+      "code_challenge",
+      "code_challenge_method",
+      "expires_at",
+      "created_at",
+    ]);
+  });
+
+  it("validates insert input", () => {
+    const parsed = insertOauthAuthorizationCodeSchema.parse({
+      codeHash: "abc",
+      clientId: "ghost",
+      userId: "user-1",
+      redirectUri: "https://vault.example/callback",
+      scopes: ["library:read"],
+      expiresAt: new Date(),
+    });
+    expect(parsed.codeHash).toBe("abc");
+    expect(() =>
+      insertOauthAuthorizationCodeSchema.parse({ codeHash: "abc" })
     ).toThrow();
   });
 });

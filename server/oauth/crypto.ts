@@ -8,6 +8,11 @@ export function sha256Hex(value: string): string {
   return createHash("sha256").update(value, "utf8").digest("hex");
 }
 
+// PKCE (RFC 7636 §4.2): the S256 code_challenge is base64url(sha256(verifier)).
+export function pkceS256Challenge(verifier: string): string {
+  return createHash("sha256").update(verifier, "utf8").digest("base64url");
+}
+
 export function newOpaqueToken(): string {
   return randomBytes(32).toString("base64url");
 }

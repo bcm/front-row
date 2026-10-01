@@ -4,6 +4,7 @@ import {
   newOpaqueToken,
   newUserCode,
   normalizeUserCode,
+  pkceS256Challenge,
   sha256Hex,
 } from "./crypto";
 
@@ -50,5 +51,13 @@ describe("user codes", () => {
   it("round-trips through format", () => {
     const code = newUserCode();
     expect(normalizeUserCode(formatUserCode(code))).toBe(code);
+  });
+});
+
+describe("pkceS256Challenge", () => {
+  it("matches the RFC 7636 Appendix B test vector", () => {
+    expect(pkceS256Challenge("dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk")).toBe(
+      "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM"
+    );
   });
 });
