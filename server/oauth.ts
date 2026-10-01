@@ -6,7 +6,10 @@
 // human-approval step uses the Device Authorization Grant (RFC 8628),
 // because the client (Ghost's VM) is headless and Brian approves in his
 // browser, authenticated by the existing Replit OIDC session
-// (server/replit_integrations/auth).
+// (server/replit_integrations/auth). The Authorization Code Grant
+// (RFC 6749 §4.1, server/oauth/authorize.ts) exists for clients that can
+// drive a browser redirect — e.g. the Secure Vault's OAuth connector — with
+// required PKCE (RFC 7636) and a per-client redirect-URI allow-list.
 //
 // Security invariants:
 // - Token values are shown once and stored as SHA-256 hashes. Token material
@@ -18,7 +21,8 @@
 //   carry a synchronizer CSRF token (the app has no global CSRF middleware).
 //
 // Module layout: server/oauth/ holds the implementation (crypto, request
-// helpers, middleware, token lifecycle, device grants, verification pages);
+// helpers, middleware, token lifecycle, device grants, authorization-code
+// grant, verification pages);
 // this file wires routes and seeds the pre-registered clients.
 
 import type { Express, Request, Response } from "express";
@@ -29,6 +33,7 @@ import { isAuthenticated } from "./replit_integrations/auth";
 import { baseUrl, sessionUserId } from "./oauth/request";
 import { OAUTH_SCOPES, revokeGrantFamily } from "./oauth/tokens";
 import { handleDeviceCode, handleToken } from "./oauth/device";
+import { handleAuthorize, handleDecision } from "./oauth/authorize";
 import { handleApprove, handleDeny, handleDevicePage } from "./oauth/verify";
 
 // DELETE /oauth/tokens/:id — revoke a grant family (session-authenticated).
@@ -64,16 +69,26 @@ function protectedResourceMetadata(req: Request, res: Response): void {
   });
 }
 
-function authorizationServerMetadata(req: Request, res: Response): void {
+export function authorizationServerMetadata(req: Request, res: Response): void {
   const url = baseUrl(req);
   res.json({
     issuer: url,
+    authorization_endpoint: `${url}/oauth/authorize`,
     device_authorization_endpoint: `${url}/oauth/device/code`,
     token_endpoint: `${url}/oauth/token`,
+    response_types_supported: ["code"],
     scopes_supported: [...OAUTH_SCOPES],
-    grant_types_supported: ["urn:ietf:params:oauth:grant-type:device_code", "refresh_token"],
-    // This server does not use authorization codes/PKCE: the device grant is
-    // the interactive step, per the headless-client design.
+    grant_types_supported: [
+      "authorization_code",
+      "urn:ietf:params:oauth:grant-type:device_code",
+      "refresh_token",
+    ],
+    // Public clients authenticate with no secret (client_id in the body);
+    // RFC 8414 defaults an omitted field to client_secret_basic, so the
+    // supported method must be explicit or discovery consumers will try
+    // Basic auth the token endpoint does not accept.
+    token_endpoint_auth_methods_supported: ["none"],
+    code_challenge_methods_supported: ["S256", "plain"],
   });
 }
 
@@ -86,6 +101,9 @@ async function ensureDefaultClients(): Promise<void> {
       clientId: "ghost",
       name: "Ghost",
       allowedScopes: [...OAUTH_SCOPES],
+      // Redirect URIs are allow-listed per client; the vault's callback is
+      // added here once known (follow-up).
+      allowedRedirectUris: [],
     })
     .onConflictDoNothing();
 }
@@ -97,6 +115,8 @@ export function registerOAuthRoutes(app: Express): void {
   app.get("/oauth/device", handleDevicePage);
   app.post("/oauth/device/approve", handleApprove);
   app.post("/oauth/device/deny", handleDeny);
+  app.get("/oauth/authorize", handleAuthorize);
+  app.post("/oauth/authorize/decision", handleDecision);
   app.delete("/oauth/tokens/:id", isAuthenticated, handleRevoke);
 
   // MCP authorization-spec metadata

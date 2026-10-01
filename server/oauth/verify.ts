@@ -15,7 +15,7 @@ import { isLoggedIn, sessionUserId } from "./request";
 
 const VERIFY_ATTEMPTS_PER_MINUTE = 20; // per-session throttle on the approval form
 
-function csrfToken(req: Request): string {
+export function csrfToken(req: Request): string {
   const session = req.session as any;
   if (!session.oauthCsrf) session.oauthCsrf = randomBytes(16).toString("hex");
   return session.oauthCsrf;
@@ -46,7 +46,7 @@ async function lookupPendingCode(userCode: string) {
   return { row, client };
 }
 
-function checkCsrf(req: Request): boolean {
+export function checkCsrf(req: Request): boolean {
   return typeof req.body?.csrf === "string" && req.body.csrf === (req.session as any)?.oauthCsrf;
 }
 

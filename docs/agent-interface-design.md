@@ -60,6 +60,15 @@ because the client (Ghost's VM) is headless and Brian's browser is the
 approval device. A shared static Bearer token was considered and rejected:
 no expiry, no scopes, no per-client revocation.
 
+A second grant exists for clients that *can* drive a browser redirect: the
+**Authorization Code Grant (RFC 6749 §4.1)** at `GET /oauth/authorize`, with
+required PKCE (RFC 7636) and a per-client `allowed_redirect_uris`
+allow-list (exact match; never redirect to an unlisted URI). It was added
+so the Secure Vault's OAuth connector — which only speaks the
+authorization-code flow — can hold a Front Row connection. The token
+endpoint, scopes, and refresh-token rotation are shared with the device
+grant.
+
 ### The session foundation (verified in code, 2026-09-29)
 
 The device flow does not invent a new identity system; it builds on the

@@ -89,6 +89,9 @@ describe("rotateRow", () => {
     const body = res.json.mock.calls[0][0];
     expect(body.token_type).toBe("Bearer");
     expect(typeof body.access_token).toBe("string");
+    // RFC 6749 §5.1: token responses must not be stored.
+    expect(res.set).toHaveBeenCalledWith("Cache-Control", "no-store");
+    expect(res.set).toHaveBeenCalledWith("Pragma", "no-cache");
   });
 });
 

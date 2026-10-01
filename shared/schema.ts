@@ -206,12 +206,13 @@ export const insertDismissedNewReleaseSchema = createInsertSchema(dismissedNewRe
   dismissedAt: true,
 });
 
-// Agent interface (MCP + OAuth device flow) tables.
+// Agent interface (MCP + OAuth) tables.
 // See docs/agent-interface-design.md §§4–6.
 export const oauthClients = pgTable("oauth_clients", {
   clientId: text("client_id").primaryKey(), // e.g. "ghost"; pre-registered, no dynamic registration in v1
   name: text("name").notNull(),
   allowedScopes: text("allowed_scopes").array().notNull(), // scopes this client may request
+  allowedRedirectUris: text("allowed_redirect_uris").array().notNull().default([]), // exact-match allow-list for the authorization-code grant
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -224,6 +225,19 @@ export const oauthDeviceCodes = pgTable("oauth_device_codes", {
   status: text("status").notNull().default("pending"), // pending | approved | denied | expired
   approvedByUserId: varchar("approved_by_user_id"), // set on approval: the approver's Replit sub
   expiresAt: timestamp("expires_at").notNull(), // ~10 minutes after creation
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const oauthAuthorizationCodes = pgTable("oauth_authorization_codes", {
+  // SHA-256 hash of the authorization code (the code itself travels once, in the redirect to the client)
+  codeHash: text("code_hash").primaryKey(),
+  clientId: text("client_id").notNull(),
+  userId: varchar("user_id").notNull(), // approver's Replit sub, bound at approval
+  redirectUri: text("redirect_uri").notNull(), // exact redirect_uri from the authorize request; must match at exchange
+  scopes: text("scopes").array().notNull(),
+  codeChallenge: text("code_challenge"), // PKCE (RFC 7636); required by the implementation, so never null for issued codes
+  codeChallengeMethod: text("code_challenge_method"), // "S256" | "plain"
+  expiresAt: timestamp("expires_at").notNull(), // ~10 minutes after issuance
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -270,6 +284,10 @@ export const insertOauthClientSchema = createInsertSchema(oauthClients).omit({
 });
 
 export const insertOauthDeviceCodeSchema = createInsertSchema(oauthDeviceCodes).omit({
+  createdAt: true,
+});
+
+export const insertOauthAuthorizationCodeSchema = createInsertSchema(oauthAuthorizationCodes).omit({
   createdAt: true,
 });
 
