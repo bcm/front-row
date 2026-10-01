@@ -32,11 +32,11 @@ export interface IStorage {
   getEpisodeWithShowAndUserData(userId: string, episodeId: number): Promise<(Episode & { show: Show; userEpisode?: UserEpisode }) | undefined>;
   createEpisode(episode: InsertEpisode): Promise<Episode>;
   getLatestEpisodes(showIds: number[]): Promise<Episode[]>;
-  searchUserEpisodes(userId: string, query: string): Promise<(Episode & { show: Show })[]>;
+  searchUserEpisodes(userId: string, query: string, limit?: number, view?: { mode: "personal" | "shared"; groupIds: string[] }): Promise<(Episode & { show: Show })[]>;
   
   // User episode methods
   getUserEpisodes(userId: string, status?: string, showMode?: string, groupIds?: string[]): Promise<(UserEpisode & { episode: Episode & { show: Show }; groupId?: string | null })[]>;
-  getUpcomingEpisodes(userId: string, showMode?: string, groupIds?: string[]): Promise<(Episode & { show: Show; groupId?: string | null })[]>;
+  getUpcomingEpisodes(userId: string, showMode?: string, groupIds?: string[], limit?: number): Promise<(Episode & { show: Show; groupId?: string | null })[]>;
   getUserEpisodesForShow(userId: string, showId: number, groupId?: string | null): Promise<(UserEpisode & { episode: Episode })[]>;
   getUserGroupIds(userId: string): Promise<string[]>;
   addUserEpisode(userEpisode: InsertUserEpisode): Promise<{ episode: UserEpisode; isNew: boolean }>;
@@ -122,7 +122,10 @@ export class DatabaseStorage implements IStorage {
       network: show.network as { name?: string; country?: { name?: string } } | null,
       webChannel: show.webChannel as { name?: string; country?: { name?: string }; officialSite?: string } | null,
       rating: show.rating as { average?: number } | null,
-      schedule: show.schedule as { time?: string; days?: string[] } | null
+      schedule: show.schedule as { time?: string; days?: string[] } | null,
+      // Local sync time, per the agent-interface design doc; stamped on every
+      // write path (syncShowFromTVMaze stamps its upsert separately).
+      lastSyncedAt: new Date()
     };
     const [newShow] = await db
       .insert(shows)
@@ -146,7 +149,8 @@ export class DatabaseStorage implements IStorage {
           officialSite: showData.officialSite,
           language: showData.language,
           type: showData.type,
-          updated: showData.updated
+          updated: showData.updated,
+          lastSyncedAt: showData.lastSyncedAt
         }
       })
       .returning();
@@ -209,6 +213,7 @@ export class DatabaseStorage implements IStorage {
         language: tvmazeShow.language,
         type: tvmazeShow.type,
         updated: tvmazeShow.updated,
+        lastSyncedAt: new Date(),
       };
 
       // Use INSERT ... ON CONFLICT to upsert the show
@@ -266,6 +271,7 @@ export class DatabaseStorage implements IStorage {
         type: shows.type,
         updated: shows.updated,
         tmdbId: shows.tmdbId,
+        lastSyncedAt: shows.lastSyncedAt,
         createdAt: shows.createdAt
       })
       .from(userShows)
@@ -509,13 +515,26 @@ export class DatabaseStorage implements IStorage {
     return Array.from(latestByShow.values());
   }
 
-  async searchUserEpisodes(userId: string, query: string): Promise<(Episode & { show: Show })[]> {
+  async searchUserEpisodes(
+    userId: string,
+    query: string,
+    limit: number = 20,
+    view?: { mode: "personal" | "shared"; groupIds: string[] },
+  ): Promise<(Episode & { show: Show })[]> {
     // Get user's group IDs to include shared episodes
     const groupIds = await this.getUserGroupIds(userId);
-    
-    // Build join condition for userShows: personal shows (userId) OR shared shows (groupId)
+
+    // Build join condition for userShows. With an explicit view the predicate
+    // applies in SQL before the limit, so out-of-view rows can't displace
+    // in-view matches; without one keep the old union behavior (app route).
+    // Predicates mirror the MCP tool's inView rule exactly.
     let userShowsJoinCondition;
-    if (groupIds.length > 0) {
+    if (view) {
+      userShowsJoinCondition =
+        view.mode === "personal"
+          ? and(eq(userShows.showId, shows.id), eq(userShows.userId, userId), isNull(userShows.groupId))
+          : and(eq(userShows.showId, shows.id), inArray(userShows.groupId, view.groupIds));
+    } else if (groupIds.length > 0) {
       userShowsJoinCondition = and(
         eq(userShows.showId, shows.id),
         or(
@@ -564,7 +583,7 @@ export class DatabaseStorage implements IStorage {
         ilike(episodes.name, `%${query}%`)
       ))
       .orderBy(asc(episodes.airdate))
-      .limit(20);
+      .limit(limit);
 
     return results.map(row => ({
       id: row.id,
@@ -678,7 +697,7 @@ export class DatabaseStorage implements IStorage {
     }));
   }
 
-  async getUpcomingEpisodes(userId: string, showMode?: string, groupIds?: string[]): Promise<(Episode & { show: Show; groupId?: string | null })[]> {
+  async getUpcomingEpisodes(userId: string, showMode?: string, groupIds?: string[], limit?: number): Promise<(Episode & { show: Show; groupId?: string | null })[]> {
     const today = new Date().toISOString().split('T')[0];
     
     // Build conditions based on showMode
@@ -738,7 +757,7 @@ export class DatabaseStorage implements IStorage {
       .innerJoin(userShows, userShowsJoinCondition)
       .where(whereClause)
       .orderBy(asc(episodes.airdate))
-      .limit(20);
+      .limit(limit ?? 20);
 
     return results.map(row => ({
       id: row.id,

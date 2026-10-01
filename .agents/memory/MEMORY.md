@@ -1,2 +1,0 @@
-- [Public GitHub history](public-github-snapshots.md) — active branches track screenshot-free public history; never push unfiltered backups.
-- [Dependency upgrades](dependency-upgrades.md) — scope transitive overrides and restart the dev app after lockfile installs.
