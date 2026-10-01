@@ -23,6 +23,17 @@ export function pkceSyntaxOk(value: string): boolean {
   return PKCE_SYNTAX.test(value);
 }
 
+// A code_challenge must be redeemable: plain shares the verifier syntax
+// (43–128 unreserved chars), while S256 is base64url(sha256(verifier)),
+// which is always exactly 43 characters. A longer S256 challenge can never
+// match pkceS256Challenge(verifier), so reject it at authorize time instead
+// of issuing a dead code.
+export function pkceChallengeOk(challenge: string, method: string): boolean {
+  if (!pkceSyntaxOk(challenge)) return false;
+  if (method === "S256") return challenge.length === 43;
+  return true;
+}
+
 export function newOpaqueToken(): string {
   return randomBytes(32).toString("base64url");
 }

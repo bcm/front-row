@@ -14,7 +14,7 @@ import type { Request, Response } from "express";
 import { eq, lt } from "drizzle-orm";
 import { db } from "../db";
 import { oauthAuthorizationCodes, oauthClients } from "@shared/schema";
-import { newOpaqueToken, pkceSyntaxOk, sha256Hex } from "./crypto";
+import { newOpaqueToken, pkceChallengeOk, sha256Hex } from "./crypto";
 import { isLoggedIn, sessionUserId, stashReturnTo } from "./request";
 import { esc, page } from "./page";
 import { checkCsrf, csrfToken } from "./verify";
@@ -100,9 +100,10 @@ export async function handleAuthorize(req: Request, res: Response): Promise<void
     }
     const codeChallenge = str(req.query.code_challenge);
     const codeChallengeMethod = str(req.query.code_challenge_method) || (codeChallenge ? "plain" : "");
-    // RFC 7636 §4.1 syntax: a short plain challenge would pass here but no
-    // verifier could ever redeem it at exchange, so reject it up front.
-    if (!pkceSyntaxOk(codeChallenge) || !PKCE_METHODS.includes(codeChallengeMethod)) {
+    // The challenge must be redeemable: a short plain challenge, or an S256
+    // challenge that isn't exactly 43 chars, could never match at exchange,
+    // so reject it up front instead of issuing a dead code.
+    if (!pkceChallengeOk(codeChallenge, codeChallengeMethod) || !PKCE_METHODS.includes(codeChallengeMethod)) {
       redirectError("invalid_request");
       return;
     }
@@ -158,7 +159,7 @@ export async function handleDecision(req: Request, res: Response): Promise<void>
     const scopes = client ? validatedScopes(client, str(body.scope)) : null;
     const codeChallenge = str(body.code_challenge);
     const codeChallengeMethod = str(body.code_challenge_method) || (codeChallenge ? "plain" : "");
-    if (!client || !scopes || !pkceSyntaxOk(codeChallenge) || !PKCE_METHODS.includes(codeChallengeMethod)) {
+    if (!client || !scopes || !pkceChallengeOk(codeChallenge, codeChallengeMethod) || !PKCE_METHODS.includes(codeChallengeMethod)) {
       res.status(400).send(errorPage("Invalid authorization request", "Unknown client, redirect URI, scope, or PKCE method."));
       return;
     }

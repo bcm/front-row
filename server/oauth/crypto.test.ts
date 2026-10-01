@@ -4,6 +4,7 @@ import {
   newOpaqueToken,
   newUserCode,
   normalizeUserCode,
+  pkceChallengeOk,
   pkceS256Challenge,
   pkceSyntaxOk,
   sha256Hex,
@@ -60,6 +61,25 @@ describe("pkceS256Challenge", () => {
     expect(pkceS256Challenge("dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk")).toBe(
       "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM"
     );
+  });
+});
+
+describe("pkceChallengeOk", () => {
+  it("accepts 43–128 char challenges for plain", () => {
+    expect(pkceChallengeOk("v".repeat(43), "plain")).toBe(true);
+    expect(pkceChallengeOk("v".repeat(128), "plain")).toBe(true);
+    expect(pkceChallengeOk("v".repeat(42), "plain")).toBe(false);
+  });
+
+  it("requires exactly 43 chars for S256", () => {
+    expect(pkceChallengeOk("v".repeat(43), "S256")).toBe(true);
+    expect(pkceChallengeOk("v".repeat(44), "S256")).toBe(false);
+    expect(pkceChallengeOk("v".repeat(128), "S256")).toBe(false);
+  });
+
+  it("rejects bad syntax regardless of method", () => {
+    expect(pkceChallengeOk("v".repeat(43) + "!", "S256")).toBe(false);
+    expect(pkceChallengeOk("", "plain")).toBe(false);
   });
 });
 

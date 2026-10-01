@@ -101,8 +101,10 @@ describe("handleAuthorize", () => {
   it("redirects with invalid_request for an unknown PKCE method", async () => {
     db.select.mockReturnValue(chainable([clientRow()]));
     const res = mockRes();
+    // PKCE_VERIFIER is 43 valid-syntax chars, so rejection is specifically
+    // for the unsupported method rather than the challenge syntax.
     await handleAuthorize(
-      authorizeQuery({ code_challenge: "abc", code_challenge_method: "md5" }),
+      authorizeQuery({ code_challenge: PKCE_VERIFIER, code_challenge_method: "md5" }),
       res
     );
     expect(redirectUrl(res).searchParams.get("error")).toBe("invalid_request");
@@ -135,6 +137,28 @@ describe("handleAuthorize", () => {
       res
     );
     expect(redirectUrl(res).searchParams.get("error")).toBe("invalid_request");
+  });
+
+  it("redirects with invalid_request for an S256 challenge that is not 43 chars", async () => {
+    db.select.mockReturnValue(chainable([clientRow()]));
+    const res = mockRes();
+    // 44 chars: valid verifier syntax, but base64url(sha256(verifier)) is
+    // always exactly 43 chars, so no verifier could ever redeem this code.
+    await handleAuthorize(
+      authorizeQuery({ code_challenge: `${PLAIN_VERIFIER}X`, code_challenge_method: "S256" }),
+      res
+    );
+    expect(redirectUrl(res).searchParams.get("error")).toBe("invalid_request");
+  });
+
+  it("renders the consent page for a 43-char S256 challenge", async () => {
+    db.select.mockReturnValue(chainable([clientRow()]));
+    const res = mockRes();
+    await handleAuthorize(
+      authorizeQuery({ code_challenge: PLAIN_VERIFIER, code_challenge_method: "S256" }),
+      res
+    );
+    expect(res.send).toHaveBeenCalledTimes(1);
   });
 
   it("renders the consent page for a valid request", async () => {
@@ -268,6 +292,19 @@ describe("handleDecision", () => {
     expect(values.codeChallenge).toBe(PLAIN_VERIFIER);
     expect(values.codeChallengeMethod).toBe("S256");
     expect(res.redirect).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects an S256 challenge that is not 43 chars at decision time", async () => {
+    db.select.mockReturnValue(chainable([clientRow()]));
+    const res = mockRes();
+    // The hidden form fields are user-tamperable, so the decision endpoint
+    // re-validates: a 44-char S256 challenge can never be redeemed.
+    await handleDecision(
+      decisionBody({ code_challenge: `${PLAIN_VERIFIER}X`, code_challenge_method: "S256" }),
+      res
+    );
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(db.insert).not.toHaveBeenCalled();
   });
 
   it("refuses to redirect to a tampered redirect_uri", async () => {
