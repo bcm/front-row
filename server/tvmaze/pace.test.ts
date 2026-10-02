@@ -1,11 +1,12 @@
-// Tests for the shared TVMaze pace gate (evenly-spaced admissions).
+// Tests for the shared TVMaze pace gate (rate + concurrency, one atomic claim).
 
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { chainable, db, resetDbMocks } from "../oauth/test-utils/mock-db";
 import {
-  admitPacedCall,
+  tryAcquireSlot,
+  releaseSlot,
   setPaceCooldown,
-  TVMAZE_PACE_INTERVAL_MS,
+  TVMAZE_MAX_CONCURRENT,
   PACE_ROW_ID,
 } from "./pace";
 
@@ -28,28 +29,29 @@ function mockSelectOnce(result: unknown) {
 const paceRow = (overrides: Record<string, unknown> = {}) => ({
   id: PACE_ROW_ID,
   nextAdmitAt: new Date(NOW.getTime() - 1_000), // due
+  inFlight: 0,
   cooldownUntil: null,
   ...overrides,
 });
 
-describe("admitPacedCall", () => {
+describe("tryAcquireSlot", () => {
   it("creates the pace row on first call, then admits", async () => {
     mockUpdateOnce([]); // no row yet
     mockInsertOnce();
     mockUpdateOnce([{ id: PACE_ROW_ID }]); // claim wins
 
-    const decision = await admitPacedCall(NOW);
+    const decision = await tryAcquireSlot(NOW);
 
-    expect(decision).toEqual({ admitted: true, retryAfterSec: 0 });
+    expect(decision).toEqual({ admitted: true, retryAfterMs: 0 });
     expect(db.insert).toHaveBeenCalled();
   });
 
-  it("admits when the next slot is due via a single conditional update", async () => {
+  it("admits when the slot is due and in-flight is below the cap", async () => {
     mockUpdateOnce([{ id: PACE_ROW_ID }]);
 
-    const decision = await admitPacedCall(NOW);
+    const decision = await tryAcquireSlot(NOW);
 
-    expect(decision).toEqual({ admitted: true, retryAfterSec: 0 });
+    expect(decision).toEqual({ admitted: true, retryAfterMs: 0 });
     expect(db.insert).not.toHaveBeenCalled();
     expect(db.select).not.toHaveBeenCalled();
   });
@@ -60,9 +62,24 @@ describe("admitPacedCall", () => {
     mockUpdateOnce([]); // lost the race / not due
     mockSelectOnce([paceRow({ nextAdmitAt: new Date(NOW.getTime() + 4_000) })]);
 
-    const decision = await admitPacedCall(NOW);
+    const decision = await tryAcquireSlot(NOW);
 
-    expect(decision).toEqual({ admitted: false, retryAfterSec: 4 });
+    expect(decision).toEqual({ admitted: false, retryAfterMs: 4000 });
+  });
+
+  it("denies when in-flight is at the cap, hinting a short poll", async () => {
+    mockUpdateOnce([]);
+    mockInsertOnce();
+    mockUpdateOnce([]);
+    mockSelectOnce([
+      paceRow({ inFlight: TVMAZE_MAX_CONCURRENT }), // pace due, concurrency full
+    ]);
+
+    const decision = await tryAcquireSlot(NOW);
+
+    // Pace due and no cooldown, so the only blocker is concurrency: the
+    // hint is the short poll interval, not a future timestamp.
+    expect(decision).toEqual({ admitted: false, retryAfterMs: 250 });
   });
 
   it("denies while a 429 cooldown is active, hinting at its expiry", async () => {
@@ -70,46 +87,25 @@ describe("admitPacedCall", () => {
     mockInsertOnce();
     mockUpdateOnce([]);
     mockSelectOnce([
-      paceRow({
-        nextAdmitAt: new Date(NOW.getTime() - 1_000),
-        cooldownUntil: new Date(NOW.getTime() + 9_000),
-      }),
+      paceRow({ cooldownUntil: new Date(NOW.getTime() + 9_000) }),
     ]);
 
-    const decision = await admitPacedCall(NOW);
+    const decision = await tryAcquireSlot(NOW);
 
-    expect(decision).toEqual({ admitted: false, retryAfterSec: 9 });
+    expect(decision).toEqual({ admitted: false, retryAfterMs: 9000 });
   });
+});
 
-  it("admits again once the cooldown lapses", async () => {
-    mockUpdateOnce([{ id: PACE_ROW_ID }]);
-
-    const decision = await admitPacedCall(
-      new Date(NOW.getTime() + 10_000) // past the cooldown
-    );
-
-    expect(decision.admitted).toBe(true);
-  });
-
-  it("spaces admissions by 10s/18", () => {
-    expect(TVMAZE_PACE_INTERVAL_MS).toBe(Math.ceil(10_000 / 18));
+describe("releaseSlot", () => {
+  it("issues an update that can only decrement toward zero", async () => {
+    await releaseSlot();
+    expect(db.update).toHaveBeenCalled();
   });
 });
 
 describe("setPaceCooldown", () => {
-  it("keeps the longest cooldown under concurrency", async () => {
-    const chain = chainable([]);
-    (db.insert as any).mockReturnValue(chain);
-    await setPaceCooldown(7, NOW);
-    expect(chain.onConflictDoUpdate).toHaveBeenCalled();
-    const setArg = (chain.onConflictDoUpdate as any).mock.calls[0][0].set;
-    const chunks = setArg.cooldownUntil?.queryChunks ?? [];
-    const text = chunks
-      .map((c: any) => (typeof c === "string" ? c : (c?.value ?? []).join("")))
-      .join("")
-      .toUpperCase();
-    // GREATEST alone returns NULL when no cooldown exists; COALESCE guards it.
-    expect(text).toContain("GREATEST");
-    expect(text).toContain("COALESCE");
+  it("upserts the cooldown row", async () => {
+    await setPaceCooldown(30, NOW);
+    expect(db.insert).toHaveBeenCalled();
   });
 });

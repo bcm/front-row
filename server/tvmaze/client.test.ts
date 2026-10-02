@@ -1,70 +1,130 @@
-// Tests for the public TVMaze client: enqueue + wait + Response shaping.
+// Tests for the TVMaze client: gate admission, cache, retries, timeouts.
 
-import { describe, expect, it, vi, beforeEach } from "vitest";
-import { db } from "../oauth/test-utils/mock-db";
-import { cancelQueuedRow, enqueueTvmazeRequest, waitForRow } from "./queue";
+import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
+import { tryAcquireSlot, releaseSlot, setPaceCooldown } from "./pace";
+import { clearTvmazeCache } from "./cache";
 
-vi.mock("../db", () => ({ db }));
-vi.mock("./queue", () => ({
-  cancelQueuedRow: vi.fn(),
-  enqueueTvmazeRequest: vi.fn(),
-  waitForRow: vi.fn(),
+vi.mock("./pace", () => ({
+  tryAcquireSlot: vi.fn(),
+  releaseSlot: vi.fn(),
+  setPaceCooldown: vi.fn(),
 }));
 
 import {
   tvmazeFetch,
   TvmazePaceTimeout,
   TvmazeRequestFailed,
-  TVMAZE_MCP_TIMEOUT_MS,
+  TVMAZE_USER_AGENT,
 } from "./client";
 
+const fetchMock = vi.fn();
+
 beforeEach(() => {
-  vi.mocked(cancelQueuedRow).mockReset();
-  vi.mocked(enqueueTvmazeRequest).mockReset();
-  vi.mocked(waitForRow).mockReset();
+  vi.stubGlobal("fetch", fetchMock);
+  clearTvmazeCache();
+  vi.mocked(tryAcquireSlot).mockReset();
+  vi.mocked(releaseSlot).mockReset();
+  vi.mocked(setPaceCooldown).mockReset();
+  fetchMock.mockReset();
 });
 
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
+const admitted = { admitted: true, retryAfterMs: 0 };
+const okResponse = (body = '{"ok":true}') => new Response(body, { status: 200 });
+
 describe("tvmazeFetch", () => {
-  it("enqueues and resolves with the upstream response", async () => {
-    vi.mocked(enqueueTvmazeRequest).mockResolvedValue("row-1");
-    vi.mocked(waitForRow).mockResolvedValue({
-      id: "row-1",
-      status: "done",
-      responseStatus: 200,
-      responseBody: '{"ok":true}',
-    } as any);
+  it("admits through the gate, fetches, and releases the slot", async () => {
+    vi.mocked(tryAcquireSlot).mockResolvedValue(admitted);
+    fetchMock.mockResolvedValue(okResponse());
 
     const res = await tvmazeFetch("https://api.tvmaze.com/shows/1");
 
-    expect(enqueueTvmazeRequest).toHaveBeenCalledWith(
-      expect.objectContaining({ url: "https://api.tvmaze.com/shows/1", method: "GET" })
-    );
-    expect(waitForRow).toHaveBeenCalledWith("row-1", TVMAZE_MCP_TIMEOUT_MS);
     expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ok: true });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://api.tvmaze.com/shows/1",
+      expect.objectContaining({
+        headers: expect.objectContaining({ "User-Agent": TVMAZE_USER_AGENT }),
+      }),
+    );
+    expect(releaseSlot).toHaveBeenCalledTimes(1);
+  });
+
+  it("serves a repeated GET from cache without touching the gate", async () => {
+    vi.mocked(tryAcquireSlot).mockResolvedValue(admitted);
+    fetchMock.mockResolvedValue(okResponse());
+
+    await tvmazeFetch("https://api.tvmaze.com/shows/1");
+    const res = await tvmazeFetch("https://api.tvmaze.com/shows/1");
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(tryAcquireSlot)).toHaveBeenCalledTimes(1);
     expect(await res.json()).toEqual({ ok: true });
   });
 
-  it("cancels the queued row and throws TvmazePaceTimeout when the waiter gives up", async () => {
-    vi.mocked(enqueueTvmazeRequest).mockResolvedValue("row-1");
-    vi.mocked(waitForRow).mockResolvedValue(null);
-    vi.mocked(cancelQueuedRow).mockResolvedValue(true);
+  it("does not cache non-GET requests", async () => {
+    vi.mocked(tryAcquireSlot).mockResolvedValue(admitted);
+    fetchMock.mockImplementation(() => Promise.resolve(okResponse()));
 
-    const err = await tvmazeFetch("https://api.tvmaze.com/shows/1", undefined, {
-      timeoutMs: 100,
-    }).catch((e) => e);
+    await tvmazeFetch("https://api.tvmaze.com/shows/1", { method: "POST", body: "{}" });
+    await tvmazeFetch("https://api.tvmaze.com/shows/1", { method: "POST", body: "{}" });
 
-    expect(cancelQueuedRow).toHaveBeenCalledWith("row-1");
-    expect(err).toBeInstanceOf(TvmazePaceTimeout);
-    expect(err.retryAfterSec).toBe(10); // one pace window
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
-  it("throws TvmazeRequestFailed when the row failed", async () => {
-    vi.mocked(enqueueTvmazeRequest).mockResolvedValue("row-1");
-    vi.mocked(waitForRow).mockResolvedValue({ id: "row-1", status: "failed", error: "boom" } as any);
+  it("waits on denial and fetches once admitted", async () => {
+    vi.mocked(tryAcquireSlot)
+      .mockResolvedValueOnce({ admitted: false, retryAfterMs: 5 })
+      .mockResolvedValue(admitted);
+    fetchMock.mockResolvedValue(okResponse());
+
+    const res = await tvmazeFetch("https://api.tvmaze.com/search/shows?q=x", undefined, {
+      timeoutMs: 2000,
+    });
+
+    expect(res.status).toBe(200);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(releaseSlot).toHaveBeenCalledTimes(1);
+  });
+
+  it("throws TvmazePaceTimeout when the caller budget runs out", async () => {
+    vi.mocked(tryAcquireSlot).mockResolvedValue({ admitted: false, retryAfterMs: 60_000 });
+
+    const err = await tvmazeFetch("https://api.tvmaze.com/shows/1", undefined, {
+      timeoutMs: 30,
+    }).catch((e) => e);
+
+    expect(err).toBeInstanceOf(TvmazePaceTimeout);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("sets a cooldown on 429 and retries within budget", async () => {
+    vi.mocked(tryAcquireSlot).mockResolvedValue(admitted);
+    fetchMock
+      .mockResolvedValueOnce(
+        new Response("slow down", { status: 429, headers: { "retry-after": "2" } }),
+      )
+      .mockResolvedValueOnce(okResponse());
+
+    const res = await tvmazeFetch("https://api.tvmaze.com/shows/1");
+
+    expect(setPaceCooldown).toHaveBeenCalledWith(2);
+    expect(res.status).toBe(200);
+    expect(releaseSlot).toHaveBeenCalledTimes(2);
+  });
+
+  it("throws TvmazeRequestFailed after repeated transport failures", async () => {
+    vi.mocked(tryAcquireSlot).mockResolvedValue(admitted);
+    fetchMock.mockRejectedValue(new Error("boom"));
 
     const err = await tvmazeFetch("https://api.tvmaze.com/shows/1").catch((e) => e);
 
     expect(err).toBeInstanceOf(TvmazeRequestFailed);
     expect(err.message).toContain("boom");
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(releaseSlot).toHaveBeenCalledTimes(3);
   });
 });
