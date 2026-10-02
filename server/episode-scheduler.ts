@@ -3,6 +3,7 @@ import { db } from "./db";
 import { users } from "@shared/schema";
 import { DatabaseStorage } from "./storage";
 import { insertEpisodeSchema, insertUserEpisodeSchema } from "@shared/schema";
+import { tvmazeFetch, TvmazePaceTimeout, TvmazeRequestFailed, TVMAZE_SYNC_TIMEOUT_MS } from "./tvmaze/client";
 
 async function syncEpisodesForAllUsers() {
   console.log(`[SCHEDULER] Starting daily episode sync at ${new Date().toISOString()}`);
@@ -40,9 +41,25 @@ async function syncEpisodesForAllUsers() {
         for (const userShow of activeShows) {
           try {
             console.log(`[SCHEDULER] Fetching episodes for: ${userShow.show.name} (ID: ${userShow.showId})`);
-            
-            const response = await fetch(`https://api.tvmaze.com/shows/${userShow.showId}/episodes`);
-            
+
+            // Paced TVMaze client (issue #5): admits through the shared
+            // Postgres pace gate, then fetches directly.
+            let response: Response;
+            try {
+              response = await tvmazeFetch(
+                `https://api.tvmaze.com/shows/${userShow.showId}/episodes`,
+                undefined,
+                { timeoutMs: TVMAZE_SYNC_TIMEOUT_MS }
+              );
+            } catch (error) {
+              const detail = error instanceof TvmazePaceTimeout || error instanceof TvmazeRequestFailed
+                ? error.message
+                : String(error);
+              console.error(`[SCHEDULER] TVMaze request failed for show ${userShow.showId}: ${detail}`);
+              totalErrors++;
+              continue;
+            }
+
             if (!response.ok) {
               console.error(`[SCHEDULER] Failed to fetch episodes for show ${userShow.showId}: ${response.status}`);
               totalErrors++;

@@ -1,5 +1,6 @@
 import { storage } from "./storage";
 import { type NewReleaseShow } from "@shared/schema";
+import { tvmazeFetch, TVMAZE_SYNC_TIMEOUT_MS } from "./tvmaze/client";
 
 const CACHE_DURATION_MS = 10 * 60 * 1000; // 10 minutes
 const DAYS_BACK = 30; // Look back 30 days
@@ -74,7 +75,8 @@ async function fetchScheduleForDate(date: string, isWeb: boolean = false): Promi
       ? `https://api.tvmaze.com/schedule/web?date=${date}`
       : `https://api.tvmaze.com/schedule?date=${date}`;
     
-    const response = await fetch(endpoint);
+    const response = await tvmazeFetch(endpoint, undefined, {
+      timeoutMs: TVMAZE_SYNC_TIMEOUT_MS, bypassCache: true });
     if (!response.ok) return [];
     
     return await response.json();

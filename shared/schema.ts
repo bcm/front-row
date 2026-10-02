@@ -279,6 +279,50 @@ export const mcpRateLimits = pgTable("mcp_rate_limits", {
 
 export const insertMcpRateLimitSchema = createInsertSchema(mcpRateLimits);
 
+// Shared TVMaze pace gate (issue #5): one row (id = 'tvmaze') holding the
+// earliest time the next call may go out. Concurrency slots are fixed rows
+// in tvmaze_slots (below), claimed per-row with FOR UPDATE SKIP LOCKED —
+// never a counter or a count-then-insert, so the cap holds under replica
+// contention. Acquisition runs as one explicit transaction
+// (server/tvmaze/pace.ts): INSERT ... ON CONFLICT DO NOTHING bootstraps
+// the row, SELECT ... FOR UPDATE takes the lock serializing acquirers,
+// the slot claim runs, then the pace advance — the pace row is modified
+// exactly once per acquisition (PostgreSQL forbids modifying one row
+// twice in a single statement). A replica that dies holding a slot never
+// releases it, so slots expire and the acquire path reclaims them. Every
+// timestamp in the gate comes from PostgreSQL: clock_timestamp() read
+// after the pace-row lock (now() is transaction-start, stale under
+// contention) — no replica wall clock, so skew can't break spacing,
+// expire live slots early, or reopen a cooldown early. The app's single
+// outbound IP is shared by all users and the sync jobs, and TVMaze allows
+// at least 20 calls per 10 seconds per IP. Each admission advances
+// nextAdmitAt by 10s/18, so calls are evenly spaced and no 10-second
+// interval ever sees more than 18 — regardless of alignment with TVMaze's
+// own limiter. A 429 from TVMaze sets cooldownUntil as a backstop (longest
+// wins under concurrency).
+export const tvmazePace = pgTable("tvmaze_pace", {
+  id: text("id").primaryKey(), // always 'tvmaze'
+  nextAdmitAt: timestamp("next_admit_at").notNull(),
+  cooldownUntil: timestamp("cooldown_until"), // set when TVMaze answers 429
+});
+
+// Crash-safe concurrency slots for the TVMaze pace gate. Fixed rows, one
+// per in-flight upstream call (slot 0 .. TVMAZE_MAX_CONCURRENT - 1). The
+// acquire path (server/tvmaze/pace.ts) claims a free-or-expired row with
+// FOR UPDATE SKIP LOCKED inside the same explicit transaction that holds
+// the pace-row lock, so the cap is enforced atomically: a concurrent
+// claimer either skips the locked row or sees the committed claim — no
+// snapshot race can admit a fifth caller. A slot held by a crashed
+// replica ages out (acquired_at older than the lease TTL) and becomes
+// claimable again — a slot can never leak permanently. Release clears the
+// caller's own lease id; clearing another caller's row is never correct
+// (use expiry for that).
+export const tvmazeSlots = pgTable("tvmaze_slots", {
+  slot: integer("slot").primaryKey(),
+  leaseId: varchar("lease_id"), // set while a call holds the slot
+  acquiredAt: timestamp("acquired_at"), // set while a call holds the slot
+});
+
 export const insertOauthClientSchema = createInsertSchema(oauthClients).omit({
   createdAt: true,
 });
@@ -340,6 +384,8 @@ export type InsertGroupMember = z.infer<typeof insertGroupMemberSchema>;
 export type GroupInvite = typeof groupInvites.$inferSelect;
 export type InsertGroupInvite = z.infer<typeof insertGroupInviteSchema>;
 export type McpRateLimit = typeof mcpRateLimits.$inferSelect;
+export type TvmazePaceRow = typeof tvmazePace.$inferSelect;
+export type TvmazeSlotRow = typeof tvmazeSlots.$inferSelect;
 export type InsertMcpRateLimit = z.infer<typeof insertMcpRateLimitSchema>;
 export type OauthClient = typeof oauthClients.$inferSelect;
 export type InsertOauthClient = z.infer<typeof insertOauthClientSchema>;
