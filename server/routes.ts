@@ -4,12 +4,8 @@ import { storage } from "./storage";
 import { insertShowSchema, insertUserShowSchema, insertEpisodeSchema, insertUserEpisodeSchema } from "@shared/schema";
 import { z } from "zod";
 import { syncJobManager } from "./sync-job-manager";
+import { getUserId } from "./user-id";
 import { isAuthenticated } from "./replit_integrations/auth";
-
-function getUserId(req: Request): string {
-  const user = req.user as any;
-  return user?.claims?.sub || "demo-user";
-}
 
 // Async sync function for adding shows with progress reporting
 async function performAsyncAddShowSync(jobId: string, showId: number, userId: string, groupId?: string | null): Promise<void> {

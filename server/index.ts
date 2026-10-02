@@ -4,7 +4,7 @@ import { setupVite, serveStatic, log } from "./vite";
 import { startEpisodeScheduler } from "./episode-scheduler";
 import { initializeRecommendationScheduler } from "./recommendation-scheduler";
 import { initNewReleasesScheduler } from "./new-releases-scheduler";
-import { setupAuth, registerAuthRoutes } from "./replit_integrations/auth";
+import { setupAuth, registerAuthRoutes, isAuthenticated } from "./replit_integrations/auth";
 import { registerOAuthRoutes } from "./oauth";
 import { registerMcpRoutes } from "./mcp";
 import { ensureTvmazeGateSeeded } from "./tvmaze/pace";
@@ -49,7 +49,14 @@ app.use((req, res, next) => {
   registerAuthRoutes(app);
   registerOAuthRoutes(app);
   registerMcpRoutes(app);
-  
+
+  // Gate every /api route registered after this point. Express evaluates
+  // middleware in registration order, so /api/login, /api/callback and
+  // /api/logout (registered earlier by setupAuth) stay public while every
+  // UI route registered below by registerRoutes requires authentication.
+  // /oauth/* and /mcp live outside /api/* and are unaffected.
+  app.use("/api", isAuthenticated);
+
   const server = await registerRoutes(app);
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
