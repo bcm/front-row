@@ -42,8 +42,8 @@ async function syncEpisodesForAllUsers() {
           try {
             console.log(`[SCHEDULER] Fetching episodes for: ${userShow.show.name} (ID: ${userShow.showId})`);
 
-            // Paced TVMaze client (issue #5): enqueue and wait for the drain
-            // worker; the shared IP pace is enforced in Postgres.
+            // Paced TVMaze client (issue #5): admits through the shared
+            // Postgres pace gate, then fetches directly.
             let response: Response;
             try {
               response = await tvmazeFetch(

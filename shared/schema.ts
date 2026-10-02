@@ -279,43 +279,19 @@ export const mcpRateLimits = pgTable("mcp_rate_limits", {
 
 export const insertMcpRateLimitSchema = createInsertSchema(mcpRateLimits);
 
-// TVMaze paced queue (issue #5): the app's single outbound IP is shared by
-// all users and the sync jobs, and TVMaze allows at least 20 calls per 10
-// seconds per IP. Outbound calls enqueue here and a scheduled worker drains
-// them through the shared pace gate (tvmaze_pace). Same relay shape as the
-// planned outbox drain (#12): table + worker claiming rows with
-// SELECT ... FOR UPDATE SKIP LOCKED (see server/relay.ts).
-export const tvmazeQueue = pgTable("tvmaze_queue", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  method: text("method").notNull().default("GET"),
-  url: text("url").notNull(),
-  headers: jsonb("headers").$type<Record<string, string>>(),
-  body: text("body"),
-  status: text("status").notNull().default("queued"), // queued | claimed | done | failed
-  attempts: integer("attempts").notNull().default(0),
-  responseStatus: integer("response_status"),
-  responseBody: text("response_body"),
-  error: text("error"),
-  createdAt: timestamp("created_at").defaultNow(),
-  claimedAt: timestamp("claimed_at"),
-  completedAt: timestamp("completed_at"),
-}, (table) => ({
-  drainOrder: index("tvmaze_queue_drain_idx").on(table.status, table.createdAt),
-}));
-
-// Shared TVMaze pace gate: one row (id = 'tvmaze') holding the earliest time
-// the next call may go out. Each admission advances it by 10s/18, so calls
-// are evenly spaced and no 10-second interval ever sees more than 18 —
-// regardless of alignment with TVMaze's own limiter. A 429 from TVMaze sets
-// cooldownUntil as a backstop (longest wins under concurrency).
+// Shared TVMaze pace gate (issue #5): one row (id = 'tvmaze') holding the
+// earliest time the next call may go out, plus how many upstream calls are
+// currently in flight. The app's single outbound IP is shared by all users
+// and the sync jobs, and TVMaze allows at least 20 calls per 10 seconds per
+// IP. Each admission advances nextAdmitAt by 10s/18, so calls are evenly
+// spaced and no 10-second interval ever sees more than 18 — regardless of
+// alignment with TVMaze's own limiter. A 429 from TVMaze sets cooldownUntil
+// as a backstop (longest wins under concurrency).
 export const tvmazePace = pgTable("tvmaze_pace", {
   id: text("id").primaryKey(), // always 'tvmaze'
   nextAdmitAt: timestamp("next_admit_at").notNull(),
+  inFlight: integer("in_flight").notNull().default(0), // upstream calls currently running
   cooldownUntil: timestamp("cooldown_until"), // set when TVMaze answers 429
-});
-
-export const insertTvmazeQueueSchema = createInsertSchema(tvmazeQueue).omit({
-  createdAt: true,
 });
 
 export const insertOauthClientSchema = createInsertSchema(oauthClients).omit({
@@ -379,7 +355,6 @@ export type InsertGroupMember = z.infer<typeof insertGroupMemberSchema>;
 export type GroupInvite = typeof groupInvites.$inferSelect;
 export type InsertGroupInvite = z.infer<typeof insertGroupInviteSchema>;
 export type McpRateLimit = typeof mcpRateLimits.$inferSelect;
-export type TvmazeQueueRow = typeof tvmazeQueue.$inferSelect;
 export type TvmazePaceRow = typeof tvmazePace.$inferSelect;
 export type InsertMcpRateLimit = z.infer<typeof insertMcpRateLimitSchema>;
 export type OauthClient = typeof oauthClients.$inferSelect;

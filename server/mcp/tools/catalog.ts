@@ -52,9 +52,9 @@ export function registerCatalogTools(tools: ToolRegistrar, auth: McpAuthContext)
       let response: Response;
       try {
         const [tvmazeResponse, libraryIds] = await Promise.all([
-          // Paced queue (issue #5): the per-client budget above keeps one
-          // client from filling the line; the shared IP pace sits behind
-          // this call and stays synchronous with a timeout.
+          // Paced TVMaze client (issue #5): the per-client budget above keeps
+          // one client from monopolizing the shared IP pace; the gate sits
+          // behind this call and stays synchronous with a timeout.
           tvmazeFetch(`https://api.tvmaze.com/search/shows?q=${encodeURIComponent(query)}`, undefined, {
             timeoutMs: TVMAZE_MCP_TIMEOUT_MS,
           }),

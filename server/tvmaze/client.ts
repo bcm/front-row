@@ -1,26 +1,29 @@
 // Public TVMaze client (issue #5): every outbound api.tvmaze.com call from
 // the sync jobs and the MCP catalog_search proxy goes through here.
 //
-// tvmazeFetch enqueues into tvmaze_queue and waits for the scheduled drain
-// worker; the worker admits through the shared Postgres pace gate (18 calls
-// per 10s per IP, evenly spaced). Synchronous from the caller's perspective:
-// it resolves with the upstream Response, throws TvmazePaceTimeout when the
-// wait exceeds the caller's budget (MCP tools turn that into 429 + retry
-// hint — never a ticket for the client to poll), or TvmazeRequestFailed when
-// the upstream call exhausted its attempts. On timeout the queued row is
-// cancelled if it never started, so expired requests don't burn the shared
-// upstream budget ahead of live ones.
+// No durable queue: tvmazeFetch admits through the shared Postgres pace
+// gate (rate + concurrency) and fetches directly. On denial it sleeps with
+// jitter until the retry hint or the caller's timeout — synchronous from
+// the caller's perspective, never a ticket to poll. Throws
+// TvmazePaceTimeout when the budget runs out (MCP tools turn that into 429
+// + retry hint) or TvmazeRequestFailed after repeated transport failures.
+// GET 200s are served from a short in-memory cache.
 
-import { cancelQueuedRow, enqueueTvmazeRequest, waitForRow } from "./queue";
-import { TVMAZE_PACE_WINDOW_MS } from "./pace";
+import { getCachedResponse, putCachedResponse } from "./cache";
+import { tryAcquireSlot, releaseSlot, setPaceCooldown } from "./pace";
 
+export const TVMAZE_USER_AGENT = "FrontRow/1.0 (https://github.com/bcm/front-row)";
 export const TVMAZE_MCP_TIMEOUT_MS = 8_000;
 export const TVMAZE_SYNC_TIMEOUT_MS = 120_000;
+
+const FETCH_TIMEOUT_MS = 15_000; // per upstream attempt
+const MAX_ATTEMPTS = 3; // transport failures before giving up
+const RETRY_JITTER_MS = 250; // de-synchronize waiters racing for the next slot
 
 export class TvmazePaceTimeout extends Error {
   readonly retryAfterSec: number;
   constructor(retryAfterSec: number) {
-    super(`TVMaze pace queue timed out; retry in ${retryAfterSec}s`);
+    super(`TVMaze pace gate timed out; retry in ${retryAfterSec}s`);
     this.name = "TvmazePaceTimeout";
     this.retryAfterSec = retryAfterSec;
   }
@@ -34,33 +37,92 @@ export class TvmazeRequestFailed extends Error {
 }
 
 export interface TvmazeFetchOptions {
-  /** How long the caller waits for the drain worker. Default: MCP budget. */
+  /** How long the caller waits for a pace slot. Default: MCP budget. */
   timeoutMs?: number;
+}
+
+function logEvent(event: string, fields: Record<string, unknown> = {}): void {
+  console.log(JSON.stringify({ scope: "tvmaze", event, ...fields }));
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function parseRetryAfter(value: string | null): number | null {
+  if (!value) return null;
+  const secs = Number(value);
+  if (Number.isFinite(secs) && secs >= 0) return Math.min(secs, 60);
+  const at = Date.parse(value);
+  if (!Number.isNaN(at)) return Math.min(Math.max(0, Math.ceil((at - Date.now()) / 1000)), 60);
+  return null;
 }
 
 export async function tvmazeFetch(
   url: string,
   init?: RequestInit,
-  opts?: TvmazeFetchOptions
+  opts?: TvmazeFetchOptions,
 ): Promise<Response> {
-  const headers: Record<string, string> = {};
-  if (init?.headers) new Headers(init.headers).forEach((v, k) => {
-    headers[k] = v;
-  });
-  const id = await enqueueTvmazeRequest({
-    url,
-    method: init?.method ?? "GET",
-    headers,
-    body: typeof init?.body === "string" ? init.body : undefined,
-  });
-  const row = await waitForRow(id, opts?.timeoutMs ?? TVMAZE_MCP_TIMEOUT_MS);
-  if (!row) {
-    // The caller gave up: drop the request if it never started, so expired
-    // searches don't sit ahead of live ones burning the shared budget.
-    // Already-claimed rows finish normally.
-    await cancelQueuedRow(id);
-    throw new TvmazePaceTimeout(Math.ceil(TVMAZE_PACE_WINDOW_MS / 1000));
+  const timeoutMs = opts?.timeoutMs ?? TVMAZE_MCP_TIMEOUT_MS;
+  const deadline = Date.now() + timeoutMs;
+  const method = init?.method ?? "GET";
+  const headers: Record<string, string> = { "User-Agent": TVMAZE_USER_AGENT };
+  if (init?.headers) new Headers(init.headers).forEach((v, k) => { headers[k] = v; });
+
+  if (method === "GET") {
+    const cached = getCachedResponse(url);
+    if (cached) {
+      logEvent("cache_hit", { url });
+      return cached;
+    }
   }
-  if (row.status === "failed") throw new TvmazeRequestFailed(row.error ?? "unknown");
-  return new Response(row.responseBody ?? "", { status: row.responseStatus ?? 502 });
+
+  let attempts = 0;
+  for (;;) {
+    const slot = await tryAcquireSlot();
+    if (!slot.admitted) {
+      const remaining = deadline - Date.now();
+      const waitMs = Math.min(
+        slot.retryAfterMs + Math.floor(Math.random() * RETRY_JITTER_MS),
+        remaining,
+      );
+      if (waitMs <= 0) {
+        logEvent("timeout", { url, waitedMs: timeoutMs });
+        throw new TvmazePaceTimeout(Math.max(1, Math.ceil(slot.retryAfterMs / 1000)));
+      }
+      logEvent("deny", { url, retryAfterMs: slot.retryAfterMs });
+      await sleep(waitMs);
+      continue;
+    }
+    logEvent("admit", { url });
+    try {
+      const res = await fetch(url, {
+        method,
+        headers,
+        body: typeof init?.body === "string" ? init.body : undefined,
+        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+      });
+      const body = await res.text();
+      if (res.status === 429) {
+        // Backstop: honor Retry-After, then loop back — the cooldown denial
+        // below sleeps for it. Bounded by the caller's deadline.
+        const retryAfterSec = parseRetryAfter(res.headers.get("retry-after")) ?? 5;
+        await setPaceCooldown(retryAfterSec);
+        logEvent("cooldown", { url, retryAfterSec });
+        continue;
+      }
+      if (method === "GET" && res.status === 200) putCachedResponse(url, 200, body);
+      return new Response(body, { status: res.status });
+    } catch (error) {
+      attempts += 1;
+      const detail = error instanceof Error ? error.message : String(error);
+      if (attempts >= MAX_ATTEMPTS) {
+        logEvent("request_failed", { url, attempts });
+        throw new TvmazeRequestFailed(detail);
+      }
+      logEvent("retry", { url, attempt: attempts, error: detail });
+    } finally {
+      await releaseSlot();
+    }
+  }
 }
