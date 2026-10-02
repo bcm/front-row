@@ -50,6 +50,7 @@ export const db = {
   insert: mockMethod(),
   update: mockMethod(),
   delete: mockMethod(),
+  execute: mockMethod(),
 };
 
 export function resetDbMocks(): void {

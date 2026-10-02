@@ -49,13 +49,32 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function parseRetryAfter(value: string | null): number | null {
+export function parseRetryAfter(value: string | null): number | null {
   if (!value) return null;
   const secs = Number(value);
-  if (Number.isFinite(secs) && secs >= 0) return Math.min(secs, 60);
+  if (Number.isFinite(secs) && secs >= 0) return clampRetryAfter(Math.floor(secs), value);
   const at = Date.parse(value);
-  if (!Number.isNaN(at)) return Math.min(Math.max(0, Math.ceil((at - Date.now()) / 1000)), 60);
+  if (!Number.isNaN(at)) {
+    return clampRetryAfter(Math.max(0, Math.ceil((at - Date.now()) / 1000)), value);
+  }
   return null;
+}
+
+// Anomaly bound on upstream backoff. TVMaze would never legitimately ask
+// for more than minutes, but a malformed or malicious header must not
+// block the shared gate indefinitely — there is no admin UI to clear it,
+// so the gate self-heals after this bound instead. Every realistic
+// backoff is honored exactly; only absurd values are clamped (with a log).
+const MAX_RETRY_AFTER_SEC = 3600;
+
+function clampRetryAfter(secs: number, raw: string): number {
+  if (secs <= MAX_RETRY_AFTER_SEC) return secs;
+  logEvent("retry_after_clamped", {
+    raw,
+    requestedSec: secs,
+    appliedSec: MAX_RETRY_AFTER_SEC,
+  });
+  return MAX_RETRY_AFTER_SEC;
 }
 
 export async function tvmazeFetch(
@@ -94,7 +113,8 @@ export async function tvmazeFetch(
       await sleep(waitMs);
       continue;
     }
-    logEvent("admit", { url });
+    logEvent("admit", { url, leaseId: slot.leaseId });
+    const leaseId = slot.leaseId;
     try {
       const res = await fetch(url, {
         method,
@@ -122,7 +142,7 @@ export async function tvmazeFetch(
       }
       logEvent("retry", { url, attempt: attempts, error: detail });
     } finally {
-      await releaseSlot();
+      if (leaseId) await releaseSlot(leaseId);
     }
   }
 }

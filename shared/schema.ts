@@ -280,8 +280,10 @@ export const mcpRateLimits = pgTable("mcp_rate_limits", {
 export const insertMcpRateLimitSchema = createInsertSchema(mcpRateLimits);
 
 // Shared TVMaze pace gate (issue #5): one row (id = 'tvmaze') holding the
-// earliest time the next call may go out, plus how many upstream calls are
-// currently in flight. The app's single outbound IP is shared by all users
+// earliest time the next call may go out. Concurrency slots are per-request
+// lease rows in tvmaze_leases (below), not a counter: a replica that dies
+// holding a slot never releases it, so leases expire and the acquire path
+// reclaims them. The app's single outbound IP is shared by all users
 // and the sync jobs, and TVMaze allows at least 20 calls per 10 seconds per
 // IP. Each admission advances nextAdmitAt by 10s/18, so calls are evenly
 // spaced and no 10-second interval ever sees more than 18 — regardless of
@@ -290,8 +292,18 @@ export const insertMcpRateLimitSchema = createInsertSchema(mcpRateLimits);
 export const tvmazePace = pgTable("tvmaze_pace", {
   id: text("id").primaryKey(), // always 'tvmaze'
   nextAdmitAt: timestamp("next_admit_at").notNull(),
-  inFlight: integer("in_flight").notNull().default(0), // upstream calls currently running
   cooldownUntil: timestamp("cooldown_until"), // set when TVMaze answers 429
+});
+
+// Crash-safe concurrency leases for the TVMaze pace gate. One row per
+// acquired upstream slot. The acquire path (server/tvmaze/pace.ts) prunes
+// rows older than the lease TTL and only counts live ones, so slots held by
+// crashed replicas are reclaimed automatically — a slot can never leak
+// permanently. Release deletes the caller's own lease id; deleting another
+// caller's row is never correct (use expiry for that).
+export const tvmazeLeases = pgTable("tvmaze_leases", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  acquiredAt: timestamp("acquired_at").defaultNow().notNull(),
 });
 
 export const insertOauthClientSchema = createInsertSchema(oauthClients).omit({
@@ -356,6 +368,7 @@ export type GroupInvite = typeof groupInvites.$inferSelect;
 export type InsertGroupInvite = z.infer<typeof insertGroupInviteSchema>;
 export type McpRateLimit = typeof mcpRateLimits.$inferSelect;
 export type TvmazePaceRow = typeof tvmazePace.$inferSelect;
+export type TvmazeLeaseRow = typeof tvmazeLeases.$inferSelect;
 export type InsertMcpRateLimit = z.infer<typeof insertMcpRateLimitSchema>;
 export type OauthClient = typeof oauthClients.$inferSelect;
 export type InsertOauthClient = z.infer<typeof insertOauthClientSchema>;

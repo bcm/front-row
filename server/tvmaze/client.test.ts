@@ -12,6 +12,7 @@ vi.mock("./pace", () => ({
 
 import {
   tvmazeFetch,
+  parseRetryAfter,
   TvmazePaceTimeout,
   TvmazeRequestFailed,
   TVMAZE_USER_AGENT,
@@ -32,7 +33,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-const admitted = { admitted: true, retryAfterMs: 0 };
+const admitted = { admitted: true, retryAfterMs: 0, leaseId: "lease-1" };
 const okResponse = (body = '{"ok":true}') => new Response(body, { status: 200 });
 
 describe("tvmazeFetch", () => {
@@ -50,7 +51,7 @@ describe("tvmazeFetch", () => {
         headers: expect.objectContaining({ "User-Agent": TVMAZE_USER_AGENT }),
       }),
     );
-    expect(releaseSlot).toHaveBeenCalledTimes(1);
+    expect(releaseSlot).toHaveBeenCalledWith("lease-1");
   });
 
   it("serves a repeated GET from cache without touching the gate", async () => {
@@ -126,5 +127,37 @@ describe("tvmazeFetch", () => {
     expect(err.message).toContain("boom");
     expect(fetchMock).toHaveBeenCalledTimes(3);
     expect(releaseSlot).toHaveBeenCalledTimes(3);
+  });
+});
+
+describe("parseRetryAfter", () => {
+  it("honors long delta-seconds values in full", () => {
+    // Finding #2: values above 60s used to be shortened to 60, letting the
+    // gate resume before the upstream-requested cooldown expired.
+    expect(parseRetryAfter("90")).toBe(90);
+    expect(parseRetryAfter("300")).toBe(300);
+  });
+
+  it("honors HTTP-date values in full within the bound", () => {
+    const thirtyMin = new Date(Date.now() + 30 * 60_000).toUTCString();
+    const delay = parseRetryAfter(thirtyMin)!;
+    expect(delay).toBeGreaterThan(1_700);
+    expect(delay).toBeLessThanOrEqual(1_800);
+  });
+
+  it("clamps absurd values to the anomaly bound instead of forever", () => {
+    // A malformed/malicious header must not block the shared gate
+    // indefinitely (no admin UI to clear it); the gate self-heals.
+    expect(parseRetryAfter("999999999")).toBe(3600);
+    const twoHours = new Date(Date.now() + 2 * 3_600_000).toUTCString();
+    expect(parseRetryAfter(twoHours)).toBe(3600);
+  });
+
+  it("returns null for missing or unparsable values", () => {
+    expect(parseRetryAfter(null)).toBeNull();
+    expect(parseRetryAfter("")).toBeNull();
+    expect(parseRetryAfter("not-a-time")).toBeNull();
+    // "-5" parses as a year in V8 -> a past date -> 0 (pre-existing).
+    expect(parseRetryAfter("-5")).toBe(0);
   });
 });
