@@ -24,10 +24,10 @@ If a thread was resolved (fixed, or explicitly disagreed-with and resolved with 
 
 ## Check the domain invariants first
 Before general review, verify these repo-specific invariants from the design doc:
-- Token hygiene: no token material, user codes, or device codes in logs (§11.3).
+- Token hygiene: store only SHA-256 hashes; constant-time comparison; never log token material, user codes, or device codes (§11.3).
 - No demo-user fallback on the new surface: invalid token → 401, scope mismatch → 403, never silent fallback (§11.2).
 - Surgical diffs: UI routes, scheduler timing, and existing API response shapes untouched unless the PR says otherwise (§11.1).
-- Stateless across replicas: no in-memory session, device-code, or rate-limit state (§11.7).
+- Stateless across replicas: no in-memory session, device-code, or MCP session state — everything in Postgres (§11.7).
 - Idempotent producers: event emission uses `dedupe_key` with insert-on-conflict-do-nothing (§11.4).
 
 ## Convergence
