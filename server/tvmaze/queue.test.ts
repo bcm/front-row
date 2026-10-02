@@ -6,6 +6,7 @@ import { claimRelayRows } from "../relay";
 import { admitPacedCall, setPaceCooldown } from "./pace";
 import {
   drainTvmazeQueue,
+  cancelQueuedRow,
   enqueueTvmazeRequest,
   getQueuedRow,
   pruneCompletedRows,
@@ -69,6 +70,17 @@ describe("getQueuedRow / waitForRow", () => {
   });
 });
 
+describe("cancelQueuedRow", () => {
+  it("deletes rows still queued, leaving claimed rows alone", async () => {
+    (db.delete as any).mockReturnValue(chainable([{ id: "r" }]));
+    expect(await cancelQueuedRow("r")).toBe(true);
+    // Conditional delete matched nothing: the drain worker claimed it first.
+    (db.delete as any).mockReturnValue(chainable([]));
+    expect(await cancelQueuedRow("r")).toBe(false);
+    expect(db.delete).toHaveBeenCalledTimes(2);
+  });
+});
+
 describe("drainTvmazeQueue", () => {
   it("claims, fetches, and records the upstream response", async () => {
     vi.mocked(claimRelayRows)
@@ -99,7 +111,7 @@ describe("drainTvmazeQueue", () => {
     expect(fetchFn).not.toHaveBeenCalled();
   });
 
-  it("releases the row and stops when the pace gate denies", async () => {
+  it("releases the row unattempted when the pace gate denies", async () => {
     vi.mocked(claimRelayRows).mockResolvedValueOnce([CLAIMED]);
     vi.mocked(admitPacedCall).mockResolvedValue({ admitted: false, retryAfterSec: 9 });
     const fetchFn = okFetch();
@@ -107,9 +119,24 @@ describe("drainTvmazeQueue", () => {
 
     expect(await drainTvmazeQueue(fetchFn)).toBe(0);
     expect(fetchFn).not.toHaveBeenCalled();
-    expect(updateChain.set).toHaveBeenCalledWith(
-      expect.objectContaining({ status: "queued", claimedAt: null })
-    );
+    // Exactly one write, and it must not touch attempts: the denied claim
+    // never reached the upstream, so it must not count against the row.
+    expect(updateChain.set).toHaveBeenCalledTimes(1);
+    expect((updateChain.set as any).mock.calls[0][0]).toEqual({
+      status: "queued",
+      claimedAt: null,
+    });
+  });
+
+  it("increments attempts only after admission", async () => {
+    vi.mocked(claimRelayRows).mockResolvedValueOnce([CLAIMED]); // attempts: 1
+    vi.mocked(admitPacedCall).mockResolvedValue({ admitted: true, retryAfterSec: 0 });
+    const fetchFn = okFetch();
+    const updateChain = mockUpdateChain();
+
+    await drainTvmazeQueue(fetchFn);
+
+    expect(updateChain.set).toHaveBeenCalledWith({ attempts: CLAIMED.attempts + 1 });
   });
 
   it("honors Retry-After on upstream 429 and requeues the row", async () => {

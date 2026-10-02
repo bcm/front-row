@@ -2,10 +2,11 @@
 
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { db } from "../oauth/test-utils/mock-db";
-import { enqueueTvmazeRequest, waitForRow } from "./queue";
+import { cancelQueuedRow, enqueueTvmazeRequest, waitForRow } from "./queue";
 
 vi.mock("../db", () => ({ db }));
 vi.mock("./queue", () => ({
+  cancelQueuedRow: vi.fn(),
   enqueueTvmazeRequest: vi.fn(),
   waitForRow: vi.fn(),
 }));
@@ -18,6 +19,7 @@ import {
 } from "./client";
 
 beforeEach(() => {
+  vi.mocked(cancelQueuedRow).mockReset();
   vi.mocked(enqueueTvmazeRequest).mockReset();
   vi.mocked(waitForRow).mockReset();
 });
@@ -42,14 +44,16 @@ describe("tvmazeFetch", () => {
     expect(await res.json()).toEqual({ ok: true });
   });
 
-  it("throws TvmazePaceTimeout with a retry hint when the waiter gives up", async () => {
+  it("cancels the queued row and throws TvmazePaceTimeout when the waiter gives up", async () => {
     vi.mocked(enqueueTvmazeRequest).mockResolvedValue("row-1");
     vi.mocked(waitForRow).mockResolvedValue(null);
+    vi.mocked(cancelQueuedRow).mockResolvedValue(true);
 
     const err = await tvmazeFetch("https://api.tvmaze.com/shows/1", undefined, {
       timeoutMs: 100,
     }).catch((e) => e);
 
+    expect(cancelQueuedRow).toHaveBeenCalledWith("row-1");
     expect(err).toBeInstanceOf(TvmazePaceTimeout);
     expect(err.retryAfterSec).toBe(10); // one pace window
   });

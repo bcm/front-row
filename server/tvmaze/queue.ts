@@ -54,6 +54,21 @@ export async function getQueuedRow(id: string): Promise<TvmazeQueueRow | undefin
   return row;
 }
 
+/**
+ * Drop a queued request its caller stopped waiting for. Only rows still
+ * `queued` are removed — an already-claimed row finishes normally. The
+ * conditional delete is atomic with the drain worker's claim, so the two
+ * can never resurrect or double-handle a row. Returns whether a row was
+ * actually removed.
+ */
+export async function cancelQueuedRow(id: string): Promise<boolean> {
+  const deleted = await db
+    .delete(tvmazeQueue)
+    .where(and(eq(tvmazeQueue.id, id), eq(tvmazeQueue.status, "queued")))
+    .returning({ id: tvmazeQueue.id });
+  return deleted.length > 0;
+}
+
 /** Wait for a queued row to reach done/failed. Returns null on timeout. */
 export async function waitForRow(id: string, timeoutMs: number, pollMs = 250): Promise<TvmazeQueueRow | null> {
   const deadline = Date.now() + timeoutMs;
@@ -75,8 +90,9 @@ function parseRetryAfter(value: string | null): number | null {
 }
 
 async function settleRow(id: string, attempts: number, error?: string): Promise<void> {
-  // attempts was already incremented by the claim; exhausted rows fail so
-  // waiters stop waiting, the rest go back to the queue.
+  // attempts counts admitted upstream fetches (incremented after admission,
+  // never for pace-denied claims). Exhausted rows fail so waiters stop
+  // waiting; the rest go back to the queue.
   if (attempts >= MAX_ATTEMPTS) {
     await db
       .update(tvmazeQueue)
@@ -102,19 +118,23 @@ export async function drainTvmazeQueue(fetchFn: typeof fetch = fetch): Promise<n
     const [row] = await claimRelayRows<ClaimedRow>({
       table: "tvmaze_queue",
       eligibleWhere: "status = 'queued'",
-      claimSet: "status = 'claimed', claimed_at = now(), attempts = attempts + 1",
+      claimSet: "status = 'claimed', claimed_at = now()",
       limit: 1,
     });
     if (!row) break;
     const gate = await admitPacedCall();
     if (!gate.admitted) {
-      // Pace exhausted: release the row, the next tick retries it.
+      // Pace exhausted: release the row unattempted — the claim never
+      // counted against its attempts — and the next tick retries it.
       await db
         .update(tvmazeQueue)
         .set({ status: "queued", claimedAt: null })
         .where(eq(tvmazeQueue.id, row.id));
       break;
     }
+    // Admitted: this is a genuine upstream attempt.
+    const attempts = row.attempts + 1;
+    await db.update(tvmazeQueue).set({ attempts }).where(eq(tvmazeQueue.id, row.id));
     try {
       const res = await fetchFn(row.url, {
         method: row.method,
@@ -126,7 +146,7 @@ export async function drainTvmazeQueue(fetchFn: typeof fetch = fetch): Promise<n
       if (res.status === 429) {
         // Backstop: honor Retry-After, requeue, stop this pass.
         await setPaceCooldown(parseRetryAfter(res.headers.get("retry-after")) ?? 5);
-        await settleRow(row.id, row.attempts);
+        await settleRow(row.id, attempts);
         break;
       }
       await db
@@ -135,7 +155,7 @@ export async function drainTvmazeQueue(fetchFn: typeof fetch = fetch): Promise<n
         .where(eq(tvmazeQueue.id, row.id));
       completed++;
     } catch (error) {
-      await settleRow(row.id, row.attempts, error instanceof Error ? error.message : String(error));
+      await settleRow(row.id, attempts, error instanceof Error ? error.message : String(error));
     }
   }
   return completed;

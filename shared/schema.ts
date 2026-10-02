@@ -303,13 +303,14 @@ export const tvmazeQueue = pgTable("tvmaze_queue", {
   drainOrder: index("tvmaze_queue_drain_idx").on(table.status, table.createdAt),
 }));
 
-// Shared TVMaze pace gate: one row (id = 'tvmaze') holding the current
-// 10-second window. The drain worker admits through an atomic upsert so
-// autoscale replicas share a single budget.
+// Shared TVMaze pace gate: one row (id = 'tvmaze') holding the earliest time
+// the next call may go out. Each admission advances it by 10s/18, so calls
+// are evenly spaced and no 10-second interval ever sees more than 18 —
+// regardless of alignment with TVMaze's own limiter. A 429 from TVMaze sets
+// cooldownUntil as a backstop (longest wins under concurrency).
 export const tvmazePace = pgTable("tvmaze_pace", {
   id: text("id").primaryKey(), // always 'tvmaze'
-  windowStart: timestamp("window_start").notNull(),
-  count: integer("count").notNull().default(0),
+  nextAdmitAt: timestamp("next_admit_at").notNull(),
   cooldownUntil: timestamp("cooldown_until"), // set when TVMaze answers 429
 });
 

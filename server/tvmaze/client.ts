@@ -3,13 +3,15 @@
 //
 // tvmazeFetch enqueues into tvmaze_queue and waits for the scheduled drain
 // worker; the worker admits through the shared Postgres pace gate (18 calls
-// per 10s per IP). Synchronous from the caller's perspective: it resolves
-// with the upstream Response, throws TvmazePaceTimeout when the wait exceeds
-// the caller's budget (MCP tools turn that into 429 + retry hint — never a
-// ticket for the client to poll), or TvmazeRequestFailed when the upstream
-// call exhausted its attempts.
+// per 10s per IP, evenly spaced). Synchronous from the caller's perspective:
+// it resolves with the upstream Response, throws TvmazePaceTimeout when the
+// wait exceeds the caller's budget (MCP tools turn that into 429 + retry
+// hint — never a ticket for the client to poll), or TvmazeRequestFailed when
+// the upstream call exhausted its attempts. On timeout the queued row is
+// cancelled if it never started, so expired requests don't burn the shared
+// upstream budget ahead of live ones.
 
-import { enqueueTvmazeRequest, waitForRow } from "./queue";
+import { cancelQueuedRow, enqueueTvmazeRequest, waitForRow } from "./queue";
 import { TVMAZE_PACE_WINDOW_MS } from "./pace";
 
 export const TVMAZE_MCP_TIMEOUT_MS = 8_000;
@@ -52,7 +54,13 @@ export async function tvmazeFetch(
     body: typeof init?.body === "string" ? init.body : undefined,
   });
   const row = await waitForRow(id, opts?.timeoutMs ?? TVMAZE_MCP_TIMEOUT_MS);
-  if (!row) throw new TvmazePaceTimeout(Math.ceil(TVMAZE_PACE_WINDOW_MS / 1000));
+  if (!row) {
+    // The caller gave up: drop the request if it never started, so expired
+    // searches don't sit ahead of live ones burning the shared budget.
+    // Already-claimed rows finish normally.
+    await cancelQueuedRow(id);
+    throw new TvmazePaceTimeout(Math.ceil(TVMAZE_PACE_WINDOW_MS / 1000));
+  }
   if (row.status === "failed") throw new TvmazeRequestFailed(row.error ?? "unknown");
   return new Response(row.responseBody ?? "", { status: row.responseStatus ?? 502 });
 }

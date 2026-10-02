@@ -18,6 +18,7 @@ const CHAIN_METHODS = [
   "insert",
   "values",
   "onConflictDoUpdate",
+  "onConflictDoNothing",
   "returning",
   "update",
   "set",
