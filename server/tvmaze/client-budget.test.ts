@@ -8,6 +8,7 @@ vi.mock("./pace", () => ({
   tryAcquireSlot: vi.fn(),
   releaseSlot: vi.fn(),
   setPaceCooldown: vi.fn(),
+  setPaceCooldownUntil: vi.fn(),
 }));
 
 import { tvmazeFetch, TvmazePaceTimeout } from "./client";

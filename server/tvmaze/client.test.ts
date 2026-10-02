@@ -1,18 +1,20 @@
 // Tests for the TVMaze client: gate admission, cache, retries, timeouts.
 
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
-import { tryAcquireSlot, releaseSlot, setPaceCooldown } from "./pace";
+import { tryAcquireSlot, releaseSlot, setPaceCooldown, setPaceCooldownUntil } from "./pace";
 import { clearTvmazeCache } from "./cache";
 
 vi.mock("./pace", () => ({
   tryAcquireSlot: vi.fn(),
   releaseSlot: vi.fn(),
   setPaceCooldown: vi.fn(),
+  setPaceCooldownUntil: vi.fn(),
 }));
 
 import {
   tvmazeFetch,
   parseRetryAfter,
+  parseRetryAfterInstant,
   TvmazePaceTimeout,
   TvmazeRequestFailed,
   TVMAZE_USER_AGENT,
@@ -26,6 +28,7 @@ beforeEach(() => {
   vi.mocked(tryAcquireSlot).mockReset();
   vi.mocked(releaseSlot).mockReset();
   vi.mocked(setPaceCooldown).mockReset();
+  vi.mocked(setPaceCooldownUntil).mockReset();
   fetchMock.mockReset();
 });
 
@@ -35,6 +38,9 @@ afterEach(() => {
 
 const admitted = { admitted: true, retryAfterMs: 0, leaseId: "lease-1" };
 const okResponse = (body = '{"ok":true}') => new Response(body, { status: 200 });
+
+// HTTP-date headers carry whole seconds; floor so round-trips compare exactly.
+const atSecond = (ms: number) => new Date(Math.floor(ms / 1000) * 1000);
 
 describe("tvmazeFetch", () => {
   it("admits through the gate, fetches, and releases the slot", async () => {
@@ -113,8 +119,30 @@ describe("tvmazeFetch", () => {
     const res = await tvmazeFetch("https://api.tvmaze.com/shows/1");
 
     expect(setPaceCooldown).toHaveBeenCalledWith(2);
+    expect(setPaceCooldownUntil).not.toHaveBeenCalled();
     expect(res.status).toBe(200);
     expect(releaseSlot).toHaveBeenCalledTimes(2);
+  });
+
+  it("stores the HTTP-date Retry-After instant against the database clock", async () => {
+    vi.mocked(tryAcquireSlot).mockResolvedValue(admitted);
+    const at = atSecond(Date.now() + 30 * 60_000);
+    fetchMock
+      .mockResolvedValueOnce(
+        new Response("slow down", {
+          status: 429,
+          headers: { "retry-after": at.toUTCString() },
+        }),
+      )
+      .mockResolvedValueOnce(okResponse());
+
+    const res = await tvmazeFetch("https://api.tvmaze.com/shows/1");
+
+    // The absolute instant is preserved — not converted to seconds
+    // against the replica clock — so SQL can compare it to now().
+    expect(setPaceCooldownUntil).toHaveBeenCalledWith(at);
+    expect(setPaceCooldown).not.toHaveBeenCalled();
+    expect(res.status).toBe(200);
   });
 
   it("throws TvmazeRequestFailed after repeated transport failures", async () => {
@@ -138,26 +166,62 @@ describe("parseRetryAfter", () => {
     expect(parseRetryAfter("300")).toBe(300);
   });
 
-  it("honors HTTP-date values in full within the bound", () => {
+  it("returns null for the HTTP-date form — it keeps its absolute instant", () => {
+    // Finding: HTTP-date values were converted to seconds against the
+    // replica's clock, baking skew into the cooldown. They now travel the
+    // parseRetryAfterInstant + setPaceCooldownUntil path instead.
     const thirtyMin = new Date(Date.now() + 30 * 60_000).toUTCString();
-    const delay = parseRetryAfter(thirtyMin)!;
-    expect(delay).toBeGreaterThan(1_700);
-    expect(delay).toBeLessThanOrEqual(1_800);
+    expect(parseRetryAfter(thirtyMin)).toBeNull();
   });
 
   it("clamps absurd values to the anomaly bound instead of forever", () => {
     // A malformed/malicious header must not block the shared gate
     // indefinitely (no admin UI to clear it); the gate self-heals.
     expect(parseRetryAfter("999999999")).toBe(3600);
-    const twoHours = new Date(Date.now() + 2 * 3_600_000).toUTCString();
-    expect(parseRetryAfter(twoHours)).toBe(3600);
   });
 
-  it("returns null for missing or unparsable values", () => {
+  it("returns null for missing, negative, or unparsable values", () => {
     expect(parseRetryAfter(null)).toBeNull();
     expect(parseRetryAfter("")).toBeNull();
     expect(parseRetryAfter("not-a-time")).toBeNull();
-    // "-5" parses as a year in V8 -> a past date -> 0 (pre-existing).
-    expect(parseRetryAfter("-5")).toBe(0);
+    expect(parseRetryAfter("-5")).toBeNull();
+  });
+});
+
+describe("parseRetryAfterInstant", () => {
+  it("preserves the absolute instant of an HTTP-date value", () => {
+    const at = atSecond(Date.now() + 30 * 60_000);
+    expect(parseRetryAfterInstant(at.toUTCString())).toEqual(at);
+  });
+
+  it("returns null for the delta-seconds form", () => {
+    expect(parseRetryAfterInstant("90")).toBeNull();
+  });
+
+  it("returns null for missing or unparsable values", () => {
+    expect(parseRetryAfterInstant(null)).toBeNull();
+    expect(parseRetryAfterInstant("")).toBeNull();
+    expect(parseRetryAfterInstant("not-a-time")).toBeNull();
+  });
+
+  it("clamps absurd futures to the anomaly bound", () => {
+    const twoHours = new Date(Date.now() + 2 * 3_600_000).toUTCString();
+    const instant = parseRetryAfterInstant(twoHours)!;
+    const bound = Date.now() + 3_600_000;
+    expect(instant.getTime()).toBeGreaterThan(bound - 5_000);
+    expect(instant.getTime()).toBeLessThanOrEqual(bound);
+  });
+
+  it("does not shorten the instant when the replica clock is ahead", () => {
+    // Finding: converting via Date.now() shortened the delay by the
+    // replica's skew before setPaceCooldown anchored it to the DB clock.
+    // The instant must survive skew untouched — SQL compares it to now().
+    const at = atSecond(Date.now() + 30 * 60_000);
+    const skewNow = vi.spyOn(Date, "now").mockReturnValue(Date.now() + 10 * 60_000);
+    try {
+      expect(parseRetryAfterInstant(at.toUTCString())).toEqual(at);
+    } finally {
+      skewNow.mockRestore();
+    }
   });
 });

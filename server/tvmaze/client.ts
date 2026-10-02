@@ -10,7 +10,7 @@
 // GET 200s are served from a short in-memory cache.
 
 import { getCachedResponse, putCachedResponse } from "./cache";
-import { tryAcquireSlot, releaseSlot, setPaceCooldown } from "./pace";
+import { tryAcquireSlot, releaseSlot, setPaceCooldown, setPaceCooldownUntil } from "./pace";
 
 export const TVMAZE_USER_AGENT = "FrontRow/1.0 (https://github.com/bcm/front-row)";
 export const TVMAZE_MCP_TIMEOUT_MS = 8_000;
@@ -56,15 +56,43 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+/**
+ * Parse the delta-seconds form of Retry-After. Returns null for the
+ * HTTP-date form (use parseRetryAfterInstant) and for missing or
+ * unparsable values. The delay is anchored to the database clock by
+ * setPaceCooldown — no replica clock enters it.
+ */
 export function parseRetryAfter(value: string | null): number | null {
   if (!value) return null;
   const secs = Number(value);
-  if (Number.isFinite(secs) && secs >= 0) return clampRetryAfter(Math.floor(secs), value);
+  if (!Number.isFinite(secs) || secs < 0) return null;
+  return clampRetryAfter(Math.floor(secs), value);
+}
+
+/**
+ * Parse the HTTP-date form of Retry-After to its absolute instant.
+ * Returns null for the delta-seconds form (use parseRetryAfter) and for
+ * missing or unparsable values. The instant — not seconds derived from
+ * the replica clock — is what setPaceCooldownUntil stores against the
+ * database clock, so replica skew can't shorten the cooldown. Absurd
+ * futures clamp to the anomaly bound; the clamp is measured against the
+ * replica clock, but that only bounds the safety valve, never the
+ * stored value.
+ */
+export function parseRetryAfterInstant(value: string | null): Date | null {
+  if (!value) return null;
+  if (Number.isFinite(Number(value))) return null; // delta-seconds form
   const at = Date.parse(value);
-  if (!Number.isNaN(at)) {
-    return clampRetryAfter(Math.max(0, Math.ceil((at - Date.now()) / 1000)), value);
+  if (Number.isNaN(at)) return null;
+  const capped = Math.min(at, Date.now() + MAX_RETRY_AFTER_SEC * 1000);
+  if (capped !== at) {
+    logEvent("retry_after_clamped", {
+      raw: value,
+      requestedAt: new Date(at).toISOString(),
+      appliedAt: new Date(capped).toISOString(),
+    });
   }
-  return null;
+  return new Date(capped);
 }
 
 // Anomaly bound on upstream backoff. TVMaze would never legitimately ask
@@ -142,10 +170,20 @@ export async function tvmazeFetch(
       const body = await res.text();
       if (res.status === 429) {
         // Backstop: honor Retry-After, then loop back — the cooldown denial
-        // below sleeps for it. Bounded by the caller's deadline.
-        const retryAfterSec = parseRetryAfter(res.headers.get("retry-after")) ?? 5;
-        await setPaceCooldown(retryAfterSec);
-        logEvent("cooldown", { url, retryAfterSec });
+        // below sleeps for it. Bounded by the caller's deadline. The
+        // HTTP-date form keeps its absolute instant (compared against the
+        // database clock in SQL); the delta-seconds form is anchored to the
+        // database clock by setPaceCooldown. Neither trusts the replica's.
+        const raw = res.headers.get("retry-after");
+        const instant = parseRetryAfterInstant(raw);
+        if (instant) {
+          await setPaceCooldownUntil(instant);
+          logEvent("cooldown", { url, retryAfterAt: instant.toISOString() });
+        } else {
+          const retryAfterSec = parseRetryAfter(raw) ?? 5;
+          await setPaceCooldown(retryAfterSec);
+          logEvent("cooldown", { url, retryAfterSec });
+        }
         continue;
       }
       if (useCache && res.status === 200) putCachedResponse(url, 200, body);

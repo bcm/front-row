@@ -7,34 +7,51 @@ import {
   ensureTvmazeGateSeeded,
   releaseSlot,
   setPaceCooldown,
+  setPaceCooldownUntil,
   LEASE_TTL_SEC,
   TVMAZE_MAX_CONCURRENT,
 } from "./pace";
 
 vi.mock("../db", () => ({ db }));
 
-beforeEach(() => resetDbMocks());
+// tryAcquireSlot runs in an explicit transaction; the tx double is wired
+// per test so statement order and SQL shape are assertable.
+let tx: { execute: ReturnType<typeof vi.fn> };
+beforeEach(() => {
+  resetDbMocks();
+  tx = { execute: vi.fn() };
+  vi.mocked(db.transaction).mockImplementation(async (cb: any) => cb(tx));
+});
 
 const NOW = new Date("2026-01-01T00:00:00Z");
 
-const acquireRow = (overrides: Record<string, unknown> = {}) => ({
-  lease_id: null,
+const paceRow = (overrides: Record<string, unknown> = {}) => ({
   next_admit_at: new Date(NOW.getTime() - 1_000).toISOString(), // due
   cooldown_until: null,
-  db_now: NOW.toISOString(), // the database clock, returned by the statement
+  db_now: NOW.toISOString(), // the database clock, returned by the lock
   ...overrides,
 });
 
-function mockExecuteOnce(rows: unknown[]) {
-  (db.execute as any).mockResolvedValueOnce({ rows });
+// Program the tx.execute sequence: bootstrap, pace lock, slot claim.
+// The admit path then runs a fourth statement (the pace advance).
+function mockAcquire({
+  pace = paceRow(),
+  leaseId = "lease-1",
+}: {
+  pace?: Record<string, unknown>;
+  leaseId?: string | null;
+} = {}) {
+  tx.execute
+    .mockResolvedValueOnce({ rows: [] }) // bootstrap
+    .mockResolvedValueOnce({ rows: [pace] }) // pace lock
+    .mockResolvedValueOnce({ rows: leaseId ? [{ lease_id: leaseId }] : [] }); // claim
 }
 
 import { StringChunk } from "drizzle-orm";
 
-// Nested sql fragments (e.g. the slot seed) appear as SQL chunks inside
-// queryChunks; walk them so assertions see the full statement text.
-function executedSQL(callIndex = 0): string {
-  const query = (db.execute as any).mock.calls[callIndex][0];
+// Nested sql fragments appear as SQL chunks inside queryChunks; walk them
+// so assertions see the full statement text.
+function sqlText(query: unknown): string {
   const parts: string[] = [];
   const walk = (chunks: unknown[]) => {
     for (const c of chunks) {
@@ -45,15 +62,14 @@ function executedSQL(callIndex = 0): string {
       }
     }
   };
-  walk(query.queryChunks);
+  walk((query as { queryChunks: unknown[] }).queryChunks);
   return parts.join("?");
 }
 
-// Bound parameters of the executed statement: every non-text chunk that
-// isn't a nested SQL fragment. A Date here would be a replica wall-clock
+// Bound parameters of a statement: every non-text chunk that isn't a
+// nested SQL fragment. A Date here would be a replica wall-clock
 // timestamp leaking into the gate.
-function boundParams(callIndex = 0): unknown[] {
-  const query = (db.execute as any).mock.calls[callIndex][0];
+function sqlParams(query: unknown): unknown[] {
   const params: unknown[] = [];
   const walk = (chunks: unknown[]) => {
     for (const c of chunks) {
@@ -63,51 +79,56 @@ function boundParams(callIndex = 0): unknown[] {
       } else params.push(c);
     }
   };
-  walk(query.queryChunks);
+  walk((query as { queryChunks: unknown[] }).queryChunks);
   return params;
 }
 
+const txStatements = () => tx.execute.mock.calls.map(([q]) => sqlText(q));
+const txParams = () => tx.execute.mock.calls.flatMap(([q]) => sqlParams(q));
+
 describe("tryAcquireSlot", () => {
-  it("admits with a lease id in a single statement", async () => {
-    mockExecuteOnce([acquireRow({ lease_id: "lease-1" })]);
+  it("admits with a lease id inside one transaction", async () => {
+    mockAcquire({ leaseId: "lease-1" });
 
     const decision = await tryAcquireSlot();
 
     expect(decision).toEqual({ admitted: true, retryAfterMs: 0, leaseId: "lease-1" });
-    // The whole acquire — pace upsert, lock, atomic claim, pace advance —
-    // is exactly one round trip, including on the deny path.
-    expect(db.execute).toHaveBeenCalledTimes(1);
+    // One transaction; the statements are bootstrap, lock, claim, advance.
+    expect(db.transaction).toHaveBeenCalledTimes(1);
+    expect(tx.execute).toHaveBeenCalledTimes(4);
+    expect(db.execute).not.toHaveBeenCalled();
     expect(db.select).not.toHaveBeenCalled();
     expect(db.insert).not.toHaveBeenCalled();
     expect(db.update).not.toHaveBeenCalled();
   });
 
-  it("denies with a single round trip when the pace slot is not due", async () => {
-    mockExecuteOnce([
-      acquireRow({ next_admit_at: new Date(NOW.getTime() + 4_000).toISOString() }),
-    ]);
+  it("denies when the pace slot is not due, without modifying the pace row", async () => {
+    mockAcquire({
+      pace: paceRow({ next_admit_at: new Date(NOW.getTime() + 4_000).toISOString() }),
+    });
 
     const decision = await tryAcquireSlot();
 
     expect(decision).toEqual({ admitted: false, retryAfterMs: 4000 });
-    expect(db.execute).toHaveBeenCalledTimes(1);
-    expect(db.select).not.toHaveBeenCalled();
-    expect(db.insert).not.toHaveBeenCalled();
-    expect(db.update).not.toHaveBeenCalled();
+    // Bootstrap + lock only; the deny path never reaches the claim or
+    // the advance, and modifies nothing.
+    expect(tx.execute).toHaveBeenCalledTimes(2);
+    expect(txStatements().join("\n")).not.toMatch(/UPDATE\s+tvmaze_pace/);
   });
 
   it("denies on slot saturation with a short poll hint", async () => {
-    mockExecuteOnce([acquireRow()]); // pace due, no cooldown, no slot -> saturated
+    mockAcquire({ leaseId: null }); // pace due, no cooldown, no slot -> saturated
 
     const decision = await tryAcquireSlot();
 
     expect(decision).toEqual({ admitted: false, retryAfterMs: 250 });
+    expect(txStatements().join("\n")).not.toMatch(/UPDATE\s+tvmaze_pace/);
   });
 
   it("denies while a 429 cooldown is active, hinting at its expiry", async () => {
-    mockExecuteOnce([
-      acquireRow({ cooldown_until: new Date(NOW.getTime() + 9_000).toISOString() }),
-    ]);
+    mockAcquire({
+      pace: paceRow({ cooldown_until: new Date(NOW.getTime() + 9_000).toISOString() }),
+    });
 
     const decision = await tryAcquireSlot();
 
@@ -115,70 +136,64 @@ describe("tryAcquireSlot", () => {
   });
 
   it("computes retry hints against the database clock, not the replica's", async () => {
-    // The statement returns db_now; the hint is next_admit_at - db_now.
+    // The lock returns db_now; the hint is next_admit_at - db_now.
     // A replica whose wall clock disagrees still waits the right amount.
-    mockExecuteOnce([
-      acquireRow({
+    mockAcquire({
+      pace: paceRow({
         next_admit_at: new Date(NOW.getTime() + 4_000).toISOString(),
         db_now: new Date(NOW.getTime() - 30_000).toISOString(), // db behind replica
       }),
-    ]);
+    });
 
     const decision = await tryAcquireSlot();
 
     expect(decision).toEqual({ admitted: false, retryAfterMs: 34000 });
   });
 
-  it("takes no clock argument — the gate never sees a replica timestamp", async () => {
-    mockExecuteOnce([acquireRow({ lease_id: "lease-1" })]);
+  it("modifies tvmaze_pace exactly once per acquisition", async () => {
+    mockAcquire({ leaseId: "lease-1" });
 
     await tryAcquireSlot();
 
-    expect(tryAcquireSlot.length).toBe(0);
-    // No bound parameter may be a Date: every timestamp in the gate comes
-    // from PostgreSQL now(). This is what makes the gate immune to
-    // replica wall-clock skew.
-    for (const param of boundParams()) {
-      expect(param).not.toBeInstanceOf(Date);
-    }
-    expect(executedSQL()).toContain("now()");
+    // Finding: the old single statement ran ON CONFLICT DO UPDATE and
+    // then updated the same row again — PostgreSQL applies only one of
+    // the two modifications, unreliably, so next_admit_at could silently
+    // stop advancing. The bootstrap is now a no-op DO NOTHING on
+    // conflict; the advance below is the single modification.
+    const paceUpdates = txStatements().filter((s) => /UPDATE\s+tvmaze_pace/.test(s));
+    expect(paceUpdates).toHaveLength(1);
+    expect(txStatements()[0]).toMatch(/ON CONFLICT \(id\) DO NOTHING/);
   });
 
-  it("bootstraps the pace row via upsert-RETURNING so a fresh DB admits", async () => {
-    mockExecuteOnce([acquireRow({ lease_id: "lease-1" })]);
+  it("locks the pace row before claiming a slot", async () => {
+    mockAcquire({ leaseId: "lease-1" });
 
-    const decision = await tryAcquireSlot();
+    await tryAcquireSlot();
 
-    // Finding: sibling data-modifying CTEs share one snapshot, so a plain
-    // SELECT can't see a row inserted by a sibling seed CTE — the first
-    // acquire on a fresh database was reported as a denial. The upsert's
-    // no-op DO UPDATE takes the row lock (serializing acquirers) and feeds
-    // RETURNING into the rest of the statement, so the row is always
-    // visible — fresh database or not.
-    const statement = executedSQL();
-    expect(statement).toMatch(/ON CONFLICT \(id\) DO UPDATE/);
-    expect(statement).toContain("RETURNING");
-    expect(statement).toContain("FROM ensured_pace");
-    expect(decision.admitted).toBe(true);
+    const lock = txStatements()[1];
+    expect(lock).toContain("FROM tvmaze_pace");
+    expect(lock).toContain("FOR UPDATE");
+    expect(lock).toContain("now() AS db_now");
   });
 
   it("claims a fixed slot row atomically — never count-then-insert", async () => {
-    mockExecuteOnce([acquireRow({ lease_id: "lease-9" })]);
+    mockAcquire({ leaseId: "lease-9" });
 
     await tryAcquireSlot();
 
     // Finding: PostgreSQL evaluates one statement against one MVCC
     // snapshot, so counting live leases then inserting is racy — two
     // concurrent acquirers can both see "3 live" and admit a fifth. The
-    // claim must be a single atomic row update.
-    const statement = executedSQL();
-    expect(statement).toContain("UPDATE tvmaze_slots");
-    expect(statement).toContain("FOR UPDATE SKIP LOCKED");
-    expect(statement).not.toMatch(/COUNT\s*\(/i);
+    // claim must be a single atomic row update, and inside the
+    // transaction the pace-row lock serializes the claimers.
+    const claim = txStatements()[2];
+    expect(claim).toContain("UPDATE tvmaze_slots");
+    expect(claim).toContain("FOR UPDATE SKIP LOCKED");
+    expect(claim).not.toMatch(/COUNT\s*\(/i);
   });
 
   it("reclaims expired slots so crashed holders recover", async () => {
-    mockExecuteOnce([acquireRow({ lease_id: "lease-9" })]);
+    mockAcquire({ leaseId: "lease-9" });
 
     await tryAcquireSlot();
 
@@ -186,38 +201,57 @@ describe("tryAcquireSlot", () => {
     // this is what reclaims slots from crashed replicas instead of
     // leaking them forever. Expiry is measured against the database
     // clock, so a skewed replica can't expire live slots early.
-    const statement = executedSQL();
-    expect(statement).toContain("acquired_at < now()");
-    expect(statement).toContain("FOR UPDATE");
+    const claim = txStatements()[2];
+    expect(claim).toContain("acquired_at < now()");
+    expect(claim).toContain("FOR UPDATE");
   });
 
   it("advances the pace timestamp monotonically", async () => {
-    mockExecuteOnce([acquireRow({ lease_id: "lease-3" })]);
+    mockAcquire({ leaseId: "lease-3" });
 
     await tryAcquireSlot();
 
-    // A stale statement timestamp must never move next_admit_at backwards
-    // (e.g. when the row lock waited across a pace interval).
-    expect(executedSQL()).toContain("GREATEST(next_admit_at");
+    // A stale lock wait must never move next_admit_at backwards.
+    expect(txStatements()[3]).toContain("GREATEST(next_admit_at");
+  });
+
+  it("takes no clock argument — the gate never sees a replica timestamp", async () => {
+    mockAcquire({ leaseId: "lease-1" });
+
+    await tryAcquireSlot();
+
+    expect(tryAcquireSlot.length).toBe(0);
+    // No bound parameter may be a Date: every timestamp in the gate comes
+    // from PostgreSQL now(). This is what makes the gate immune to
+    // replica wall-clock skew.
+    for (const param of txParams()) {
+      expect(param).not.toBeInstanceOf(Date);
+    }
+    expect(txStatements().join("\n")).toContain("now()");
   });
 });
 
 describe("ensureTvmazeGateSeeded", () => {
   it("seeds the pace row and one fixed row per concurrency slot", async () => {
+    (db.execute as any).mockResolvedValue({ rows: [] });
+
     await ensureTvmazeGateSeeded();
 
     expect(db.execute).toHaveBeenCalledTimes(2);
-    const paceSQL = executedSQL(0);
+    const calls = (db.execute as any).mock.calls.map(([q]: any[]) => sqlText(q));
+    const paceSQL = calls[0];
     expect(paceSQL).toContain("INSERT INTO tvmaze_pace");
     expect(paceSQL).toContain("ON CONFLICT (id) DO NOTHING");
-    const slotsSQL = executedSQL(1);
+    const slotsSQL = calls[1];
     expect(slotsSQL).toContain("INSERT INTO tvmaze_slots");
     for (let i = 0; i < TVMAZE_MAX_CONCURRENT; i++) {
       expect(slotsSQL).toContain(`(${i})`);
     }
     expect(slotsSQL).toContain("ON CONFLICT (slot) DO NOTHING");
     // Idempotent: safe to run on every replica boot.
-    for (const param of [...boundParams(0), ...boundParams(1)]) {
+    for (const param of (db.execute as any).mock.calls.flatMap(([q]: any[]) =>
+      sqlParams(q),
+    )) {
       expect(param).not.toBeInstanceOf(Date);
     }
   });
@@ -235,20 +269,48 @@ describe("releaseSlot", () => {
 
 describe("setPaceCooldown", () => {
   it("anchors the cooldown to the database clock, keeping the longest", async () => {
+    (db.execute as any).mockResolvedValue({ rows: [] });
+
     await setPaceCooldown(30);
 
     expect(db.execute).toHaveBeenCalledTimes(1);
-    const statement = executedSQL();
+    const statement = sqlText((db.execute as any).mock.calls[0][0]);
     // Finding: the cooldown was derived from the handling replica's
     // clock — a replica behind the database reopened the shared gate
     // early. now() + interval is a single clock source with acquisition.
     expect(statement).toContain("now() + make_interval");
     expect(statement).toContain("GREATEST(");
     expect(statement).toContain("EXCLUDED.cooldown_until");
-    for (const param of boundParams()) {
+    for (const param of sqlParams((db.execute as any).mock.calls[0][0])) {
       expect(param).not.toBeInstanceOf(Date);
     }
     expect(db.insert).not.toHaveBeenCalled();
+  });
+});
+
+describe("setPaceCooldownUntil", () => {
+  it("stores the absolute instant against the database clock, keeping the longest", async () => {
+    (db.execute as any).mockResolvedValue({ rows: [] });
+    const instant = new Date("2026-06-01T12:00:00Z");
+
+    await setPaceCooldownUntil(instant);
+
+    expect(db.execute).toHaveBeenCalledTimes(1);
+    const statement = sqlText((db.execute as any).mock.calls[0][0]);
+    // Finding: the HTTP-date instant was converted to seconds against the
+    // replica's clock before setPaceCooldown anchored it — a replica
+    // ahead shortened the delay and the gate reopened early. SQL compares
+    // the instant itself against now().
+    expect(statement).toContain("GREATEST(");
+    expect(statement).toContain("now()");
+    expect(statement).toContain("EXCLUDED.cooldown_until");
+    const params = sqlParams((db.execute as any).mock.calls[0][0]);
+    // The instant binds as an ISO string, not a Date: it is TVMaze's
+    // stated instant, not a replica clock reading.
+    expect(params).toContain(instant.toISOString());
+    for (const param of params) {
+      expect(param).not.toBeInstanceOf(Date);
+    }
   });
 });
 

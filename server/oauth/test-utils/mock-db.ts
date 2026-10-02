@@ -51,11 +51,18 @@ export const db = {
   update: mockMethod(),
   delete: mockMethod(),
   execute: mockMethod(),
+  // Wired per test file: must invoke its callback with a tx double.
+  transaction: vi.fn(),
 };
 
 export function resetDbMocks(): void {
-  for (const method of Object.values(db)) {
+  for (const [name, method] of Object.entries(db)) {
     method.mockClear();
-    method.mockImplementation((..._args: unknown[]) => chainable());
+    // transaction is exempt: the default chainable would swallow the
+    // callback instead of running it. Each test file sets its own
+    // implementation after resetDbMocks().
+    if (name !== "transaction") {
+      method.mockImplementation((..._args: unknown[]) => chainable());
+    }
   }
 }
