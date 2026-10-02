@@ -1,13 +1,11 @@
-// Public TVMaze client (issue #5): every outbound api.tvmaze.com call from
-// the sync jobs and the MCP catalog_search proxy goes through here.
-//
-// No durable queue: tvmazeFetch admits through the shared Postgres pace
-// gate (rate + concurrency) and fetches directly. On denial it sleeps with
-// jitter until the retry hint or the caller's timeout — synchronous from
-// the caller's perspective, never a ticket to poll. Throws
-// TvmazePaceTimeout when the budget runs out (MCP tools turn that into 429
-// + retry hint) or TvmazeRequestFailed after repeated transport failures.
-// GET 200s are served from a short in-memory cache.
+// Public TVMaze client (issue #5): every outbound api.tvmaze.com call
+// from the sync jobs and the MCP catalog_search proxy goes through here.
+// tvmazeFetch admits through the shared Postgres pace gate (rate +
+// concurrency) and fetches directly; on denial it sleeps with jitter
+// until the retry hint or the caller's timeout. Throws TvmazePaceTimeout
+// when the budget runs out (MCP turns it into 429 + retry hint) or
+// TvmazeRequestFailed after repeated transport failures. GET 200s are
+// served from a short in-memory cache.
 
 import { getCachedResponse, putCachedResponse } from "./cache";
 import { tryAcquireSlot, releaseSlot, setPaceCooldown, setPaceCooldownUntil } from "./pace";
@@ -39,12 +37,9 @@ export class TvmazeRequestFailed extends Error {
 export interface TvmazeFetchOptions {
   /** How long the caller waits for a pace slot. Default: MCP budget. */
   timeoutMs?: number;
-  /**
-   * Skip the in-memory GET cache for both reads and writes. Use for
-   * callers with their own freshness window (e.g. the new-releases
-   * schedule, which refetches every 10 minutes) so a forced refresh
-   * actually reaches TVMaze instead of replaying a 60-minute entry.
-   */
+  /** Skip the in-memory GET cache for reads and writes. Use for callers
+   *  with their own freshness window (e.g. the new-releases schedule) so
+   *  a forced refresh reaches TVMaze instead of replaying a stale entry. */
   bypassCache?: boolean;
 }
 
@@ -57,10 +52,9 @@ function sleep(ms: number): Promise<void> {
 }
 
 /**
- * Parse the delta-seconds form of Retry-After. Returns null for the
- * HTTP-date form (use parseRetryAfterInstant) and for missing or
- * unparsable values. The delay is anchored to the database clock by
- * setPaceCooldown — no replica clock enters it.
+ * Delta-seconds Retry-After only; null for the HTTP-date form (use
+ * parseRetryAfterInstant), missing, or unparsable values. The delay is
+ * anchored to the database clock by setPaceCooldown.
  */
 export function parseRetryAfter(value: string | null): number | null {
   if (!value) return null;
@@ -70,14 +64,11 @@ export function parseRetryAfter(value: string | null): number | null {
 }
 
 /**
- * Parse the HTTP-date form of Retry-After to its absolute instant.
- * Returns null for the delta-seconds form (use parseRetryAfter) and for
- * missing or unparsable values. The instant — not seconds derived from
- * the replica clock — is what setPaceCooldownUntil stores against the
- * database clock, so replica skew can't shorten the cooldown. Absurd
- * futures clamp to the anomaly bound; the clamp is measured against the
- * replica clock, but that only bounds the safety valve, never the
- * stored value.
+ * HTTP-date Retry-After to its absolute instant; null for delta-seconds
+ * (use parseRetryAfter), missing, or unparsable values. The instant —
+ * not seconds derived from the replica clock — is stored against the
+ * database clock by setPaceCooldownUntil, so skew can't shorten it.
+ * Absurd futures clamp to the bound (a safety valve, not the value).
  */
 export function parseRetryAfterInstant(value: string | null): Date | null {
   if (!value) return null;
@@ -152,8 +143,7 @@ export async function tvmazeFetch(
     logEvent("admit", { url, leaseId: slot.leaseId });
     const leaseId = slot.leaseId;
     try {
-      // The caller deadline binds admitted attempts too: a transport
-      // retry loop must not outlive the caller's budget, and each fetch is
+      // The caller deadline binds admitted attempts too: each fetch is
       // capped at the remaining budget rather than the full 15s — an 8s
       // catalog_search budget blocks ~8s, not ~45s.
       const remaining = deadline - Date.now();
@@ -169,11 +159,10 @@ export async function tvmazeFetch(
       });
       const body = await res.text();
       if (res.status === 429) {
-        // Backstop: honor Retry-After, then loop back — the cooldown denial
-        // below sleeps for it. Bounded by the caller's deadline. The
-        // HTTP-date form keeps its absolute instant (compared against the
-        // database clock in SQL); the delta-seconds form is anchored to the
-        // database clock by setPaceCooldown. Neither trusts the replica's.
+        // Honor Retry-After, then loop back — the cooldown denial below
+        // sleeps for it. HTTP-date keeps its absolute instant (compared
+        // against the DB clock in SQL); delta-seconds is anchored by
+        // setPaceCooldown. Neither trusts the replica clock.
         const raw = res.headers.get("retry-after");
         const instant = parseRetryAfterInstant(raw);
         if (instant) {
