@@ -75,7 +75,8 @@ async function fetchScheduleForDate(date: string, isWeb: boolean = false): Promi
       ? `https://api.tvmaze.com/schedule/web?date=${date}`
       : `https://api.tvmaze.com/schedule?date=${date}`;
     
-    const response = await tvmazeFetch(endpoint, undefined, { timeoutMs: TVMAZE_SYNC_TIMEOUT_MS });
+    const response = await tvmazeFetch(endpoint, undefined, {
+      timeoutMs: TVMAZE_SYNC_TIMEOUT_MS, bypassCache: true });
     if (!response.ok) return [];
     
     return await response.json();

@@ -39,6 +39,13 @@ export class TvmazeRequestFailed extends Error {
 export interface TvmazeFetchOptions {
   /** How long the caller waits for a pace slot. Default: MCP budget. */
   timeoutMs?: number;
+  /**
+   * Skip the in-memory GET cache for both reads and writes. Use for
+   * callers with their own freshness window (e.g. the new-releases
+   * schedule, which refetches every 10 minutes) so a forced refresh
+   * actually reaches TVMaze instead of replaying a 60-minute entry.
+   */
+  bypassCache?: boolean;
 }
 
 function logEvent(event: string, fields: Record<string, unknown> = {}): void {
@@ -85,10 +92,11 @@ export async function tvmazeFetch(
   const timeoutMs = opts?.timeoutMs ?? TVMAZE_MCP_TIMEOUT_MS;
   const deadline = Date.now() + timeoutMs;
   const method = init?.method ?? "GET";
+  const useCache = method === "GET" && !opts?.bypassCache;
   const headers: Record<string, string> = { "User-Agent": TVMAZE_USER_AGENT };
   if (init?.headers) new Headers(init.headers).forEach((v, k) => { headers[k] = v; });
 
-  if (method === "GET") {
+  if (useCache) {
     const cached = getCachedResponse(url);
     if (cached) {
       logEvent("cache_hit", { url });
@@ -116,11 +124,20 @@ export async function tvmazeFetch(
     logEvent("admit", { url, leaseId: slot.leaseId });
     const leaseId = slot.leaseId;
     try {
+      // The caller deadline binds admitted attempts too: a transport
+      // retry loop must not outlive the caller's budget, and each fetch is
+      // capped at the remaining budget rather than the full 15s — an 8s
+      // catalog_search budget blocks ~8s, not ~45s.
+      const remaining = deadline - Date.now();
+      if (remaining <= 0) {
+        logEvent("timeout", { url, waitedMs: timeoutMs });
+        throw new TvmazePaceTimeout(1);
+      }
       const res = await fetch(url, {
         method,
         headers,
         body: typeof init?.body === "string" ? init.body : undefined,
-        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+        signal: AbortSignal.timeout(Math.min(FETCH_TIMEOUT_MS, remaining)),
       });
       const body = await res.text();
       if (res.status === 429) {
@@ -131,9 +148,17 @@ export async function tvmazeFetch(
         logEvent("cooldown", { url, retryAfterSec });
         continue;
       }
-      if (method === "GET" && res.status === 200) putCachedResponse(url, 200, body);
+      if (useCache && res.status === 200) putCachedResponse(url, 200, body);
       return new Response(body, { status: res.status });
     } catch (error) {
+      // A pace timeout is terminal — never converted into a retry.
+      if (error instanceof TvmazePaceTimeout) throw error;
+      // A fetch aborted because the caller's budget ran out is a timeout,
+      // not a transport failure.
+      if (Date.now() >= deadline) {
+        logEvent("timeout", { url, waitedMs: timeoutMs });
+        throw new TvmazePaceTimeout(1);
+      }
       attempts += 1;
       const detail = error instanceof Error ? error.message : String(error);
       if (attempts >= MAX_ATTEMPTS) {
