@@ -1,38 +1,40 @@
 // Shared TVMaze pace gate (issue #5): the distributed coordination point
-// for the app's single outbound IP.
+// for the app's single outbound IP (20 calls / 10s, shared by all users
+// and sync jobs). One Postgres row (id = 'tvmaze') carries the earliest
+// time the next call may go out; concurrency slots are fixed rows in
+// tvmaze_slots, claimed atomically.
 //
-// TVMaze allows at least 20 calls per 10 seconds per IP, shared by all
-// users and the sync jobs. One Postgres row (id = 'tvmaze') carries the
-// earliest time the next call may go out; concurrency slots are fixed rows
-// in tvmaze_slots, claimed atomically (see below).
+// Two limits, one atomic statement: each admission advances nextAdmitAt by
+// 10s/18 (even spacing; no 10s interval ever sees more than 18), and at
+// most 4 upstream calls run in flight (simultaneous starts can 429 even
+// inside the rate budget).
 //
-// Two limits, one atomic statement:
-// - rate: each admission advances nextAdmitAt by 10s/18, so calls are evenly
-//   spaced and no 10-second interval — aligned with TVMaze's limiter or
-//   not — ever sees more than 18;
-// - concurrency: at most 4 upstream calls in flight, because simultaneous
-//   starts can trip a 429 even inside the rate budget.
+// One clock: every timestamp comes from PostgreSQL now(), never a
+// replica's wall clock — ~556 ms of skew breaks the spacing guarantee,
+// larger skew expires live slots early or reopens a 429 cooldown early.
+// The statement returns the database timestamp for retry-hint arithmetic.
 //
-// Why fixed slot rows instead of counting live leases: PostgreSQL
-// evaluates one statement against one MVCC snapshot. A count-then-insert
-// lets two concurrent acquirers both see "3 live" and both insert a 4th
-// lease — the fifth lease slips through. Claiming a fixed row with
-// FOR UPDATE SKIP LOCKED is atomic per row: a concurrent claimer either
-// sees the row locked (skips it) or sees the committed claim on lock
-// re-check (EvalPlanQual filters it out). The cap holds under contention.
+// Fixed slot rows, not count-then-insert: one statement sees one MVCC
+// snapshot, so two acquirers could both see "3 live" and admit a fifth.
+// Claiming a fixed row with FOR UPDATE SKIP LOCKED is atomic per row
+// (a concurrent claimer sees the lock and skips, or EvalPlanQual filters
+// the committed claim on re-check).
 //
-// Crash safety: a slot is data, not a lock. If a replica dies mid-call its
-// slot's acquired_at ages past the TTL and the next acquire reclaims it —
-// a slot can never leak permanently. The pace-row lock serializes the pace
-// advance; losers change nothing and get a retry hint.
+// Bootstrap: the pace row is created by an upsert whose no-op
+// ON CONFLICT DO UPDATE takes the row lock and feeds RETURNING into the
+// rest of the statement — the first acquire on a fresh database admits
+// instead of reading nulls through the sibling-CTE visibility gap. Slot
+// rows can't bootstrap this way (the claim scans the table, which can't
+// see a sibling insert), so ensureTvmazeGateSeeded() runs at startup as
+// the explicit deployment contract.
 //
-// A denied caller reads the hint and waits; the caller stays synchronous
-// with its own timeout. A 429 from TVMaze sets a cooldown as the backstop;
-// concurrent 429s keep the longest cooldown.
+// Crash safety: a dead replica's slot ages past the TTL and is reclaimed —
+// slots never leak permanently. A 429 sets a cooldown backstop; concurrent
+// 429s keep the longest.
 
 import { eq, sql } from "drizzle-orm";
 import { db } from "../db";
-import { tvmazePace, tvmazeSlots } from "@shared/schema";
+import { tvmazeSlots } from "@shared/schema";
 
 export const TVMAZE_PACE_WINDOW_MS = 10_000;
 export const TVMAZE_PACE_MAX = 18; // per window; under TVMaze's documented 20/10s
@@ -47,8 +49,7 @@ export const LEASE_TTL_SEC = 60;
 // timestamp to wait on — poll again soon instead of spinning.
 const CONCURRENCY_POLL_MS = 250;
 
-// Slot rows are fixed (0 .. TVMAZE_MAX_CONCURRENT - 1) and seeded by the
-// acquire statement itself.
+// Slot rows are fixed (0 .. TVMAZE_MAX_CONCURRENT - 1).
 const SLOT_SEED = sql.raw(
   Array.from({ length: TVMAZE_MAX_CONCURRENT }, (_, i) => `(${i})`).join(", "),
 );
@@ -64,48 +65,50 @@ interface AcquireRow {
   lease_id: string | null;
   next_admit_at: string;
   cooldown_until: string | null;
+  /** The database clock at statement time — the only clock the gate uses. */
+  db_now: string;
 }
 
 /**
  * Claim the next pace slot and a concurrency slot in ONE statement —
  * exactly one round trip, including on the deny path.
  *
- * The slot claim is a fixed-row UPDATE with FOR UPDATE SKIP LOCKED, so it
- * is atomic under replica contention: no MVCC snapshot race can admit a
- * fifth caller. The pace-row lock serializes the pace advance, and the
- * advance is monotonic (GREATEST), so a stale statement timestamp can
- * never move nextAdmitAt backwards.
+ * Every timestamp comes from PostgreSQL now(): no replica wall clock
+ * enters the gate, so clock skew between autoscaled replicas can't break
+ * spacing, expire live slots early, or reopen a cooldown early. The slot
+ * claim is a fixed-row UPDATE with FOR UPDATE SKIP LOCKED, so it is
+ * atomic under replica contention: no MVCC snapshot race can admit a
+ * fifth caller. The pace-row lock (via the upsert below) serializes the
+ * pace advance, and the advance is monotonic (GREATEST), so a stale
+ * statement timestamp can never move nextAdmitAt backwards.
  */
-export async function tryAcquireSlot(now: Date = new Date()): Promise<SlotDecision> {
+export async function tryAcquireSlot(): Promise<SlotDecision> {
   const result = await db.execute(sql`
     WITH ensured_pace AS (
       INSERT INTO tvmaze_pace (id, next_admit_at)
-      VALUES (${PACE_ROW_ID}, ${now})
-      ON CONFLICT (id) DO NOTHING
-    ),
-    ensured_slots AS (
-      INSERT INTO tvmaze_slots (slot)
-      VALUES ${SLOT_SEED}
-      ON CONFLICT (slot) DO NOTHING
+      VALUES (${PACE_ROW_ID}, now())
+      -- No-op update on conflict: takes the row lock (serializing
+      -- concurrent acquirers) and makes the row visible via RETURNING
+      -- even on a fresh database, where a sibling SELECT could not see
+      -- the just-inserted row.
+      ON CONFLICT (id) DO UPDATE SET next_admit_at = tvmaze_pace.next_admit_at
+      RETURNING next_admit_at, cooldown_until
     ),
     locked AS (
-      SELECT next_admit_at, cooldown_until
-      FROM tvmaze_pace
-      WHERE id = ${PACE_ROW_ID}
-      FOR UPDATE
+      SELECT next_admit_at, cooldown_until FROM ensured_pace
     ),
     claimed AS (
       UPDATE tvmaze_slots AS s
       SET lease_id = gen_random_uuid(),
-          acquired_at = ${now}
+          acquired_at = now()
       FROM locked AS l
-      WHERE l.next_admit_at <= ${now}
-        AND (l.cooldown_until IS NULL OR l.cooldown_until <= ${now})
+      WHERE l.next_admit_at <= now()
+        AND (l.cooldown_until IS NULL OR l.cooldown_until <= now())
         AND s.slot = (
           SELECT slot
           FROM tvmaze_slots
           WHERE lease_id IS NULL
-             OR acquired_at < ${now} - make_interval(secs => ${LEASE_TTL_SEC})
+             OR acquired_at < now() - make_interval(secs => ${LEASE_TTL_SEC})
           ORDER BY slot
           LIMIT 1
           FOR UPDATE SKIP LOCKED
@@ -115,27 +118,47 @@ export async function tryAcquireSlot(now: Date = new Date()): Promise<SlotDecisi
     advanced AS (
       UPDATE tvmaze_pace
       SET next_admit_at =
-        GREATEST(next_admit_at, ${now}) + make_interval(secs => ${TVMAZE_PACE_INTERVAL_MS / 1000})
+        GREATEST(next_admit_at, now()) + make_interval(secs => ${TVMAZE_PACE_INTERVAL_MS / 1000})
       WHERE id = ${PACE_ROW_ID} AND EXISTS (SELECT 1 FROM claimed)
     )
     SELECT
       (SELECT lease_id FROM claimed) AS lease_id,
       (SELECT next_admit_at FROM locked) AS next_admit_at,
-      (SELECT cooldown_until FROM locked) AS cooldown_until
+      (SELECT cooldown_until FROM locked) AS cooldown_until,
+      now() AS db_now
   `);
   const row = (result.rows as unknown as AcquireRow[])[0];
   if (row.lease_id) return { admitted: true, retryAfterMs: 0, leaseId: row.lease_id };
-  const nextAdmitAt = new Date(row.next_admit_at);
-  const nextMs = nextAdmitAt > now ? nextAdmitAt.getTime() - now.getTime() : 0;
-  const cooldownUntil = row.cooldown_until ? new Date(row.cooldown_until) : null;
-  const coolMs =
-    cooldownUntil && cooldownUntil > now ? cooldownUntil.getTime() - now.getTime() : 0;
+  // Retry hints are computed against the database clock, not the replica's.
+  const dbNow = new Date(row.db_now).getTime();
+  const nextMs = Math.max(0, new Date(row.next_admit_at).getTime() - dbNow);
+  const coolMs = row.cooldown_until
+    ? Math.max(0, new Date(row.cooldown_until).getTime() - dbNow)
+    : 0;
   // Pace due and no active cooldown means the slot cap was the blocker.
   const concurrencyBlocked = nextMs === 0 && coolMs === 0;
   return {
     admitted: false,
     retryAfterMs: concurrencyBlocked ? CONCURRENCY_POLL_MS : Math.max(nextMs, coolMs),
   };
+}
+
+/**
+ * Seed the gate rows. Idempotent — safe to run on every replica boot.
+ * The acquire statement self-seeds as a fallback, but the explicit
+ * deployment contract is: tables exist (db:push) and this has run.
+ */
+export async function ensureTvmazeGateSeeded(): Promise<void> {
+  await db.execute(sql`
+    INSERT INTO tvmaze_pace (id, next_admit_at)
+    VALUES (${PACE_ROW_ID}, now())
+    ON CONFLICT (id) DO NOTHING
+  `);
+  await db.execute(sql`
+    INSERT INTO tvmaze_slots (slot)
+    VALUES ${SLOT_SEED}
+    ON CONFLICT (slot) DO NOTHING
+  `);
 }
 
 /**
@@ -151,17 +174,19 @@ export async function releaseSlot(leaseId: string): Promise<void> {
 
 /**
  * Backstop: TVMaze answered 429 — admit nothing until the cooldown lapses.
- * Concurrent 429s keep the longest cooldown; a shorter Retry-After never
- * clobbers it. (GREATEST alone would return NULL when no cooldown exists,
- * hence the COALESCE.)
+ * The cooldown is anchored to the database clock (now() + interval), never
+ * the handling replica's: a replica behind the database can't reopen the
+ * shared gate early. Concurrent 429s keep the longest cooldown; a shorter
+ * Retry-After never clobbers it.
  */
-export async function setPaceCooldown(retryAfterSec: number, now: Date = new Date()): Promise<void> {
-  const until = new Date(now.getTime() + retryAfterSec * 1000);
-  await db
-    .insert(tvmazePace)
-    .values({ id: PACE_ROW_ID, nextAdmitAt: now, cooldownUntil: until })
-    .onConflictDoUpdate({
-      target: tvmazePace.id,
-      set: { cooldownUntil: sql`GREATEST(COALESCE(${tvmazePace.cooldownUntil}, ${until}), ${until})` },
-    });
+export async function setPaceCooldown(retryAfterSec: number): Promise<void> {
+  await db.execute(sql`
+    INSERT INTO tvmaze_pace (id, next_admit_at, cooldown_until)
+    VALUES (${PACE_ROW_ID}, now(), now() + make_interval(secs => ${retryAfterSec}))
+    ON CONFLICT (id) DO UPDATE SET
+      cooldown_until = GREATEST(
+        COALESCE(tvmaze_pace.cooldown_until, now()),
+        EXCLUDED.cooldown_until
+      )
+  `);
 }
