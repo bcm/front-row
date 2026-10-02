@@ -360,6 +360,22 @@ describe("setPaceCooldownUntil", () => {
     expect(sqlText(call)).toContain("make_interval");
     expect(sqlParams(call)).toContain(MAX_RETRY_AFTER_SEC);
   });
+
+  it("returns the stored cooldown on conflict, not just the proposal", async () => {
+    // Finding: on the conflict path GREATEST may keep a later stored
+    // cooldown, but RETURNING yielded only the proposal — the caller
+    // logged an incorrect retryAfterAt. RETURNING yields the row's final
+    // value, the cooldown actually stored.
+    const storedAt = "2026-06-01T12:30:00.000Z"; // later than the proposal
+    (db.execute as any).mockResolvedValue({ rows: [{ applied_at: storedAt }] });
+
+    const applied = await setPaceCooldownUntil(new Date("2026-06-01T12:00:00Z"));
+
+    expect(sqlText((db.execute as any).mock.calls[0][0])).toContain(
+      "RETURNING cooldown_until",
+    );
+    expect(applied.toISOString()).toBe(storedAt);
+  });
 });
 
 describe("lease TTL", () => {

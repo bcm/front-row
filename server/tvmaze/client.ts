@@ -43,9 +43,7 @@ export class TvmazeRequestFailed extends Error {
 export interface TvmazeFetchOptions {
   /** How long the caller waits for a pace slot. Default: MCP budget. */
   timeoutMs?: number;
-  /** Skip the in-memory GET cache for reads and writes. Use for callers
-   *  with their own freshness window (e.g. the new-releases schedule) so
-   *  a forced refresh reaches TVMaze instead of replaying a stale entry. */
+  /** Skip the in-memory GET cache (e.g. forced new-releases refresh). */
   bypassCache?: boolean;
 }
 
@@ -57,11 +55,7 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-/**
- * Delta-seconds Retry-After only; null for the HTTP-date form (use
- * parseRetryAfterInstant), missing, or unparsable values. The delay is
- * anchored to the database clock by setPaceCooldown.
- */
+/** Delta-seconds Retry-After; null for HTTP-date, missing, unparsable. */
 export function parseRetryAfter(value: string | null): number | null {
   if (!value) return null;
   const secs = Number(value);
@@ -69,12 +63,7 @@ export function parseRetryAfter(value: string | null): number | null {
   return clampRetryAfter(Math.floor(secs), value);
 }
 
-/**
- * HTTP-date Retry-After to its absolute instant; null for delta-seconds
- * (use parseRetryAfter), missing, or unparsable values. Preserved
- * untouched — setPaceCooldownUntil clamps against the database clock, so
- * replica skew can neither shorten nor stretch it.
- */
+/** HTTP-date Retry-After to its absolute instant; null otherwise. */
 export function parseRetryAfterInstant(value: string | null): Date | null {
   if (!value) return null;
   if (Number.isFinite(Number(value))) return null; // delta-seconds form
@@ -194,7 +183,18 @@ export async function tvmazeFetch(
       }
       logEvent("retry", { url, attempt: attempts, error: detail });
     } finally {
-      if (leaseId) await releaseSlot(leaseId);
+      // Best-effort: a release failure must never override the outcome.
+      if (leaseId) {
+        try {
+          await releaseSlot(leaseId);
+        } catch (error) {
+          logEvent("release_failed", {
+            url,
+            leaseId,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
     }
   }
 }

@@ -281,11 +281,19 @@ export const insertMcpRateLimitSchema = createInsertSchema(mcpRateLimits);
 
 // Shared TVMaze pace gate (issue #5): one row (id = 'tvmaze') holding the
 // earliest time the next call may go out. Concurrency slots are fixed rows
-// in tvmaze_slots (below), claimed atomically — never a counter or a
-// count-then-insert, so the cap holds under replica contention (PostgreSQL
-// evaluates one statement against one MVCC snapshot, which makes counting
-// live leases racy). A replica that dies holding a slot never releases it,
-// so slots expire and the acquire path reclaims them. The app's single
+// in tvmaze_slots (below), claimed per-row with FOR UPDATE SKIP LOCKED —
+// never a counter or a count-then-insert, so the cap holds under replica
+// contention. Acquisition runs as one explicit transaction
+// (server/tvmaze/pace.ts): INSERT ... ON CONFLICT DO NOTHING bootstraps
+// the row, SELECT ... FOR UPDATE takes the lock serializing acquirers,
+// the slot claim runs, then the pace advance — the pace row is modified
+// exactly once per acquisition (PostgreSQL forbids modifying one row
+// twice in a single statement). A replica that dies holding a slot never
+// releases it, so slots expire and the acquire path reclaims them. Every
+// timestamp in the gate comes from PostgreSQL: clock_timestamp() read
+// after the pace-row lock (now() is transaction-start, stale under
+// contention) — no replica wall clock, so skew can't break spacing,
+// expire live slots early, or reopen a cooldown early. The app's single
 // outbound IP is shared by all users and the sync jobs, and TVMaze allows
 // at least 20 calls per 10 seconds per IP. Each admission advances
 // nextAdmitAt by 10s/18, so calls are evenly spaced and no 10-second
@@ -301,13 +309,14 @@ export const tvmazePace = pgTable("tvmaze_pace", {
 // Crash-safe concurrency slots for the TVMaze pace gate. Fixed rows, one
 // per in-flight upstream call (slot 0 .. TVMAZE_MAX_CONCURRENT - 1). The
 // acquire path (server/tvmaze/pace.ts) claims a free-or-expired row with
-// FOR UPDATE SKIP LOCKED in the same statement that checks the pace gate,
-// so the cap is enforced atomically: concurrent acquirers can never both
-// take the last slot, even though each statement sees a single MVCC
-// snapshot. A slot held by a crashed replica ages out (acquired_at older
-// than the lease TTL) and becomes claimable again — a slot can never leak
-// permanently. Release clears the caller's own lease id; clearing another
-// caller's row is never correct (use expiry for that).
+// FOR UPDATE SKIP LOCKED inside the same explicit transaction that holds
+// the pace-row lock, so the cap is enforced atomically: a concurrent
+// claimer either skips the locked row or sees the committed claim — no
+// snapshot race can admit a fifth caller. A slot held by a crashed
+// replica ages out (acquired_at older than the lease TTL) and becomes
+// claimable again — a slot can never leak permanently. Release clears the
+// caller's own lease id; clearing another caller's row is never correct
+// (use expiry for that).
 export const tvmazeSlots = pgTable("tvmaze_slots", {
   slot: integer("slot").primaryKey(),
   leaseId: varchar("lease_id"), // set while a call holds the slot

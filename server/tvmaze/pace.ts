@@ -192,7 +192,9 @@ export async function setPaceCooldownUntil(instant: Date): Promise<Date> {
         COALESCE(tvmaze_pace.cooldown_until, now()),
         EXCLUDED.cooldown_until
       )
-    RETURNING ${clamped} AS applied_at
+    -- GREATEST may keep a later stored cooldown: return the row's final
+    -- value (the cooldown actually stored), not just the proposal.
+    RETURNING cooldown_until AS applied_at
   `)).rows as unknown as { applied_at: string }[];
   return new Date(rows[0].applied_at);
 }

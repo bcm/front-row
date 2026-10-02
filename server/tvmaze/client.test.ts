@@ -186,6 +186,37 @@ describe("tvmazeFetch", () => {
     expect(fetchMock).toHaveBeenCalledTimes(3);
     expect(releaseSlot).toHaveBeenCalledTimes(3);
   });
+
+  it("a release failure never overrides a successful response", async () => {
+    // Finding: a releaseSlot error in the finally block replaced an
+    // already-successful upstream response with a raw database failure.
+    // Release is best-effort (leases expire for crash safety): the
+    // failure is logged, the outcome stands.
+    vi.mocked(tryAcquireSlot).mockResolvedValue(admitted);
+    fetchMock.mockResolvedValue(okResponse());
+    vi.mocked(releaseSlot).mockRejectedValueOnce(new Error("db down"));
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    const res = await tvmazeFetch("https://api.tvmaze.com/shows/1");
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ok: true });
+    const events = logSpy.mock.calls.map(([line]) => JSON.parse(String(line)).event);
+    expect(events).toContain("release_failed");
+    logSpy.mockRestore();
+  });
+
+  it("a release failure never replaces a typed request error", async () => {
+    vi.mocked(tryAcquireSlot).mockResolvedValue(admitted);
+    fetchMock.mockRejectedValue(new Error("boom"));
+    vi.mocked(releaseSlot).mockRejectedValue(new Error("db down"));
+
+    const err = await tvmazeFetch("https://api.tvmaze.com/shows/1").catch((e) => e);
+
+    expect(err).toBeInstanceOf(TvmazeRequestFailed);
+    expect(err.message).toContain("boom");
+    expect(err.message).not.toContain("db down");
+  });
 });
 
 describe("parseRetryAfter", () => {
