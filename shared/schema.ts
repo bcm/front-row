@@ -279,6 +279,44 @@ export const mcpRateLimits = pgTable("mcp_rate_limits", {
 
 export const insertMcpRateLimitSchema = createInsertSchema(mcpRateLimits);
 
+// TVMaze paced queue (issue #5): the app's single outbound IP is shared by
+// all users and the sync jobs, and TVMaze allows at least 20 calls per 10
+// seconds per IP. Outbound calls enqueue here and a scheduled worker drains
+// them through the shared pace gate (tvmaze_pace). Same relay shape as the
+// planned outbox drain (#12): table + worker claiming rows with
+// SELECT ... FOR UPDATE SKIP LOCKED (see server/relay.ts).
+export const tvmazeQueue = pgTable("tvmaze_queue", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  method: text("method").notNull().default("GET"),
+  url: text("url").notNull(),
+  headers: jsonb("headers").$type<Record<string, string>>(),
+  body: text("body"),
+  status: text("status").notNull().default("queued"), // queued | claimed | done | failed
+  attempts: integer("attempts").notNull().default(0),
+  responseStatus: integer("response_status"),
+  responseBody: text("response_body"),
+  error: text("error"),
+  createdAt: timestamp("created_at").defaultNow(),
+  claimedAt: timestamp("claimed_at"),
+  completedAt: timestamp("completed_at"),
+}, (table) => ({
+  drainOrder: index("tvmaze_queue_drain_idx").on(table.status, table.createdAt),
+}));
+
+// Shared TVMaze pace gate: one row (id = 'tvmaze') holding the current
+// 10-second window. The drain worker admits through an atomic upsert so
+// autoscale replicas share a single budget.
+export const tvmazePace = pgTable("tvmaze_pace", {
+  id: text("id").primaryKey(), // always 'tvmaze'
+  windowStart: timestamp("window_start").notNull(),
+  count: integer("count").notNull().default(0),
+  cooldownUntil: timestamp("cooldown_until"), // set when TVMaze answers 429
+});
+
+export const insertTvmazeQueueSchema = createInsertSchema(tvmazeQueue).omit({
+  createdAt: true,
+});
+
 export const insertOauthClientSchema = createInsertSchema(oauthClients).omit({
   createdAt: true,
 });
@@ -340,6 +378,8 @@ export type InsertGroupMember = z.infer<typeof insertGroupMemberSchema>;
 export type GroupInvite = typeof groupInvites.$inferSelect;
 export type InsertGroupInvite = z.infer<typeof insertGroupInviteSchema>;
 export type McpRateLimit = typeof mcpRateLimits.$inferSelect;
+export type TvmazeQueueRow = typeof tvmazeQueue.$inferSelect;
+export type TvmazePaceRow = typeof tvmazePace.$inferSelect;
 export type InsertMcpRateLimit = z.infer<typeof insertMcpRateLimitSchema>;
 export type OauthClient = typeof oauthClients.$inferSelect;
 export type InsertOauthClient = z.infer<typeof insertOauthClientSchema>;

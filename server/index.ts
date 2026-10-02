@@ -4,6 +4,7 @@ import { setupVite, serveStatic, log } from "./vite";
 import { startEpisodeScheduler } from "./episode-scheduler";
 import { initializeRecommendationScheduler } from "./recommendation-scheduler";
 import { initNewReleasesScheduler } from "./new-releases-scheduler";
+import { startTvmazeDrainWorker } from "./tvmaze/worker";
 import { setupAuth, registerAuthRoutes } from "./replit_integrations/auth";
 import { registerOAuthRoutes } from "./oauth";
 import { registerMcpRoutes } from "./mcp";
@@ -84,4 +85,5 @@ app.use((req, res, next) => {
   startEpisodeScheduler();
   initializeRecommendationScheduler();
   initNewReleasesScheduler();
+  startTvmazeDrainWorker();
 })();

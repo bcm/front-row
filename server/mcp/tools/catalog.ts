@@ -10,6 +10,12 @@ import type { McpAuthContext } from "../../oauth/middleware";
 import { viewSchema, resolveView } from "../view";
 import { ok, err } from "../format";
 import { checkRateLimit, rateLimitKey } from "../rate-limit";
+import {
+  tvmazeFetch,
+  TvmazePaceTimeout,
+  TvmazeRequestFailed,
+  TVMAZE_MCP_TIMEOUT_MS,
+} from "../../tvmaze/client";
 
 interface TvmazeSearchHit {
   score: number;
@@ -30,7 +36,8 @@ export function registerCatalogTools(tools: ToolRegistrar, auth: McpAuthContext)
   tools.registerReadTool(
     "catalog_search",
     "Search the TVMaze catalog for shows to consider adding. Rate limited to 60 requests/hour per client. " +
-      "View-independent (the catalog is global); view is accepted for interface consistency and drives the in_library flag.",
+      "View-independent (the catalog is global); view is accepted for interface consistency and drives the in_library flag. " +
+      "TVMaze's shared per-IP pace sits behind this tool: it waits briefly for a pace slot, or answers 429 with a retry hint when saturated.",
     {
       view: viewSchema,
       query: z.string().min(1).describe("Show title to search for."),
@@ -42,38 +49,57 @@ export function registerCatalogTools(tools: ToolRegistrar, auth: McpAuthContext)
         return err(`catalog_search rate limit exceeded; retry in ${decision.retryAfterSec}s`);
       }
       const resolved = await resolveView(auth.userId, view);
-      const [response, libraryIds] = await Promise.all([
-        fetch(`https://api.tvmaze.com/search/shows?q=${encodeURIComponent(query)}`),
-        // Personal membership only: groupId == null, same as library_list.
-        // getUserShowIds alone would also match shows this user added to a group.
-        storage.getUserShows(auth.userId).then((rows) =>
-          rows
-            .filter((us) =>
-              !us.isRemoved &&
-              (resolved.view === "personal" ? us.groupId == null : resolved.groupIds.includes(us.groupId ?? ""))
-            )
-            .map((us) => us.showId)
-        ),
-      ]);
-      if (!response.ok) {
-        return err(`TVMaze catalog search failed (HTTP ${response.status})`);
+      let response: Response;
+      try {
+        const [tvmazeResponse, libraryIds] = await Promise.all([
+          // Paced queue (issue #5): the per-client budget above keeps one
+          // client from filling the line; the shared IP pace sits behind
+          // this call and stays synchronous with a timeout.
+          tvmazeFetch(`https://api.tvmaze.com/search/shows?q=${encodeURIComponent(query)}`, undefined, {
+            timeoutMs: TVMAZE_MCP_TIMEOUT_MS,
+          }),
+          // Personal membership only: groupId == null, same as library_list.
+          // getUserShowIds alone would also match shows this user added to a group.
+          storage.getUserShows(auth.userId).then((rows) =>
+            rows
+              .filter((us) =>
+                !us.isRemoved &&
+                (resolved.view === "personal" ? us.groupId == null : resolved.groupIds.includes(us.groupId ?? ""))
+              )
+              .map((us) => us.showId)
+          ),
+        ]);
+        response = tvmazeResponse;
+        const inLibrary = new Set(libraryIds);
+        if (!response.ok) {
+          return err(`TVMaze catalog search failed (HTTP ${response.status})`);
+        }
+        const hits = (await response.json()) as TvmazeSearchHit[];
+        return ok({
+          view,
+          results: hits.slice(0, limit ?? 5).map(({ score, show }) => ({
+            score,
+            tvmaze_id: show.id,
+            name: show.name,
+            status: show.status ?? null,
+            premiered: show.premiered ?? null,
+            network: show.network?.name ?? show.webChannel?.name ?? null,
+            genres: show.genres ?? [],
+            rating: show.rating?.average ?? null,
+            in_library: inLibrary.has(show.id),
+          })),
+        });
+      } catch (error) {
+        // The tool stays synchronous: on pace-timeout the agent gets a 429
+        // with a retry hint, never a ticket to poll.
+        if (error instanceof TvmazePaceTimeout) {
+          return err(`TVMaze is at its shared pace limit (HTTP 429); retry in ${error.retryAfterSec}s`);
+        }
+        if (error instanceof TvmazeRequestFailed) {
+          return err(`TVMaze catalog search failed: ${error.message}`);
+        }
+        throw error;
       }
-      const hits = (await response.json()) as TvmazeSearchHit[];
-      const inLibrary = new Set(libraryIds);
-      return ok({
-        view,
-        results: hits.slice(0, limit ?? 5).map(({ score, show }) => ({
-          score,
-          tvmaze_id: show.id,
-          name: show.name,
-          status: show.status ?? null,
-          premiered: show.premiered ?? null,
-          network: show.network?.name ?? show.webChannel?.name ?? null,
-          genres: show.genres ?? [],
-          rating: show.rating?.average ?? null,
-          in_library: inLibrary.has(show.id),
-        })),
-      });
     }
   );
 }
