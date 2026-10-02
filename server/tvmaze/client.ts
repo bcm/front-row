@@ -8,7 +8,13 @@
 // served from a short in-memory cache.
 
 import { getCachedResponse, putCachedResponse } from "./cache";
-import { tryAcquireSlot, releaseSlot, setPaceCooldown, setPaceCooldownUntil } from "./pace";
+import {
+  tryAcquireSlot,
+  releaseSlot,
+  setPaceCooldown,
+  setPaceCooldownUntil,
+  MAX_RETRY_AFTER_SEC,
+} from "./pace";
 
 export const TVMAZE_USER_AGENT = "FrontRow/1.0 (https://github.com/bcm/front-row)";
 export const TVMAZE_MCP_TIMEOUT_MS = 8_000;
@@ -65,33 +71,17 @@ export function parseRetryAfter(value: string | null): number | null {
 
 /**
  * HTTP-date Retry-After to its absolute instant; null for delta-seconds
- * (use parseRetryAfter), missing, or unparsable values. The instant —
- * not seconds derived from the replica clock — is stored against the
- * database clock by setPaceCooldownUntil, so skew can't shorten it.
- * Absurd futures clamp to the bound (a safety valve, not the value).
+ * (use parseRetryAfter), missing, or unparsable values. Preserved
+ * untouched — setPaceCooldownUntil clamps against the database clock, so
+ * replica skew can neither shorten nor stretch it.
  */
 export function parseRetryAfterInstant(value: string | null): Date | null {
   if (!value) return null;
   if (Number.isFinite(Number(value))) return null; // delta-seconds form
   const at = Date.parse(value);
   if (Number.isNaN(at)) return null;
-  const capped = Math.min(at, Date.now() + MAX_RETRY_AFTER_SEC * 1000);
-  if (capped !== at) {
-    logEvent("retry_after_clamped", {
-      raw: value,
-      requestedAt: new Date(at).toISOString(),
-      appliedAt: new Date(capped).toISOString(),
-    });
-  }
-  return new Date(capped);
+  return new Date(at);
 }
-
-// Anomaly bound on upstream backoff. TVMaze would never legitimately ask
-// for more than minutes, but a malformed or malicious header must not
-// block the shared gate indefinitely — there is no admin UI to clear it,
-// so the gate self-heals after this bound instead. Every realistic
-// backoff is honored exactly; only absurd values are clamped (with a log).
-const MAX_RETRY_AFTER_SEC = 3600;
 
 function clampRetryAfter(secs: number, raw: string): number {
   if (secs <= MAX_RETRY_AFTER_SEC) return secs;
@@ -124,18 +114,22 @@ export async function tvmazeFetch(
   }
 
   let attempts = 0;
+  let lastRetryAfterMs = 0;
   for (;;) {
+    // Deadline checked BEFORE each acquisition: a timed-out waiter must
+    // never consume a shared admission it can't use.
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) {
+      logEvent("timeout", { url, waitedMs: timeoutMs });
+      throw new TvmazePaceTimeout(Math.max(1, Math.ceil(lastRetryAfterMs / 1000)));
+    }
     const slot = await tryAcquireSlot();
     if (!slot.admitted) {
-      const remaining = deadline - Date.now();
+      lastRetryAfterMs = slot.retryAfterMs;
       const waitMs = Math.min(
         slot.retryAfterMs + Math.floor(Math.random() * RETRY_JITTER_MS),
         remaining,
       );
-      if (waitMs <= 0) {
-        logEvent("timeout", { url, waitedMs: timeoutMs });
-        throw new TvmazePaceTimeout(Math.max(1, Math.ceil(slot.retryAfterMs / 1000)));
-      }
       logEvent("deny", { url, retryAfterMs: slot.retryAfterMs });
       await sleep(waitMs);
       continue;
@@ -143,11 +137,11 @@ export async function tvmazeFetch(
     logEvent("admit", { url, leaseId: slot.leaseId });
     const leaseId = slot.leaseId;
     try {
-      // The caller deadline binds admitted attempts too: each fetch is
-      // capped at the remaining budget rather than the full 15s — an 8s
-      // catalog_search budget blocks ~8s, not ~45s.
-      const remaining = deadline - Date.now();
-      if (remaining <= 0) {
+      // Deadline also binds admitted attempts (re-checked for the race
+      // where it falls inside tryAcquireSlot()): each fetch is capped at
+      // the remaining budget, not the full 15s.
+      const postAcquireRemaining = deadline - Date.now();
+      if (postAcquireRemaining <= 0) {
         logEvent("timeout", { url, waitedMs: timeoutMs });
         throw new TvmazePaceTimeout(1);
       }
@@ -155,19 +149,25 @@ export async function tvmazeFetch(
         method,
         headers,
         body: typeof init?.body === "string" ? init.body : undefined,
-        signal: AbortSignal.timeout(Math.min(FETCH_TIMEOUT_MS, remaining)),
+        signal: AbortSignal.timeout(Math.min(FETCH_TIMEOUT_MS, postAcquireRemaining)),
       });
       const body = await res.text();
       if (res.status === 429) {
-        // Honor Retry-After, then loop back — the cooldown denial below
-        // sleeps for it. HTTP-date keeps its absolute instant (compared
-        // against the DB clock in SQL); delta-seconds is anchored by
-        // setPaceCooldown. Neither trusts the replica clock.
+        // Honor Retry-After, then loop back — the cooldown denial sleeps
+        // for it. HTTP-date keeps its absolute instant (DB clock in SQL);
+        // delta-seconds is anchored by setPaceCooldown.
         const raw = res.headers.get("retry-after");
         const instant = parseRetryAfterInstant(raw);
         if (instant) {
-          await setPaceCooldownUntil(instant);
-          logEvent("cooldown", { url, retryAfterAt: instant.toISOString() });
+          const applied = await setPaceCooldownUntil(instant);
+          if (applied.getTime() < instant.getTime()) {
+            logEvent("retry_after_clamped", {
+              raw,
+              requestedAt: instant.toISOString(),
+              appliedAt: applied.toISOString(),
+            });
+          }
+          logEvent("cooldown", { url, retryAfterAt: applied.toISOString() });
         } else {
           const retryAfterSec = parseRetryAfter(raw) ?? 5;
           await setPaceCooldown(retryAfterSec);

@@ -8,7 +8,10 @@ vi.mock("./pace", () => ({
   tryAcquireSlot: vi.fn(),
   releaseSlot: vi.fn(),
   setPaceCooldown: vi.fn(),
-  setPaceCooldownUntil: vi.fn(),
+  // Echo the requested instant: the real one returns the DB-applied
+  // instant, which equals the input when the anomaly bound doesn't bite.
+  setPaceCooldownUntil: vi.fn(async (d: Date) => d),
+  MAX_RETRY_AFTER_SEC: 3600,
 }));
 
 import {
@@ -28,7 +31,9 @@ beforeEach(() => {
   vi.mocked(tryAcquireSlot).mockReset();
   vi.mocked(releaseSlot).mockReset();
   vi.mocked(setPaceCooldown).mockReset();
-  vi.mocked(setPaceCooldownUntil).mockReset();
+  // mockClear, not reset: keep the echo implementation (input instant is
+  // the DB-applied one when the anomaly bound doesn't bite).
+  vi.mocked(setPaceCooldownUntil).mockClear();
   fetchMock.mockReset();
 });
 
@@ -145,6 +150,31 @@ describe("tvmazeFetch", () => {
     expect(res.status).toBe(200);
   });
 
+  it("logs when the database clamps an anomalous HTTP-date", async () => {
+    vi.mocked(tryAcquireSlot).mockResolvedValue(admitted);
+    const at = atSecond(Date.now() + 2 * 3_600_000);
+    const appliedAt = atSecond(Date.now() + 3_600_000);
+    vi.mocked(setPaceCooldownUntil).mockResolvedValueOnce(appliedAt);
+    fetchMock
+      .mockResolvedValueOnce(
+        new Response("slow down", {
+          status: 429,
+          headers: { "retry-after": at.toUTCString() },
+        }),
+      )
+      .mockResolvedValueOnce(okResponse());
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    await tvmazeFetch("https://api.tvmaze.com/shows/1");
+
+    // The 1h LEAST bound is evaluated against PostgreSQL now() inside
+    // setPaceCooldownUntil; the client only reports when it bit.
+    const events = logSpy.mock.calls.map(([line]) => JSON.parse(String(line)).event);
+    expect(events).toContain("retry_after_clamped");
+    expect(events).toContain("cooldown");
+    logSpy.mockRestore();
+  });
+
   it("throws TvmazeRequestFailed after repeated transport failures", async () => {
     vi.mocked(tryAcquireSlot).mockResolvedValue(admitted);
     fetchMock.mockRejectedValue(new Error("boom"));
@@ -204,12 +234,14 @@ describe("parseRetryAfterInstant", () => {
     expect(parseRetryAfterInstant("not-a-time")).toBeNull();
   });
 
-  it("clamps absurd futures to the anomaly bound", () => {
+  it("preserves absurd futures untouched — the anomaly bound lives in SQL", () => {
+    // Finding: the 1h clamp used the replica clock (Date.now()) — a
+    // replica behind the database shortened a valid cooldown, one ahead
+    // stretched an anomalous one past a database hour. Parsing now
+    // preserves the instant; setPaceCooldownUntil applies LEAST against
+    // PostgreSQL now().
     const twoHours = new Date(Date.now() + 2 * 3_600_000).toUTCString();
-    const instant = parseRetryAfterInstant(twoHours)!;
-    const bound = Date.now() + 3_600_000;
-    expect(instant.getTime()).toBeGreaterThan(bound - 5_000);
-    expect(instant.getTime()).toBeLessThanOrEqual(bound);
+    expect(parseRetryAfterInstant(twoHours)!.getTime()).toBe(Date.parse(twoHours));
   });
 
   it("does not shorten the instant when the replica clock is ahead", () => {

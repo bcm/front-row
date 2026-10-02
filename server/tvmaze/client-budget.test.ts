@@ -9,6 +9,7 @@ vi.mock("./pace", () => ({
   releaseSlot: vi.fn(),
   setPaceCooldown: vi.fn(),
   setPaceCooldownUntil: vi.fn(),
+  MAX_RETRY_AFTER_SEC: 3600,
 }));
 
 import { tvmazeFetch, TvmazePaceTimeout } from "./client";
@@ -47,7 +48,7 @@ describe("caller deadline on admitted attempts", () => {
     expect(capped).toBeLessThanOrEqual(8000);
   });
 
-  it("throws TvmazePaceTimeout when admitted after the deadline", async () => {
+  it("never touches the gate once the budget is exhausted", async () => {
     vi.mocked(tryAcquireSlot).mockResolvedValue(admitted);
     fetchMock.mockImplementation(() => Promise.resolve(okResponse()));
 
@@ -56,8 +57,31 @@ describe("caller deadline on admitted attempts", () => {
     }).catch((e) => e);
 
     expect(err).toBeInstanceOf(TvmazePaceTimeout);
+    // Finding: the old loop slept for the remaining budget, then called
+    // tryAcquireSlot() after the deadline — the DB advanced next_admit_at
+    // for a caller that immediately timed out, consuming a shared
+    // admission and delaying live work. The deadline is now checked
+    // before every acquisition, so a zero budget never reaches the gate:
+    // no lease acquired, nothing to release, nothing fetched.
+    expect(tryAcquireSlot).not.toHaveBeenCalled();
     expect(fetchMock).not.toHaveBeenCalled();
-    // The admitted slot is still released.
+    expect(releaseSlot).not.toHaveBeenCalled();
+  });
+
+  it("times out without fetching when the deadline falls inside acquisition", async () => {
+    // The deadline can still expire during tryAcquireSlot() itself; the
+    // admitted path re-checks and releases the slot without fetching.
+    vi.mocked(tryAcquireSlot).mockImplementation(
+      () => new Promise((resolve) => setTimeout(() => resolve(admitted), 100)),
+    );
+    fetchMock.mockImplementation(() => Promise.resolve(okResponse()));
+
+    const err = await tvmazeFetch("https://api.tvmaze.com/shows/10", undefined, {
+      timeoutMs: 20,
+    }).catch((e) => e);
+
+    expect(err).toBeInstanceOf(TvmazePaceTimeout);
+    expect(fetchMock).not.toHaveBeenCalled();
     expect(releaseSlot).toHaveBeenCalledWith("lease-1");
   });
 

@@ -9,6 +9,7 @@ import {
   setPaceCooldown,
   setPaceCooldownUntil,
   LEASE_TTL_SEC,
+  MAX_RETRY_AFTER_SEC,
   TVMAZE_MAX_CONCURRENT,
 } from "./pace";
 
@@ -173,7 +174,10 @@ describe("tryAcquireSlot", () => {
     const lock = txStatements()[1];
     expect(lock).toContain("FROM tvmaze_pace");
     expect(lock).toContain("FOR UPDATE");
-    expect(lock).toContain("now() AS db_now");
+    // clock_timestamp(), not now(): the SELECT target list evaluates
+    // after the row lock is taken, so this is post-lock database time.
+    expect(lock).toContain("clock_timestamp() AS db_now");
+    expect(lock).not.toContain("now() AS db_now");
   });
 
   it("claims a fixed slot row atomically — never count-then-insert", async () => {
@@ -199,11 +203,34 @@ describe("tryAcquireSlot", () => {
 
     // A slot whose acquired_at is older than the TTL is claimable again —
     // this is what reclaims slots from crashed replicas instead of
-    // leaking them forever. Expiry is measured against the database
-    // clock, so a skewed replica can't expire live slots early.
+    // leaking them forever. Expiry is measured against the post-lock
+    // database instant, so a stale transaction can't expire live slots
+    // early and a skewed replica can't either (it never supplies time).
     const claim = txStatements()[2];
-    expect(claim).toContain("acquired_at < now()");
+    expect(claim).not.toMatch(/acquired_at < now\(\)/);
+    expect(claim).toMatch(/acquired_at < \?+::timestamptz - make_interval/);
     expect(claim).toContain("FOR UPDATE");
+  });
+
+  it("uses one post-lock database instant for lease, expiry, and advance", async () => {
+    mockAcquire({ leaseId: "lease-1" });
+
+    await tryAcquireSlot();
+
+    // Finding: now() is the transaction's start time — under contention
+    // a lock wait makes it stale, so waiters with different start times
+    // could be admitted back-to-back and acquired_at could be old enough
+    // to expire a live lease early. The lock SELECT's clock_timestamp()
+    // is post-lock time; that one value binds into the claim
+    // (acquired_at, expiry) and the pace advance.
+    const statements = txStatements();
+    const claim = statements[2];
+    expect(claim).not.toMatch(/acquired_at = now\(\)/);
+    expect(statements[3]).not.toMatch(/GREATEST\(next_admit_at, now\(\)\)/);
+    // The mock's db_now string is the bound value: twice in the claim
+    // (acquired_at, expiry) and once in the advance.
+    const dbNowParams = txParams().filter((p) => p === NOW.toISOString());
+    expect(dbNowParams).toHaveLength(3);
   });
 
   it("advances the pace timestamp monotonically", async () => {
@@ -222,12 +249,13 @@ describe("tryAcquireSlot", () => {
 
     expect(tryAcquireSlot.length).toBe(0);
     // No bound parameter may be a Date: every timestamp in the gate comes
-    // from PostgreSQL now(). This is what makes the gate immune to
-    // replica wall-clock skew.
+    // from PostgreSQL clock_timestamp(). This is what makes the gate
+    // immune to replica wall-clock skew. (ISO strings bound below are
+    // that database time, echoed back from the lock SELECT.)
     for (const param of txParams()) {
       expect(param).not.toBeInstanceOf(Date);
     }
-    expect(txStatements().join("\n")).toContain("now()");
+    expect(txStatements().join("\n")).toContain("clock_timestamp()");
   });
 });
 
@@ -290,10 +318,11 @@ describe("setPaceCooldown", () => {
 
 describe("setPaceCooldownUntil", () => {
   it("stores the absolute instant against the database clock, keeping the longest", async () => {
-    (db.execute as any).mockResolvedValue({ rows: [] });
+    const appliedAt = "2026-06-01T12:00:00.000Z";
+    (db.execute as any).mockResolvedValue({ rows: [{ applied_at: appliedAt }] });
     const instant = new Date("2026-06-01T12:00:00Z");
 
-    await setPaceCooldownUntil(instant);
+    const applied = await setPaceCooldownUntil(instant);
 
     expect(db.execute).toHaveBeenCalledTimes(1);
     const statement = sqlText((db.execute as any).mock.calls[0][0]);
@@ -311,6 +340,25 @@ describe("setPaceCooldownUntil", () => {
     for (const param of params) {
       expect(param).not.toBeInstanceOf(Date);
     }
+    expect(applied.toISOString()).toBe(appliedAt);
+  });
+
+  it("clamps absurd futures to one database hour in SQL", async () => {
+    (db.execute as any).mockResolvedValue({
+      rows: [{ applied_at: "2026-06-01T13:00:00.000Z" }],
+    });
+
+    await setPaceCooldownUntil(new Date("2026-06-03T12:00:00Z"));
+
+    // Finding: the 1h clamp used the replica clock (Date.now()) — a
+    // replica behind the database shortened a valid cooldown, while one
+    // ahead let an anomalous date block the shared gate for more than
+    // one database hour. The LEAST bound is evaluated against
+    // PostgreSQL now() inside setPaceCooldownUntil.
+    const call = (db.execute as any).mock.calls[0][0];
+    expect(sqlText(call)).toContain("LEAST(");
+    expect(sqlText(call)).toContain("make_interval");
+    expect(sqlParams(call)).toContain(MAX_RETRY_AFTER_SEC);
   });
 });
 
