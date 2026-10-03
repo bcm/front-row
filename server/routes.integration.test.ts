@@ -1,8 +1,11 @@
 import type { Express } from "express";
-import { beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   TEST_SHOW_ID,
-  buildTestApp,
+  TEST_USER_ID,
+  closeTestResources,
+  createSessionCookie,
+  createTestApp,
   request,
   seedLibrary,
 } from "./test/integration-harness";
@@ -11,16 +14,29 @@ import {
 // .github/workflows/ci.yml). Not part of `npm test`; run with
 // `npm run test:integration`.
 //
+// This exercises the REAL server assembly (server/app.ts): real Express
+// wiring, real passport + session store, real isAuthenticated, real routes,
+// real storage, real database. The only faked part is the OIDC provider
+// itself — sessions are established directly since CI has no interactive
+// login. If the app.use("/api", isAuthenticated) line is removed from
+// server/app.ts, the 401 tests below fail: that revert-proof was verified.
+//
 // Explicitly out of scope here: 403 scope checks (arrive with #11's write
 // tools), 405 handling (not Express-default behavior), and tripping the
 // TVMaze rate limiter (requires 60+ upstream calls; not CI-appropriate).
 describe("/api auth gating (integration)", () => {
   let app: Express;
+  let authCookie: string;
 
   beforeAll(async () => {
-    app = await buildTestApp();
+    app = await createTestApp();
     await seedLibrary();
-  }, 60000);
+    authCookie = await createSessionCookie(TEST_USER_ID);
+  }, 120000);
+
+  afterAll(async () => {
+    await closeTestResources();
+  });
 
   it("rejects unauthenticated GET /api/library with 401", async () => {
     const res = await request(app).get("/api/library");
@@ -42,19 +58,20 @@ describe("/api auth gating (integration)", () => {
   it("returns 404 for an unknown /api route", async () => {
     const res = await request(app)
       .get("/api/does-not-exist")
-      .set("x-test-auth", "yes");
+      .set("Cookie", authCookie);
     expect(res.status).toBe(404);
   });
 
-  it("keeps /api/login public", async () => {
+  it("keeps /api/login public (redirects to OIDC, not 401)", async () => {
     const res = await request(app).get("/api/login");
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(302);
+    expect(res.headers.location).toContain("replit.com/oidc");
   });
 
   it("serves the seeded library to an authenticated user", async () => {
     const res = await request(app)
       .get("/api/library")
-      .set("x-test-auth", "yes");
+      .set("Cookie", authCookie);
     expect(res.status).toBe(200);
     expect(Array.isArray(res.body)).toBe(true);
     const names = res.body.map((row: any) => row.show?.name ?? row.name);
