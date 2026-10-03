@@ -27,7 +27,12 @@ jobs:
         with:
           node-version: "20"
           cache: "npm"
-      - run: npm ci
+      # npm 10.8.2 (bundled with node 20.20.2) crashes with "Exit handler
+      # never called" installing this tree's esbuild optional platform
+      # package, leaving node_modules half-installed; npm 10.9.4 installs
+      # it cleanly (verified). Pinned, not latest, for reproducibility.
+      - run: npm install -g npm@10.9.4
+      - run: npm ci --no-audit --no-fund
       - run: npm run check
       # Unit tests only: *.integration.test.ts is excluded from this run
       # (see vitest.config.ts) and needs a live database.
@@ -57,7 +62,9 @@ jobs:
         with:
           node-version: "20"
           cache: "npm"
-      - run: npm ci
+      # Same npm 10.8.2 crash as the quality job — upgrade first (see above).
+      - run: npm install -g npm@10.9.4
+      - run: npm ci --no-audit --no-fund
       # The service database starts empty, so this push must apply cleanly
       # with no prompts. Never --force here: a prompt means the schema and
       # the database disagree, and that must fail loudly, not be paved over.
