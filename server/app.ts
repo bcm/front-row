@@ -64,6 +64,16 @@ export async function createApp(): Promise<{ app: Express; server: Server }> {
 
   const server = await registerRoutes(app);
 
+  // Explicit JSON 404 for unknown /api routes. Without this, an
+  // authenticated request to an unregistered /api path falls through to
+  // Express's default HTML 404 — and in production the SPA wildcard (wired
+  // up after this assembly in server/index.ts) serves index.html with 200
+  // for the same URL. This pins 404 as the real API contract. It runs after
+  // the /api auth gate above, so unauthenticated unknown routes still 401.
+  app.use("/api", (_req, res) => {
+    res.status(404).json({ message: "Not Found" });
+  });
+
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
     const message = err.message || "Internal Server Error";

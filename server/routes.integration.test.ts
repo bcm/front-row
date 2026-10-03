@@ -60,6 +60,9 @@ describe("/api auth gating (integration)", () => {
       .get("/api/does-not-exist")
       .set("Cookie", authCookie);
     expect(res.status).toBe(404);
+    // Distinguishes the explicit /api catch-all in server/app.ts from
+    // Express's default HTML 404.
+    expect(res.body).toEqual({ message: "Not Found" });
   });
 
   it("keeps /api/login public (redirects to OIDC, not 401)", async () => {
