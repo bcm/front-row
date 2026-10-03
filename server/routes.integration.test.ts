@@ -8,6 +8,7 @@ import {
   createTestApp,
   request,
   seedLibrary,
+  testOidcIssuer,
 } from "./test/integration-harness";
 
 // Integration suite: runs against a real scratch postgres (see
@@ -16,10 +17,13 @@ import {
 //
 // This exercises the REAL server assembly (server/app.ts): real Express
 // wiring, real passport + session store, real isAuthenticated, real routes,
-// real storage, real database. The only faked part is the OIDC provider
+// real storage, real database. The only faked parts are the OIDC provider
 // itself — sessions are established directly since CI has no interactive
-// login. If the app.use("/api", isAuthenticated) line is removed from
-// server/app.ts, the 401 tests below fail: that revert-proof was verified.
+// login — and OIDC discovery, which is served by a local stub
+// (server/test/oidc-discovery-stub.ts) so the suite never depends on the
+// live replit.com provider. If the app.use("/api", isAuthenticated) line is
+// removed from server/app.ts, the 401 tests below fail: that revert-proof
+// was verified.
 //
 // Explicitly out of scope here: 403 scope checks (arrive with #11's write
 // tools), 405 handling (not Express-default behavior), and tripping the
@@ -68,7 +72,7 @@ describe("/api auth gating (integration)", () => {
   it("keeps /api/login public (redirects to OIDC, not 401)", async () => {
     const res = await request(app).get("/api/login");
     expect(res.status).toBe(302);
-    expect(res.headers.location).toContain("replit.com/oidc");
+    expect(res.headers.location).toContain(testOidcIssuer());
   });
 
   it("serves the seeded library to an authenticated user", async () => {

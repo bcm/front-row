@@ -3,6 +3,7 @@ import request from "supertest";
 import { randomBytes } from "crypto";
 import cookieSignature from "cookie-signature";
 import type { PgBridge } from "./ws-pg-bridge";
+import type { OidcDiscoveryStub } from "./oidc-discovery-stub";
 
 // The app import chain (storage -> db.ts) throws without DATABASE_URL at load
 // time. CI sets it to the scratch postgres service; local runs fall back to
@@ -20,6 +21,7 @@ const { db, pool } = await import("../db");
 const { sql } = await import("drizzle-orm");
 const { neonConfig } = await import("@neondatabase/serverless");
 const { startPgBridge } = await import("./ws-pg-bridge");
+const { startOidcDiscoveryStub } = await import("./oidc-discovery-stub");
 
 export const TEST_USER_ID = "integration-test-user";
 export const TEST_SHOW_ID = 999001;
@@ -28,6 +30,13 @@ const SESSION_SECRET = "integration-test-session-secret";
 const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 let bridge: PgBridge | null = null;
+let oidcStub: OidcDiscoveryStub | null = null;
+
+/** Issuer URL of the local OIDC discovery stub (set by createTestApp). */
+export function testOidcIssuer(): string {
+  if (!oidcStub) throw new Error("OIDC discovery stub is not running");
+  return oidcStub.url;
+}
 
 /**
  * Assemble the REAL app (server/app.ts) against the scratch database: real
@@ -43,6 +52,16 @@ let bridge: PgBridge | null = null;
 export async function createTestApp(): Promise<Express> {
   process.env.SESSION_SECRET ??= SESSION_SECRET;
   process.env.REPL_ID ??= "integration-test-repl-id";
+
+  // Start the local OIDC discovery stub BEFORE createApp(): setupAuth()
+  // awaits client.discovery() against ISSUER_URL, and the suite must not
+  // depend on the live replit.com provider. The stub serves HTTPS with a
+  // test-only self-signed certificate, so TLS verification is disabled for
+  // the test process. Everything else stays real: the real pg session
+  // store, real Passport strategy construction, real isAuthenticated.
+  oidcStub = await startOidcDiscoveryStub();
+  process.env.ISSUER_URL = oidcStub.url;
+  process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
 
   const dbUrl = new URL(process.env.DATABASE_URL!);
   if (dbUrl.hostname === "localhost" || dbUrl.hostname === "127.0.0.1") {
@@ -104,9 +123,13 @@ export async function seedLibrary(): Promise<void> {
   await storage.addUserShow({ userId: TEST_USER_ID, showId: TEST_SHOW_ID });
 }
 
-/** Release test resources (bridge, drizzle pool) so the process can exit. */
+/** Release test resources (stub, bridge, drizzle pool) so the process can exit. */
 export async function closeTestResources(): Promise<void> {
   await pool.end();
+  if (oidcStub) {
+    await oidcStub.close();
+    oidcStub = null;
+  }
   if (bridge) {
     await bridge.close();
     bridge = null;
