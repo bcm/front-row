@@ -1,0 +1,65 @@
+name: CI
+
+# What runs here: typecheck, unit tests, production build, and the
+# postgres-backed API integration suite. Linting and formatting are
+# deliberately absent (issue #8 asks for check/test/build only).
+#
+# All third-party actions are pinned to commit SHAs (mutable major tags can
+# be retagged). The trailing "# vN" comments record which tag each SHA came
+# from, so Dependabot can still propose updates.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    name: Quality (typecheck, test, build)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: "20"
+          cache: "npm"
+      - run: npm ci
+      - run: npm run check
+      # Unit tests only: *.integration.test.ts is excluded from this run
+      # (see vitest.config.ts) and needs a live database.
+      - run: npm test
+      - run: npm run build
+
+  integration:
+    name: Integration (postgres-backed API tests)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/postgres
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: "20"
+          cache: "npm"
+      - run: npm ci
+      # The service database starts empty, so this push must apply cleanly
+      # with no prompts. Never --force here: a prompt means the schema and
+      # the database disagree, and that must fail loudly, not be paved over.
+      - run: npm run db:push
+      - run: npm run test:integration
