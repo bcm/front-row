@@ -11,5 +11,8 @@ export default defineConfig({
   },
   test: {
     include: ["server/**/*.test.ts", "shared/**/*.test.ts"],
+    // Integration tests need a live postgres; they run via
+    // `npm run test:integration`, never as part of `npm test`.
+    exclude: ["**/*.integration.test.ts", "**/node_modules/**"],
   },
 });
