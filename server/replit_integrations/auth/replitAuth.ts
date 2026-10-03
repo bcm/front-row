@@ -15,7 +15,10 @@ const getOidcConfig = memoize(
       process.env.REPL_ID!
     );
   },
-  { maxAge: 3600 * 1000 }
+  // promise: true drops rejected discoveries from the cache instead of
+  // serving the failure for maxAge. A single failed discovery must not
+  // poison every token refresh for the next hour.
+  { maxAge: 3600 * 1000, promise: true }
 );
 
 export function getSession() {
@@ -40,13 +43,19 @@ export function getSession() {
   });
 }
 
-function updateUserSession(
+export function updateUserSession(
   user: any,
   tokens: client.TokenEndpointResponse & client.TokenEndpointResponseHelpers
 ) {
   user.claims = tokens.claims();
   user.access_token = tokens.access_token;
-  user.refresh_token = tokens.refresh_token;
+  // A refresh response may omit refresh_token (the provider didn't rotate
+  // it); the spec says the client must keep using the old one. Overwriting
+  // with undefined permanently breaks future refreshes: the next expiry
+  // finds no refresh token and the user is logged out.
+  if (tokens.refresh_token) {
+    user.refresh_token = tokens.refresh_token;
+  }
   user.expires_at = user.claims?.exp;
 }
 
