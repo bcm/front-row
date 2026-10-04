@@ -71,7 +71,7 @@ export default function ShowDetail() {
     message: '',
     errors: []
   });
-  const eventSourceRef = useRef<EventSource | null>(null);
+  const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   
   const { data: show, isLoading, error } = useQuery<TVMazeShow>({
     queryKey: ['/api/shows', id],
@@ -228,15 +228,85 @@ export default function ShowDetail() {
     removeShowMutation.mutate();
   };
 
-  // Cleanup EventSource on unmount or job completion
+  // Stop sync polling on unmount
   useEffect(() => {
     return () => {
-      if (eventSourceRef.current) {
-        eventSourceRef.current.close();
-        eventSourceRef.current = null;
+      if (pollTimerRef.current) {
+        clearInterval(pollTimerRef.current);
+        pollTimerRef.current = null;
       }
     };
   }, []);
+
+  const stopPolling = () => {
+    if (pollTimerRef.current) {
+      clearInterval(pollTimerRef.current);
+      pollTimerRef.current = null;
+    }
+  };
+
+  // Poll the durable sync-job status endpoint every 2s, like the other
+  // sync dialogs. The response exposes completedShows/totalShows (not
+  // completedEpisodes/totalEpisodes) and lastMessage (not message).
+  const pollSyncStatus = async (jobId: string) => {
+    try {
+      const statusResponse = await fetch(`/api/sync/${jobId}/status`);
+      if (!statusResponse.ok) throw new Error(`status ${statusResponse.status}`);
+      const job = await statusResponse.json();
+
+      setSyncProgress(prev => ({
+        ...prev,
+        status: job.status,
+        phase: job.phase ?? prev.phase,
+        percent: job.percent ?? prev.percent,
+        completedEpisodes: job.completedShows ?? prev.completedEpisodes,
+        totalEpisodes: job.totalShows ?? prev.totalEpisodes,
+        etaSeconds: job.etaSeconds ?? null,
+        message: job.lastMessage ?? prev.message,
+        errors: job.errors ?? prev.errors,
+        episodesImported: job.episodesImported,
+        episodesUpdated: job.episodesUpdated
+      }));
+
+      if (job.status === 'success') {
+        stopPolling();
+        queryClient.invalidateQueries({ queryKey: ['/api/shows', id] });
+        queryClient.invalidateQueries({ queryKey: ['/api/shows', id, 'stats'] });
+        queryClient.invalidateQueries({ queryKey: ['/api/shows', id, 'episodes'] });
+        queryClient.invalidateQueries({ queryKey: ['/api/shows', id, 'user-episodes'] });
+        queryClient.invalidateQueries({ queryKey: ['/api/user/episodes'] });
+
+        toast({
+          title: "Sync Complete",
+          description: job.lastMessage,
+        });
+      } else if (job.status === 'error') {
+        stopPolling();
+        toast({
+          title: "Sync Failed",
+          description: job.lastMessage || "Failed to sync show data from TVMaze",
+          variant: "destructive",
+        });
+      } else if (job.status === 'canceled') {
+        stopPolling();
+        setSyncProgress(prev => ({ ...prev, message: 'Sync canceled' }));
+      }
+    } catch (pollError) {
+      console.error('Error polling sync status:', pollError);
+      stopPolling();
+      toast({
+        title: "Connection error",
+        description: "Lost connection to sync progress",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const startPolling = (jobId: string) => {
+    stopPolling();
+    pollTimerRef.current = setInterval(() => void pollSyncStatus(jobId), 2000);
+    void pollSyncStatus(jobId);
+  };
 
   const startSync = async () => {
     try {
@@ -256,142 +326,9 @@ export default function ShowDetail() {
         message: 'Starting sync...'
       }));
 
-      // Connect to EventSource for real-time updates
-      const eventSource = new EventSource(`/api/sync/${jobId}/events`);
-      eventSourceRef.current = eventSource;
-
-      eventSource.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data);
-          
-          if (data.type === 'init' || data.type === 'progress') {
-            setSyncProgress(prev => ({
-              ...prev,
-              status: data.data.status ?? prev.status,
-              phase: data.data.phase ?? prev.phase,
-              percent: data.data.percent ?? prev.percent,
-              completedEpisodes: data.data.completedEpisodes ?? prev.completedEpisodes,
-              totalEpisodes: data.data.totalEpisodes ?? prev.totalEpisodes,
-              etaSeconds: data.data.etaSeconds,
-              message: data.data.message ?? prev.message,
-              errors: data.data.errors ?? prev.errors
-            }));
-          } else if (data.type === 'complete') {
-            setSyncProgress(prev => ({
-              ...prev,
-              status: 'success',
-              percent: 100,
-              message: data.data.message,
-              episodesImported: data.data.episodesImported,
-              episodesUpdated: data.data.episodesUpdated
-            }));
-
-            // Invalidate queries
-            queryClient.invalidateQueries({ queryKey: ['/api/shows', id] });
-            queryClient.invalidateQueries({ queryKey: ['/api/shows', id, 'stats'] });
-            queryClient.invalidateQueries({ queryKey: ['/api/shows', id, 'episodes'] });
-            queryClient.invalidateQueries({ queryKey: ['/api/shows', id, 'user-episodes'] });
-            queryClient.invalidateQueries({ queryKey: ['/api/user/episodes'] });
-
-            toast({
-              title: "Sync Complete",
-              description: data.data.message,
-            });
-
-            eventSource.close();
-            eventSourceRef.current = null;
-          } else if (data.type === 'error') {
-            if (data.data.fatal) {
-              setSyncProgress(prev => ({
-                ...prev,
-                status: 'error',
-                message: data.data.message || 'Sync failed'
-              }));
-              
-              toast({
-                title: "Sync Failed",
-                description: data.data.message || "Failed to sync show data from TVMaze",
-                variant: "destructive",
-              });
-
-              eventSource.close();
-              eventSourceRef.current = null;
-            } else {
-              // Non-fatal error, just add to errors list
-              setSyncProgress(prev => ({
-                ...prev,
-                errors: [...prev.errors, data.data.error]
-              }));
-            }
-          } else if (data.type === 'canceled') {
-            setSyncProgress(prev => ({
-              ...prev,
-              status: 'canceled',
-              message: 'Sync canceled'
-            }));
-
-            eventSource.close();
-            eventSourceRef.current = null;
-          }
-        } catch (parseError) {
-          console.error('Error parsing SSE message:', parseError);
-        }
-      };
-
-      eventSource.onerror = () => {
-        console.error('EventSource error, attempting to use polling fallback');
-        eventSource.close();
-        eventSourceRef.current = null;
-        
-        // Fallback to polling
-        const pollStatus = async () => {
-          try {
-            const statusResponse = await fetch(`/api/sync/${jobId}/status`);
-            if (statusResponse.ok) {
-              const job = await statusResponse.json();
-              setSyncProgress(prev => ({
-                ...prev,
-                status: job.status,
-                phase: job.phase,
-                percent: job.percent,
-                completedEpisodes: job.completedEpisodes,
-                totalEpisodes: job.totalEpisodes,
-                etaSeconds: job.etaSeconds,
-                message: job.lastMessage,
-                errors: job.errors
-              }));
-
-              if (['success', 'error', 'canceled'].includes(job.status)) {
-                if (job.status === 'success') {
-                  queryClient.invalidateQueries({ queryKey: ['/api/shows', id] });
-                  queryClient.invalidateQueries({ queryKey: ['/api/shows', id, 'stats'] });
-                  queryClient.invalidateQueries({ queryKey: ['/api/shows', id, 'episodes'] });
-                  queryClient.invalidateQueries({ queryKey: ['/api/shows', id, 'user-episodes'] });
-                  queryClient.invalidateQueries({ queryKey: ['/api/user/episodes'] });
-                  
-                  toast({
-                    title: "Sync Complete",
-                    description: job.lastMessage,
-                  });
-                } else if (job.status === 'error') {
-                  toast({
-                    title: "Sync Failed",
-                    description: job.lastMessage,
-                    variant: "destructive",
-                  });
-                }
-                return;
-              }
-
-              setTimeout(pollStatus, 1000);
-            }
-          } catch (pollError) {
-            console.error('Polling error:', pollError);
-          }
-        };
-        
-        setTimeout(pollStatus, 1000);
-      };
+      // Poll the durable sync-job status endpoint (the /events SSE route
+      // was removed; sync state is consistent across replicas in Postgres).
+      startPolling(jobId);
 
     } catch (error: any) {
       toast({
@@ -403,11 +340,10 @@ export default function ShowDetail() {
   };
 
   const cancelSync = async () => {
-    if (syncProgress.jobId && eventSourceRef.current) {
+    if (syncProgress.jobId) {
       try {
         await fetch(`/api/sync/${syncProgress.jobId}`, { method: 'DELETE' });
-        eventSourceRef.current.close();
-        eventSourceRef.current = null;
+        // The poll loop observes the 'canceled' status and stops itself.
       } catch (error) {
         console.error('Error canceling sync:', error);
       }
@@ -416,10 +352,7 @@ export default function ShowDetail() {
 
   const closeSyncModal = () => {
     setSyncProgress(prev => ({ ...prev, isOpen: false }));
-    if (eventSourceRef.current) {
-      eventSourceRef.current.close();
-      eventSourceRef.current = null;
-    }
+    stopPolling();
   };
 
   const formatETA = (seconds: number | null): string => {

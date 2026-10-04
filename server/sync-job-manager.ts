@@ -7,7 +7,7 @@
 // heartbeat is older than SYNC_HEARTBEAT_TIMEOUT_MS as dead — computed on
 // read, the row itself is never mutated by a reader.
 
-import { eq, and, desc, lt, or } from "drizzle-orm";
+import { eq, and, desc, lt, or, sql } from "drizzle-orm";
 import { db } from "./db";
 import { syncJobs, type SyncJobRow } from "@shared/schema";
 
@@ -110,9 +110,21 @@ export class SyncJobManager {
   private pendingProgress = new Map<string, PendingProgress>();
   private progressTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private lastProgressFlush = new Map<string, number>();
-  // Awaitable handles for in-flight throttled flushes, so callers that
-  // await a reporter method get durability, not fire-and-forget.
-  private inflightFlush = new Map<string, { promise: Promise<void>; resolve: () => void }>();
+  // In-flight progress DB writes, per job. flushProgress awaits these before
+  // writing, so an older progress write can never land after a terminal
+  // update issued from another call.
+  private inflightWrites = new Map<string, Promise<void>>();
+  // Deferred handles for throttled (trailing-edge) flushes, per job: the
+  // promise a reporter method returned settles when its flush lands, so an
+  // awaiting caller gets durability, not fire-and-forget.
+  private scheduledFlushes = new Map<
+    string,
+    {
+      promise: Promise<void>;
+      resolve: () => void;
+      reject: (err: unknown) => void;
+    }
+  >();
 
   private makeId(showId: number | null | undefined): string {
     const sid = showId ?? 0;
@@ -181,7 +193,7 @@ export class SyncJobManager {
   }
 
   async markJobRunning(jobId: string): Promise<void> {
-    await this.flushProgress(jobId);
+    await this.flushProgressQuietly(jobId);
     const now = new Date();
     await db
       .update(syncJobs)
@@ -189,14 +201,19 @@ export class SyncJobManager {
       .where(eq(syncJobs.id, jobId));
   }
 
+  /**
+   * Terminal transitions are conditional on the row still being active: a
+   * cancellation that wins after the worker's final cancellation check must
+   * stay terminal. Returns whether the transition was applied.
+   */
   async markJobSuccess(
     jobId: string,
     episodesImported: number,
     episodesUpdated: number
-  ): Promise<void> {
-    await this.flushProgress(jobId);
+  ): Promise<boolean> {
+    await this.flushProgressQuietly(jobId);
     const now = new Date();
-    await db
+    const updated = await db
       .update(syncJobs)
       .set({
         status: "success",
@@ -208,13 +225,21 @@ export class SyncJobManager {
         heartbeatAt: now,
         finishedAt: now,
       })
-      .where(eq(syncJobs.id, jobId));
+      .where(
+        and(
+          eq(syncJobs.id, jobId),
+          or(eq(syncJobs.status, "queued"), eq(syncJobs.status, "running"))
+        )
+      )
+      .returning({ id: syncJobs.id });
+    return updated.length > 0;
   }
 
-  async markJobError(jobId: string, error: string): Promise<void> {
-    await this.flushProgress(jobId);
+  /** Same conditional-transition contract as markJobSuccess. */
+  async markJobError(jobId: string, error: string): Promise<boolean> {
+    await this.flushProgressQuietly(jobId);
     const now = new Date();
-    await db
+    const updated = await db
       .update(syncJobs)
       .set({
         status: "error",
@@ -223,11 +248,18 @@ export class SyncJobManager {
         heartbeatAt: now,
         finishedAt: now,
       })
-      .where(eq(syncJobs.id, jobId));
+      .where(
+        and(
+          eq(syncJobs.id, jobId),
+          or(eq(syncJobs.status, "queued"), eq(syncJobs.status, "running"))
+        )
+      )
+      .returning({ id: syncJobs.id });
+    return updated.length > 0;
   }
 
   async cancelJob(jobId: string): Promise<boolean> {
-    await this.flushProgress(jobId);
+    await this.flushProgressQuietly(jobId);
     const now = new Date();
     const updated = await db
       .update(syncJobs)
@@ -244,88 +276,139 @@ export class SyncJobManager {
     return updated.length > 0;
   }
 
-  /** Flush any throttled progress for a job. Awaiting it guarantees the
-   *  latest progress is durable. Called by the terminal transitions; also
-   *  exposed for tests. */
+  /**
+   * Flush wrapper for the state-transition methods: a failed progress flush
+   * preserves its snapshot for the next flush (see flushProgress), and the
+   * transition itself must still be attempted — terminal state matters more
+   * than the last progress tick.
+   */
+  private async flushProgressQuietly(jobId: string): Promise<void> {
+    try {
+      await this.flushProgress(jobId);
+    } catch (error) {
+      console.error(
+        `[SYNC_JOB] pre-transition progress flush failed for ${jobId}:`,
+        error
+      );
+      // The failed flush preserved its snapshot, but no further progress
+      // ticks will come after a terminal transition — drop it rather than
+      // leak it in the pending map.
+      this.pendingProgress.delete(jobId);
+    }
+  }
+
+  /**
+   * Flush any throttled progress for a job. Awaiting it guarantees the
+   * latest progress is durable:
+   *
+   * - It first awaits any in-flight progress write, so a terminal
+   *   transition can never run concurrently with an older write that would
+   *   land afterward and clobber terminal fields (e.g. percent: 100).
+   * - On DB failure the pending snapshot is preserved for the next flush
+   *   (heartbeats resume instead of silently stopping) and the returned
+   *   promise rejects, so awaited writes observe the failure. The rejection
+   *   is also observed internally, so intentionally fire-and-forget callers
+   *   can't trigger unhandled-rejection warnings.
+   */
   async flushProgress(jobId: string): Promise<void> {
     const timer = this.progressTimers.get(jobId);
     if (timer) {
       clearTimeout(timer);
       this.progressTimers.delete(jobId);
     }
+    // A trailing flush was scheduled but this explicit flush supersedes it:
+    // its awaiters ride on this flush's outcome.
+    const scheduled = this.scheduledFlushes.get(jobId);
+    if (scheduled) this.scheduledFlushes.delete(jobId);
+
+    const inflight = this.inflightWrites.get(jobId);
+    if (inflight) {
+      try {
+        await inflight;
+      } catch {
+        // The failed write preserved its snapshot (see below); proceed —
+        // a terminal transition must still be attempted.
+      }
+    }
+
     const pending = this.pendingProgress.get(jobId);
     this.pendingProgress.delete(jobId);
     if (!pending) {
-      this.settleFlush(jobId);
+      scheduled?.resolve();
       return;
     }
+
     this.lastProgressFlush.set(jobId, Date.now());
     const now = new Date();
-    try {
-      await db
-        .update(syncJobs)
-        .set({
-          completedShows: pending.completedShows,
-          percent: pending.percent,
-          etaSeconds: pending.etaSeconds,
-          ...(pending.lastMessage !== undefined
-            ? { lastMessage: pending.lastMessage }
-            : {}),
-          updatedAt: now,
-          heartbeatAt: now,
-        })
-        .where(eq(syncJobs.id, jobId));
-    } catch (error) {
-      console.error(`[SYNC_JOB] progress flush failed for ${jobId}:`, error);
-    }
-    this.settleFlush(jobId);
-  }
-
-  private settleFlush(jobId: string): void {
-    const entry = this.inflightFlush.get(jobId);
-    if (entry) {
-      this.inflightFlush.delete(jobId);
-      entry.resolve();
-    }
-  }
-
-  private trackFlush(jobId: string, p: Promise<void>): Promise<void> {
-    const existing = this.inflightFlush.get(jobId);
-    if (existing) return existing.promise;
-    let resolve!: () => void;
-    const tracked = new Promise<void>((res) => {
-      resolve = res;
-    });
-    this.inflightFlush.set(jobId, { promise: tracked, resolve });
-    p.then(
-      () => this.settleFlush(jobId),
-      () => this.settleFlush(jobId)
+    const write = db
+      .update(syncJobs)
+      .set({
+        completedShows: pending.completedShows,
+        percent: pending.percent,
+        etaSeconds: pending.etaSeconds,
+        ...(pending.lastMessage !== undefined
+          ? { lastMessage: pending.lastMessage }
+          : {}),
+        updatedAt: now,
+        heartbeatAt: now,
+      })
+      .where(eq(syncJobs.id, jobId));
+    const tracked: Promise<void> = write.then(
+      () => {
+        if (this.inflightWrites.get(jobId) === tracked) {
+          this.inflightWrites.delete(jobId);
+        }
+        scheduled?.resolve();
+      },
+      (error) => {
+        if (this.inflightWrites.get(jobId) === tracked) {
+          this.inflightWrites.delete(jobId);
+        }
+        console.error(`[SYNC_JOB] progress flush failed for ${jobId}:`, error);
+        // Preserve the snapshot so the next flush retries it instead of
+        // silently dropping the heartbeat — unless newer progress has
+        // already superseded it.
+        const existing = this.pendingProgress.get(jobId);
+        if (
+          !existing ||
+          existing.completedShows < pending.completedShows
+        ) {
+          this.pendingProgress.set(jobId, pending);
+        }
+        scheduled?.reject(error);
+        throw error;
+      }
     );
+    this.inflightWrites.set(jobId, tracked);
+    // Observe internally so fire-and-forget callers are safe; awaiters of
+    // the returned promise still see the rejection.
+    tracked.catch(() => {});
     return tracked;
   }
 
   private scheduleProgressFlush(jobId: string): Promise<void> {
     const elapsed = Date.now() - (this.lastProgressFlush.get(jobId) ?? 0);
     if (elapsed >= PROGRESS_FLUSH_MS) {
-      return this.trackFlush(jobId, this.flushProgress(jobId));
+      return this.flushProgress(jobId);
     }
-    const existing = this.inflightFlush.get(jobId);
-    if (existing) return existing.promise;
+    const scheduled = this.scheduledFlushes.get(jobId);
+    if (scheduled) return scheduled.promise;
     let resolve!: () => void;
-    const tracked = new Promise<void>((res) => {
+    let reject!: (err: unknown) => void;
+    const promise = new Promise<void>((res, rej) => {
       resolve = res;
+      reject = rej;
     });
-    this.inflightFlush.set(jobId, { promise: tracked, resolve });
+    // Fire-and-forget callers are safe; awaiters still observe failures.
+    promise.catch(() => {});
+    this.scheduledFlushes.set(jobId, { promise, resolve, reject });
     const timer = setTimeout(() => {
       this.progressTimers.delete(jobId);
-      const p = this.flushProgress(jobId);
-      p.then(
-        () => this.settleFlush(jobId),
-        () => this.settleFlush(jobId)
-      );
+      this.scheduledFlushes.delete(jobId);
+      this.flushProgress(jobId).then(resolve, reject);
     }, PROGRESS_FLUSH_MS - elapsed);
     this.progressTimers.set(jobId, timer);
-    return tracked;
+    return promise;
   }
 
   createReporter(jobId: string): ProgressReporter {
@@ -381,15 +464,22 @@ export class SyncJobManager {
       },
 
       addError: async (error) => {
-        // Append without a read-modify-write race: errors are only ever
-        // appended by the single worker owning the job.
-        const rows = await db
-          .select({ errors: syncJobs.errors })
-          .from(syncJobs)
-          .where(eq(syncJobs.id, jobId))
-          .limit(1);
-        const errors = [...(rows[0]?.errors ?? []), error];
-        await touchHeartbeat({ errors });
+        // Atomic JSONB append in a single UPDATE: route call sites invoke
+        // addError without awaiting it, so a read-modify-write here could
+        // lose errors when concurrent appends read the same array.
+        const now = new Date();
+        try {
+          await db
+            .update(syncJobs)
+            .set({
+              errors: sql`coalesce(${syncJobs.errors}, '[]'::jsonb) || ${JSON.stringify(error)}::jsonb`,
+              updatedAt: now,
+              heartbeatAt: now,
+            })
+            .where(eq(syncJobs.id, jobId));
+        } catch (err) {
+          console.error(`[SYNC_JOB] addError failed for ${jobId}:`, err);
+        }
       },
 
       // Reads the row, so a cancel issued from any replica is honored.
@@ -410,24 +500,48 @@ export class SyncJobManager {
 // Global instance
 export const syncJobManager = new SyncJobManager();
 
-// Reap finished jobs older than 24h, hourly. Running jobs are never reaped:
-// a dead worker's row stays 'running' and reads as a heartbeat timeout.
-setInterval(async () => {
-  try {
-    const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
-    await db
-      .delete(syncJobs)
-      .where(
-        and(
-          lt(syncJobs.updatedAt, cutoff),
-          or(
-            eq(syncJobs.status, "success"),
-            eq(syncJobs.status, "error"),
-            eq(syncJobs.status, "canceled")
-          )
+// Jobs are retained for 24h after their last update, then reaped.
+const SYNC_JOB_RETENTION_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Hourly maintenance, exported for tests.
+ *
+ * Dead workers leave 'running' rows that nothing would ever delete (readers
+ * only compute the heartbeat timeout, never persist it), so first terminate
+ * running jobs whose heartbeat has been stale beyond the retention period,
+ * then reap terminal jobs older than retention as before.
+ */
+export async function cleanupSyncJobs(now: number = Date.now()): Promise<void> {
+  const cutoff = new Date(now - SYNC_JOB_RETENTION_MS);
+  const stamp = new Date(now);
+  await db
+    .update(syncJobs)
+    .set({
+      status: "error",
+      lastMessage: SYNC_WORKER_LOST_MESSAGE,
+      updatedAt: stamp,
+      finishedAt: stamp,
+    })
+    .where(
+      and(eq(syncJobs.status, "running"), lt(syncJobs.heartbeatAt, cutoff))
+    );
+  await db
+    .delete(syncJobs)
+    .where(
+      and(
+        lt(syncJobs.updatedAt, cutoff),
+        or(
+          eq(syncJobs.status, "success"),
+          eq(syncJobs.status, "error"),
+          eq(syncJobs.status, "canceled")
         )
-      );
-  } catch (error) {
-    console.error("[SYNC_JOB] cleanup failed:", error);
-  }
+      )
+    );
+}
+
+// Reap old jobs hourly.
+setInterval(() => {
+  cleanupSyncJobs().catch((error) =>
+    console.error("[SYNC_JOB] cleanup failed:", error)
+  );
 }, 60 * 60 * 1000);

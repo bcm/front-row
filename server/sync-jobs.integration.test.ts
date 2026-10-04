@@ -6,9 +6,12 @@
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { eq, sql } from "drizzle-orm";
+import type { Express } from "express";
 import {
   closeTestResources,
+  createSessionCookie,
   createTestApp,
+  request,
 } from "./test/integration-harness";
 
 // The harness sets DATABASE_URL before these imports resolve server/db.
@@ -18,6 +21,7 @@ import {
   syncJobManager,
   SyncJobManager,
   SYNC_WORKER_LOST_MESSAGE,
+  cleanupSyncJobs,
 } from "./sync-job-manager";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { registerSyncTools } from "./mcp/tools/sync";
@@ -45,8 +49,10 @@ async function backdateHeartbeat(id: string, minutesAgo: number) {
     WHERE "id" = ${id}`);
 }
 
+let app: Express;
+
 beforeAll(async () => {
-  await createTestApp();
+  app = await createTestApp();
 }, 120000);
 
 afterAll(async () => {
@@ -181,6 +187,137 @@ describe("SyncJobManager (durable, PG-backed)", () => {
 
     const active = await syncJobManager.getActiveJobs(USER_A);
     expect(active.map((j) => j.id)).toEqual([id]);
+  });
+
+  it("a terminal update does not overwrite a cancellation that won the race", async () => {
+    const id = await syncJobManager.createJob(USER_A, "show-sync", 31);
+    await syncJobManager.markJobRunning(id);
+
+    // The worker's final checkCanceled() passed, then the user canceled.
+    expect(await syncJobManager.cancelJob(id)).toBe(true);
+
+    // The worker's terminal write must not resurrect the job.
+    expect(await syncJobManager.markJobSuccess(id, 5, 1)).toBe(false);
+    const job = (await syncJobManager.getJob(id))!;
+    expect(job.status).toBe("canceled");
+    expect(job.lastMessage).toBe("Sync canceled by user");
+    expect(job.episodesImported).toBe(0);
+  });
+
+  it("markJobError is likewise conditional on the job still being active", async () => {
+    const id = await syncJobManager.createJob(USER_A, "show-sync", 32);
+    await syncJobManager.markJobRunning(id);
+    await syncJobManager.cancelJob(id);
+
+    expect(await syncJobManager.markJobError(id, "late failure")).toBe(false);
+    expect((await syncJobManager.getJob(id))!.status).toBe("canceled");
+  });
+
+  it("terminal transitions still apply to queued and running jobs", async () => {
+    const queued = await syncJobManager.createJob(USER_A, "show-sync", 33);
+    expect(await syncJobManager.markJobSuccess(queued, 1, 0)).toBe(true);
+
+    const running = await syncJobManager.createJob(USER_A, "show-sync", 34);
+    await syncJobManager.markJobRunning(running);
+    expect(await syncJobManager.markJobError(running, "boom")).toBe(true);
+    expect((await syncJobManager.getJob(running))!.status).toBe("error");
+  });
+
+  it("a terminal transition awaits an in-flight progress write", async () => {
+    const id = await syncJobManager.createJob(USER_A, "show-sync", 35);
+    await syncJobManager.markJobRunning(id);
+    const reporter = syncJobManager.createReporter(id);
+    await reporter.setTotal(10);
+
+    // Fire-and-forget: the throttled flush starts its DB write in the
+    // background (first tick always flushes immediately).
+    void reporter.incrementCompleted("show one");
+
+    // Must not run concurrently with the older write: without the await,
+    // the progress write could land after this and clobber percent: 100.
+    await syncJobManager.markJobSuccess(id, 1, 0);
+
+    const row = (await rawRow(id))!;
+    expect(row.status).toBe("success");
+    expect(row.percent).toBe(100);
+    expect(row.completedShows).toBe(1);
+    expect(row.lastMessage).toBe(
+      "Sync completed successfully. 1 episodes imported, 0 updated."
+    );
+  });
+
+  it("concurrent addError calls do not lose errors", async () => {
+    const id = await syncJobManager.createJob(USER_A, "show-sync", 36);
+    await syncJobManager.markJobRunning(id);
+    const reporter = syncJobManager.createReporter(id);
+
+    // Route call sites invoke addError without awaiting it; a
+    // read-modify-write here would let all three read the same array and
+    // keep only the last write.
+    await Promise.all([
+      reporter.addError("e1"),
+      reporter.addError("e2"),
+      reporter.addError("e3"),
+    ]);
+
+    const row = (await rawRow(id))!;
+    expect(row.errors).toHaveLength(3);
+    expect(row.errors).toEqual(expect.arrayContaining(["e1", "e2", "e3"]));
+  });
+
+  it("cleanup terminates heartbeat-dead running jobs and reaps old terminal jobs", async () => {
+    // Dead worker: heartbeat stale beyond retention -> terminated as error,
+    // but not deleted on the same pass (its updatedAt is now fresh).
+    const dead = await syncJobManager.createJob(USER_A, "show-sync", 37);
+    await syncJobManager.markJobRunning(dead);
+    await backdateHeartbeat(dead, 25 * 60);
+
+    // Old terminal job -> reaped.
+    const old = await syncJobManager.createJob(USER_A, "show-sync", 38);
+    await syncJobManager.markJobRunning(old);
+    await syncJobManager.markJobSuccess(old, 1, 0);
+    await db.execute(
+      sql`UPDATE "sync_jobs" SET "updated_at" = now() - interval '25 hours' WHERE "id" = ${old}`
+    );
+
+    // Fresh running job -> untouched.
+    const fresh = await syncJobManager.createJob(USER_A, "show-sync", 39);
+    await syncJobManager.markJobRunning(fresh);
+
+    await cleanupSyncJobs();
+
+    const deadRow = (await rawRow(dead))!;
+    expect(deadRow.status).toBe("error");
+    expect(deadRow.lastMessage).toBe(SYNC_WORKER_LOST_MESSAGE);
+    expect(deadRow.finishedAt).not.toBeNull();
+
+    expect(await rawRow(old)).toBeNull();
+    expect((await rawRow(fresh))!.status).toBe("running");
+  });
+});
+
+describe("episode import cancel route scoping", () => {
+  beforeEach(async () => {
+    await db.delete(syncJobs);
+  });
+
+  it("user B cannot cancel user A's job; the owner can", async () => {
+    const id = await syncJobManager.createJob(USER_A, "episode-import");
+    await syncJobManager.markJobRunning(id);
+
+    const cookieB = await createSessionCookie(USER_B);
+    const denied = await request(app)
+      .post(`/api/episodes/import/cancel/${id}`)
+      .set("Cookie", cookieB);
+    expect(denied.status).toBe(404);
+    expect((await syncJobManager.getJob(id, USER_A))!.status).toBe("running");
+
+    const cookieA = await createSessionCookie(USER_A);
+    const allowed = await request(app)
+      .post(`/api/episodes/import/cancel/${id}`)
+      .set("Cookie", cookieA);
+    expect(allowed.status).toBe(200);
+    expect((await syncJobManager.getJob(id, USER_A))!.status).toBe("canceled");
   });
 });
 

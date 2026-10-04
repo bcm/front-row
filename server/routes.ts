@@ -804,7 +804,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Get sync job status (for polling fallback)
   // Get sync job status (polled by the UI; durable across replicas)
   app.get("/api/sync/:id/status", async (req, res) => {
     const { id } = req.params;
@@ -831,7 +830,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     });
   });
 
-  // Cancel sync job
   // Cancel sync job
   app.delete("/api/sync/:id", async (req, res) => {
     const { id } = req.params;
@@ -1456,9 +1454,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Cancel episode import job
   app.post("/api/episodes/import/cancel/:id", async (req, res) => {
     const { id } = req.params;
-    
+    const userId = getUserId(req);
+    const job = await syncJobManager.getJob(id, userId);
+
+    if (!job) {
+      return res.status(404).json({ error: "Job not found" });
+    }
+
     const success = await syncJobManager.cancelJob(id);
-    
+
     if (success) {
       res.json({ message: "Episode sync canceled successfully" });
     } else {
@@ -1466,7 +1470,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Check for active episode import jobs
   // Check for active episode import jobs
   app.get("/api/episodes/import/status", async (req, res) => {
     const userId = getUserId(req);
