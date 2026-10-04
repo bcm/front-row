@@ -113,6 +113,35 @@ describe("SyncJobManager (durable, PG-backed)", () => {
     expect(job.finishedAt).not.toBeNull();
   });
 
+  it("an addError chained mid-drain is not dropped by the terminal transition", async () => {
+    const id = await syncJobManager.createJob(USER_A, "show-sync", 7);
+    await syncJobManager.markJobRunning(id);
+    const reporter = syncJobManager.createReporter(id);
+    await reporter.setTotal(10);
+
+    // Adversarial interleaving, issued synchronously so no await can
+    // interleave between the calls:
+    //   1. an unawaited addError starts a tracked write,
+    //   2. the terminal transition begins draining it,
+    //   3. throttled progress is queued, so the transition's flush has a
+    //      progress write to install after the drain,
+    //   4. a second addError chains onto the first write while the drain
+    //      await is pending.
+    // The drain must re-check the map and await the chained write before
+    // installing the progress write — otherwise the terminal UPDATE could
+    // commit while the second error is still running, and the active-row
+    // guard would silently drop it.
+    const first = reporter.addError("first");
+    const terminal = syncJobManager.markJobSuccess(id, 1, 0);
+    const tick = reporter.incrementCompleted("tick");
+    const second = reporter.addError("second");
+    await Promise.all([first, terminal, tick, second]);
+
+    const job = (await syncJobManager.getJob(id))!;
+    expect(job.status).toBe("success");
+    expect(job.errors).toEqual(["first", "second"]);
+  });
+
   it("two manager instances (two replicas) see the same job state", async () => {
     const replicaA = syncJobManager;
     const replicaB = new SyncJobManager();

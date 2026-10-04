@@ -30,6 +30,17 @@ export const SYNC_WORKER_LOST_MESSAGE = "Sync worker lost (heartbeat timeout)";
 // the trailing flush guarantees the final values land.
 const PROGRESS_FLUSH_MS = 1000;
 
+// Cap on re-check passes in the write-drain loops (flushProgress and
+// flushProgressQuietly). Each pass awaits at most one tracked write;
+// reporter writes are throttled to ~1/s, so in practice the drain settles
+// in one or two passes — the bound only guards against a pathological
+// constantly-chattering writer starving the drain forever. A straggler
+// past the bound stays chained behind the other writes (see
+// trackInflightWrite), so it still lands in order and can only no-op
+// against an already-terminal row via the active-row guard, never
+// clobber it.
+const DRAIN_MAX_PASSES = 10;
+
 export interface SyncJob {
   id: string;
   userId: string;
@@ -365,8 +376,10 @@ export class SyncJobManager {
     // Re-check the map after each await: a write issued during the drain
     // chains onto the tracked promise and is awaited in turn. Tracked
     // writes are plain UPDATEs that never wait on a terminal transition,
-    // so this cannot deadlock.
-    for (;;) {
+    // so this cannot deadlock. Bounded by DRAIN_MAX_PASSES (see above):
+    // with the ordering chain, a straggler past the bound lands after the
+    // terminal commit and no-ops cleanly against the terminal row.
+    for (let pass = 0; pass < DRAIN_MAX_PASSES; pass++) {
       const inflight = this.inflightWrites.get(jobId);
       if (!inflight) return;
       try {
@@ -406,8 +419,18 @@ export class SyncJobManager {
     const scheduled = this.scheduledFlushes.get(jobId);
     if (scheduled) this.scheduledFlushes.delete(jobId);
 
-    const inflight = this.inflightWrites.get(jobId);
-    if (inflight) {
+    // Re-checking drain: a reporter write issued while the drain await is
+    // pending (e.g. an unawaited addError) chains a newer promise into
+    // inflightWrites. Drain again until a full pass finds the map stable —
+    // otherwise the progress write installed below would overwrite the
+    // newer entry, the straggler drain in flushProgressQuietly would see an
+    // empty map, and the terminal UPDATE could commit while the newer write
+    // was still running (its active-row guard would then silently drop it).
+    // Bounded by DRAIN_MAX_PASSES (see above); a straggler past the bound
+    // stays chained behind the progress write and lands in order.
+    for (let pass = 0; pass < DRAIN_MAX_PASSES; pass++) {
+      const inflight = this.inflightWrites.get(jobId);
+      if (!inflight) break;
       try {
         await inflight;
       } catch {
@@ -441,36 +464,35 @@ export class SyncJobManager {
       // flush was pending makes the write a no-op instead of clobbering
       // terminal fields.
       .where(activeJob(jobId));
-    const tracked: Promise<void> = write.then(
-      () => {
-        if (this.inflightWrites.get(jobId) === tracked) {
-          this.inflightWrites.delete(jobId);
+    // Chain onto whatever is tracked now rather than overwriting the map:
+    // a write issued during the drain above stays ahead of this flush in
+    // the ordering chain, so it can never be hidden from the straggler
+    // drain in flushProgressQuietly.
+    const tracked = this.trackInflightWrite(jobId, () =>
+      write.then(
+        () => {
+          scheduled?.resolve();
+        },
+        (error) => {
+          console.error(
+            `[SYNC_JOB] progress flush failed for ${jobId}:`,
+            error
+          );
+          // Preserve the snapshot so the next flush retries it instead of
+          // silently dropping the heartbeat — unless newer progress has
+          // already superseded it.
+          const existing = this.pendingProgress.get(jobId);
+          if (
+            !existing ||
+            existing.completedShows < pending.completedShows
+          ) {
+            this.pendingProgress.set(jobId, pending);
+          }
+          scheduled?.reject(error);
+          throw error;
         }
-        scheduled?.resolve();
-      },
-      (error) => {
-        if (this.inflightWrites.get(jobId) === tracked) {
-          this.inflightWrites.delete(jobId);
-        }
-        console.error(`[SYNC_JOB] progress flush failed for ${jobId}:`, error);
-        // Preserve the snapshot so the next flush retries it instead of
-        // silently dropping the heartbeat — unless newer progress has
-        // already superseded it.
-        const existing = this.pendingProgress.get(jobId);
-        if (
-          !existing ||
-          existing.completedShows < pending.completedShows
-        ) {
-          this.pendingProgress.set(jobId, pending);
-        }
-        scheduled?.reject(error);
-        throw error;
-      }
+      )
     );
-    this.inflightWrites.set(jobId, tracked);
-    // Observe internally so fire-and-forget callers are safe; awaiters of
-    // the returned promise still see the rejection.
-    tracked.catch(() => {});
     return tracked;
   }
 
