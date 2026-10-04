@@ -8,6 +8,7 @@ import { registerCatalogTools } from "./catalog";
 import { registerShowTools } from "./shows";
 import { registerEpisodeTools } from "./episodes";
 import { registerDiscoveryTools } from "./discovery";
+import { registerSyncTools } from "./sync";
 
 export const READ_TOOL_NAMES = [
   "library_list",
@@ -18,6 +19,7 @@ export const READ_TOOL_NAMES = [
   "upcoming_episodes",
   "releases_new",
   "recommendations_list",
+  "sync_status",
 ] as const;
 
 export function registerReadTools(tools: ToolRegistrar, auth: McpAuthContext): void {
@@ -26,4 +28,5 @@ export function registerReadTools(tools: ToolRegistrar, auth: McpAuthContext): v
   registerShowTools(tools, auth);
   registerEpisodeTools(tools, auth);
   registerDiscoveryTools(tools, auth);
+  registerSyncTools(tools, auth);
 }

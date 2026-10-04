@@ -13,10 +13,10 @@ async function performAsyncAddShowSync(jobId: string, showId: number, userId: st
   
   try {
     console.log(`[ADD_SHOW_SYNC] Starting async sync for show ${showId}, job ${jobId}, groupId: ${groupId || 'personal'}`);
-    syncJobManager.markJobRunning(jobId);
+    await syncJobManager.markJobRunning(jobId);
     
     // Phase 1: Fetch scrobble data
-    reporter.setPhase('fetch-scrobbles', 'Fetching your watch history from TVMaze...');
+    await reporter.setPhase('fetch-scrobbles', 'Fetching your watch history from TVMaze...');
     let scrobbleData = [];
     const apiKey = process.env.TVMAZE_API_KEY;
     const username = process.env.TVMAZE_USERNAME;
@@ -53,7 +53,7 @@ async function performAsyncAddShowSync(jobId: string, showId: number, userId: st
     }
 
     // Phase 2: Fetch episodes
-    reporter.setPhase('fetch-episodes', 'Fetching episode list...');
+    await reporter.setPhase('fetch-episodes', 'Fetching episode list...');
     const episodeResponse = await fetch(`https://api.tvmaze.com/shows/${showId}/episodes`);
     
     if (!episodeResponse.ok) {
@@ -64,15 +64,15 @@ async function performAsyncAddShowSync(jobId: string, showId: number, userId: st
     console.log(`[ADD_SHOW_SYNC] Found ${episodes.length} episodes for show ${showId}`);
     
     // Phase 3: Process episodes
-    reporter.setPhase('process-episodes', 'Processing episodes...');
-    reporter.setTotal(episodes.length);
+    await reporter.setPhase('process-episodes', 'Processing episodes...');
+    await reporter.setTotal(episodes.length);
     
     let episodesImported = 0;
     let episodesUpdated = 0;
     
     for (const episode of episodes) {
       // Check for cancellation
-      if (reporter.checkCanceled()) {
+      if (await reporter.checkCanceled()) {
         console.log(`[ADD_SHOW_SYNC] Job ${jobId} was cancelled`);
         return;
       }
@@ -152,14 +152,14 @@ async function performAsyncAddShowSync(jobId: string, showId: number, userId: st
     }
     
     // Phase 4: Finalize
-    reporter.setPhase('finalize', 'Finishing sync...');
+    await reporter.setPhase('finalize', 'Finishing sync...');
     console.log(`[ADD_SHOW_SYNC] Completed: ${episodesImported} episodes imported, ${episodesUpdated} episodes updated from scrobbles`);
     
-    syncJobManager.markJobSuccess(jobId, episodesImported, episodesUpdated);
+    await syncJobManager.markJobSuccess(jobId, episodesImported, episodesUpdated);
     
   } catch (error) {
     console.error(`[ADD_SHOW_SYNC] Error in async add show sync:`, error);
-    syncJobManager.markJobError(jobId, error instanceof Error ? error.message : 'Unknown error');
+    await syncJobManager.markJobError(jobId, error instanceof Error ? error.message : 'Unknown error');
   }
 }
 
@@ -168,10 +168,10 @@ async function performAsyncSync(jobId: string, showId: number, userId: string): 
   const reporter = syncJobManager.createReporter(jobId);
   
   try {
-    syncJobManager.markJobRunning(jobId);
+    await syncJobManager.markJobRunning(jobId);
     
     // Phase 1: Sync show details
-    reporter.setPhase('fetch-show', 'Fetching show details...');
+    await reporter.setPhase('fetch-show', 'Fetching show details...');
     const syncedShow = await storage.syncShowFromTVMaze(showId);
     
     if (!syncedShow) {
@@ -179,7 +179,7 @@ async function performAsyncSync(jobId: string, showId: number, userId: string): 
     }
 
     // Phase 2: Fetch scrobble data
-    reporter.setPhase('fetch-scrobbles', 'Fetching watch history from TVMaze...');
+    await reporter.setPhase('fetch-scrobbles', 'Fetching watch history from TVMaze...');
     let scrobbleData = [];
     const apiKey = process.env.TVMAZE_API_KEY;
     const username = process.env.TVMAZE_USERNAME;
@@ -205,7 +205,7 @@ async function performAsyncSync(jobId: string, showId: number, userId: string): 
     }
 
     // Phase 3: Fetch episodes
-    reporter.setPhase('fetch-episodes', 'Fetching episode list...');
+    await reporter.setPhase('fetch-episodes', 'Fetching episode list...');
     const response = await fetch(`https://api.tvmaze.com/shows/${showId}/episodes`);
     
     if (!response.ok) {
@@ -215,15 +215,15 @@ async function performAsyncSync(jobId: string, showId: number, userId: string): 
     const episodes = await response.json();
     
     // Phase 4: Process episodes
-    reporter.setPhase('process-episodes', 'Processing episodes...');
-    reporter.setTotal(episodes.length);
+    await reporter.setPhase('process-episodes', 'Processing episodes...');
+    await reporter.setTotal(episodes.length);
     
     let episodesImported = 0;
     let episodesUpdated = 0;
     
     for (const episode of episodes) {
       // Check for cancellation
-      if (reporter.checkCanceled()) {
+      if (await reporter.checkCanceled()) {
         return;
       }
 
@@ -312,13 +312,13 @@ async function performAsyncSync(jobId: string, showId: number, userId: string): 
     }
 
     // Phase 5: Finalize
-    reporter.setPhase('finalize', 'Finishing sync...');
+    await reporter.setPhase('finalize', 'Finishing sync...');
     
-    syncJobManager.markJobSuccess(jobId, episodesImported, episodesUpdated);
+    await syncJobManager.markJobSuccess(jobId, episodesImported, episodesUpdated);
     
   } catch (error) {
     console.error("Error in async sync:", error);
-    syncJobManager.markJobError(jobId, error instanceof Error ? error.message : 'Unknown error');
+    await syncJobManager.markJobError(jobId, error instanceof Error ? error.message : 'Unknown error');
   }
 }
 
@@ -328,7 +328,7 @@ async function performAsyncLibraryImport(jobId: string, userId: string): Promise
   
   try {
     console.log(`[LIBRARY_IMPORT] Starting async library import, job ${jobId}`);
-    syncJobManager.markJobRunning(jobId);
+    await syncJobManager.markJobRunning(jobId);
     
     const apiKey = process.env.TVMAZE_API_KEY;
     const username = process.env.TVMAZE_USERNAME;
@@ -338,7 +338,7 @@ async function performAsyncLibraryImport(jobId: string, userId: string): Promise
     }
 
     // Phase 1: Fetch followed shows
-    reporter.setPhase('fetch-show', 'Fetching your followed shows from TVMaze...');
+    await reporter.setPhase('fetch-show', 'Fetching your followed shows from TVMaze...');
     
     const credentials = Buffer.from(`${username}:${apiKey}`).toString('base64');
     const response = await fetch(`https://api.tvmaze.com/v1/user/follows/shows?embed=show`, {
@@ -363,8 +363,8 @@ async function performAsyncLibraryImport(jobId: string, userId: string): Promise
     let skippedCount = 0;
 
     // Phase 2: Process shows
-    reporter.setPhase('process-episodes', 'Importing shows to your library...'); // Reusing episodes phase
-    reporter.setTotal(followedShows.length);
+    await reporter.setPhase('process-episodes', 'Importing shows to your library...'); // Reusing episodes phase
+    await reporter.setTotal(followedShows.length);
 
     // Process each followed show
     for (const followedShow of followedShows) {
@@ -419,13 +419,13 @@ async function performAsyncLibraryImport(jobId: string, userId: string): Promise
     }
 
     // Phase 3: Finalize
-    reporter.setPhase('finalize', 'Import completed!');
+    await reporter.setPhase('finalize', 'Import completed!');
     
-    syncJobManager.markJobSuccess(jobId, importedCount, skippedCount);
+    await syncJobManager.markJobSuccess(jobId, importedCount, skippedCount);
     
   } catch (error) {
     console.error("Error in library import:", error);
-    syncJobManager.markJobError(jobId, error instanceof Error ? error.message : 'Unknown error');
+    await syncJobManager.markJobError(jobId, error instanceof Error ? error.message : 'Unknown error');
   }
 }
 
@@ -435,10 +435,10 @@ async function performAsyncEpisodeImport(jobId: string, userId: string): Promise
   
   try {
     console.log(`[EPISODE_IMPORT] Starting async episode import, job ${jobId}`);
-    syncJobManager.markJobRunning(jobId);
+    await syncJobManager.markJobRunning(jobId);
     
     // Phase 1: Fetch user shows
-    reporter.setPhase('fetch-episodes', 'Fetching your shows...');
+    await reporter.setPhase('fetch-episodes', 'Fetching your shows...');
     
     const allUserShows = await storage.getUserShows(userId);
     if (allUserShows.length === 0) {
@@ -458,12 +458,12 @@ async function performAsyncEpisodeImport(jobId: string, userId: string): Promise
     let processedShows = 0;
 
     // Start processing shows immediately (no upfront counting needed)
-    reporter.setPhase('process-episodes', 'Processing and updating episode information...');
-    reporter.setTotal(totalShows);
+    await reporter.setPhase('process-episodes', 'Processing and updating episode information...');
+    await reporter.setTotal(totalShows);
 
     for (const userShow of userShows) {
       // Check if job has been canceled
-      if (reporter.checkCanceled()) {
+      if (await reporter.checkCanceled()) {
         console.log(`[EPISODE_IMPORT] Job ${jobId} was canceled`);
         break;
       }
@@ -540,17 +540,17 @@ async function performAsyncEpisodeImport(jobId: string, userId: string): Promise
     }
 
     // Phase 4: Finalize
-    if (reporter.checkCanceled()) {
-      reporter.setPhase('finalize', 'Episode sync canceled');
-      syncJobManager.markJobError(jobId, 'Sync was canceled by user');
+    if (await reporter.checkCanceled()) {
+      await reporter.setPhase('finalize', 'Episode sync canceled');
+      await syncJobManager.markJobError(jobId, 'Sync was canceled by user');
     } else {
-      reporter.setPhase('finalize', 'Episode import completed!');
-      syncJobManager.markJobSuccess(jobId, importedCount, skippedCount);
+      await reporter.setPhase('finalize', 'Episode import completed!');
+      await syncJobManager.markJobSuccess(jobId, importedCount, skippedCount);
     }
     
   } catch (error) {
     console.error("Error in episode import:", error);
-    syncJobManager.markJobError(jobId, error instanceof Error ? error.message : 'Unknown error');
+    await syncJobManager.markJobError(jobId, error instanceof Error ? error.message : 'Unknown error');
   }
 }
 
@@ -790,7 +790,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const userId = getUserId(req);
       
       // Create new sync job
-      const jobId = syncJobManager.createJob(showId);
+      const jobId = await syncJobManager.createJob(userId, "show-sync", showId);
       
       // Start async sync process
       setImmediate(async () => {
@@ -804,66 +804,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/sync/:id/events", (req, res) => {
-    const { id } = req.params;
-    const job = syncJobManager.getJob(id);
-    
-    if (!job) {
-      return res.status(404).json({ error: "Job not found" });
-    }
-
-    // Set SSE headers
-    res.writeHead(200, {
-      'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache',
-      'Connection': 'keep-alive',
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Headers': 'Cache-Control'
-    });
-
-    // Send initial job state
-    res.write(`data: ${JSON.stringify({ 
-      type: 'init', 
-      data: {
-        status: job.status,
-        phase: job.phase,
-        percent: job.percent,
-        completedShows: job.completedShows,
-        totalShows: job.totalShows,
-        etaSeconds: job.etaSeconds,
-        message: job.lastMessage,
-        errors: job.errors
-      },
-      timestamp: Date.now()
-    })}\n\n`);
-
-    // Subscribe to job updates
-    const unsubscribe = syncJobManager.subscribe(id, (event) => {
-      res.write(event);
-    });
-
-    // Heartbeat to keep connection alive
-    const heartbeat = setInterval(() => {
-      res.write(`data: ${JSON.stringify({ type: 'heartbeat', timestamp: Date.now() })}\n\n`);
-    }, 15000);
-
-    // Cleanup on client disconnect
-    req.on('close', () => {
-      clearInterval(heartbeat);
-      unsubscribe();
-    });
-  });
-
   // Get sync job status (for polling fallback)
-  app.get("/api/sync/:id/status", (req, res) => {
+  // Get sync job status (polled by the UI; durable across replicas)
+  app.get("/api/sync/:id/status", async (req, res) => {
     const { id } = req.params;
-    const job = syncJobManager.getJob(id);
+    const userId = getUserId(req);
+    const job = await syncJobManager.getJob(id, userId);
     
     if (!job) {
       return res.status(404).json({ error: "Job not found" });
     }
 
     res.json({
+      id: job.id,
+      kind: job.kind,
       status: job.status,
       phase: job.phase,
       percent: job.percent,
@@ -878,16 +832,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Cancel sync job
-  app.delete("/api/sync/:id", (req, res) => {
+  // Cancel sync job
+  app.delete("/api/sync/:id", async (req, res) => {
     const { id } = req.params;
-    const job = syncJobManager.getJob(id);
+    const userId = getUserId(req);
+    const job = await syncJobManager.getJob(id, userId);
     
     if (!job) {
       return res.status(404).json({ error: "Job not found" });
     }
 
     if (job.status === 'running') {
-      syncJobManager.cancelJob(id);
+      await syncJobManager.cancelJob(id);
       res.json({ message: "Sync job canceled" });
     } else {
       res.json({ message: "Job already completed or not running" });
@@ -1061,7 +1017,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const userId = getUserId(req);
       
       // Create new library import job
-      const jobId = syncJobManager.createJob(0);
+      const jobId = await syncJobManager.createJob(userId, "library-import");
       
       // Start async import process
       setImmediate(async () => {
@@ -1076,55 +1032,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // SSE endpoint for library import progress
-  app.get("/api/library/import/:id/events", (req, res) => {
+  // Library import job status (polled by the UI; durable across replicas)
+  app.get("/api/library/import/:id/status", async (req, res) => {
     const { id } = req.params;
-    const job = syncJobManager.getJob(id);
-    
+    const userId = getUserId(req);
+    const job = await syncJobManager.getJob(id, userId);
+
     if (!job) {
       return res.status(404).json({ error: "Job not found" });
     }
 
-    // Set SSE headers
-    res.writeHead(200, {
-      'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache',
-      'Connection': 'keep-alive',
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Headers': 'Cache-Control'
-    });
-
-    // Send initial job state
-    res.write(`data: ${JSON.stringify({ 
-      type: 'init', 
-      data: {
-        status: job.status,
-        phase: job.phase,
-        percent: job.percent,
-        completedShows: job.completedShows,
-        totalShows: job.totalShows,
-        etaSeconds: job.etaSeconds,
-        message: job.lastMessage,
-        errors: job.errors,
-        episodesImported: job.episodesImported,
-        episodesUpdated: job.episodesUpdated
-      },
-      timestamp: Date.now()
-    })}\n\n`);
-
-    // Subscribe to job updates
-    const unsubscribe = syncJobManager.subscribe(id, (event) => {
-      res.write(event);
-    });
-
-    // Heartbeat to keep connection alive
-    const heartbeat = setInterval(() => {
-      res.write(`data: ${JSON.stringify({ type: 'heartbeat', timestamp: Date.now() })}\n\n`);
-    }, 15000);
-
-    // Cleanup on client disconnect
-    req.on('close', () => {
-      clearInterval(heartbeat);
-      unsubscribe();
+    res.json({
+      id: job.id,
+      kind: job.kind,
+      status: job.status,
+      phase: job.phase,
+      percent: job.percent,
+      completedShows: job.completedShows,
+      totalShows: job.totalShows,
+      etaSeconds: job.etaSeconds,
+      message: job.lastMessage,
+      errors: job.errors,
+      episodesImported: job.episodesImported,
+      episodesUpdated: job.episodesUpdated
     });
   });
 
@@ -1242,7 +1172,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Create async job for episode sync
-      const jobId = syncJobManager.createJob(showId);
+      const jobId = await syncJobManager.createJob(userId, "show-sync", showId);
       console.log(`[ADD_SHOW] Created sync job: ${jobId}`);
 
       // Start async episode sync process - pass groupId for shared shows
@@ -1474,7 +1404,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // For larger collections, use job-based async import with progress tracking
-      const jobId = syncJobManager.createJob(0);
+      const jobId = await syncJobManager.createJob(userId, "episode-import");
       
       // Start async episode import
       performAsyncEpisodeImport(jobId, userId).catch(error => {
@@ -1493,13 +1423,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Episode import progress via JSON polling (no more SSE)
-  app.get("/api/episodes/import/progress/:id", (req, res) => {
+  app.get("/api/episodes/import/progress/:id", async (req, res) => {
     const { id } = req.params;
+    const userId = getUserId(req);
     
     console.log(`[PROGRESS] Polling request for job ${id}`);
 
     // Get job status
-    const job = syncJobManager.getJob(id);
+    const job = await syncJobManager.getJob(id, userId);
     if (!job) {
       console.log(`[PROGRESS] Job ${id} not found`);
       return res.status(404).json({ error: 'Job not found' });
@@ -1523,10 +1454,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Cancel episode import job
-  app.post("/api/episodes/import/cancel/:id", (req, res) => {
+  app.post("/api/episodes/import/cancel/:id", async (req, res) => {
     const { id } = req.params;
     
-    const success = syncJobManager.cancelJob(id);
+    const success = await syncJobManager.cancelJob(id);
     
     if (success) {
       res.json({ message: "Episode sync canceled successfully" });
@@ -1536,8 +1467,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Check for active episode import jobs
-  app.get("/api/episodes/import/status", (req, res) => {
-    const activeJobs = syncJobManager.getActiveJobs();
+  // Check for active episode import jobs
+  app.get("/api/episodes/import/status", async (req, res) => {
+    const userId = getUserId(req);
+    const activeJobs = await syncJobManager.getActiveJobs(userId);
     const activeJob = activeJobs.length > 0 ? activeJobs[0] : null;
     
     if (activeJob) {
@@ -1976,7 +1909,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
       
       // Start async episode sync - pass groupId for shared shows
-      const jobId = syncJobManager.createJob(tvmazeId);
+      const jobId = await syncJobManager.createJob(userId, "show-sync", tvmazeId);
       
       // Fire and forget the async sync
       performAsyncAddShowSync(jobId, tvmazeId, userId, groupId || undefined).catch(error => {
@@ -2055,7 +1988,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
       
       // Sync episodes first
-      const jobId = syncJobManager.createJob(tvmazeId);
+      const jobId = await syncJobManager.createJob(userId, "show-sync", tvmazeId);
       
       // Sync episodes and mark all as watched
       (async () => {
@@ -2187,7 +2120,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       await storage.dismissNewRelease(userId, tvmazeId);
       
       // Start async episode sync - pass groupId for shared shows
-      const jobId = syncJobManager.createJob(tvmazeId);
+      const jobId = await syncJobManager.createJob(userId, "show-sync", tvmazeId);
       
       performAsyncAddShowSync(jobId, tvmazeId, userId, groupId || undefined).catch(error => {
         console.error(`[NEW_RELEASES_ADD] Async sync failed for job ${jobId}:`, error);
@@ -2257,7 +2190,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       await storage.dismissNewRelease(userId, tvmazeId);
       
       // Sync episodes and mark all as watched
-      const jobId = syncJobManager.createJob(tvmazeId);
+      const jobId = await syncJobManager.createJob(userId, "show-sync", tvmazeId);
       
       (async () => {
         try {

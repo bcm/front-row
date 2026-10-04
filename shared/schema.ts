@@ -395,3 +395,36 @@ export type OauthToken = typeof oauthTokens.$inferSelect;
 export type InsertOauthToken = z.infer<typeof insertOauthTokenSchema>;
 export type OutboxEvent = typeof outboxEvents.$inferSelect;
 export type InsertOutboxEvent = z.infer<typeof insertOutboxEventSchema>;
+
+// Durable sync job state (issue #6). Async sync jobs (show sync, library
+// import, episode import) persist here instead of the old per-replica
+// in-memory manager, so every reader (UI, API, MCP sync_status) sees the
+// same state regardless of which replica runs the job. heartbeat_at advances
+// on throttled progress writes while the worker is alive; readers treat a
+// 'running' job whose heartbeat is older than the timeout as dead — computed
+// on read, the row itself is never mutated by readers.
+export const syncJobs = pgTable("sync_jobs", {
+  id: text("id").primaryKey(), // sync_<showId>_<ts>_<rand>
+  userId: varchar("user_id").notNull(),
+  kind: text("kind").notNull(), // 'show-sync' | 'library-import' | 'episode-import'
+  showId: integer("show_id"), // null for library/episode imports
+  status: text("status").notNull(), // 'queued' | 'running' | 'success' | 'error' | 'canceled'
+  phase: text("phase").notNull(),
+  totalShows: integer("total_shows").notNull().default(0),
+  completedShows: integer("completed_shows").notNull().default(0),
+  percent: integer("percent").notNull().default(0),
+  etaSeconds: integer("eta_seconds"),
+  errors: jsonb("errors").$type<string[]>().notNull().default([]),
+  episodesImported: integer("episodes_imported").notNull().default(0),
+  episodesUpdated: integer("episodes_updated").notNull().default(0),
+  lastMessage: text("last_message"),
+  canceled: boolean("canceled").notNull().default(false),
+  startedAt: timestamp("started_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+  heartbeatAt: timestamp("heartbeat_at").defaultNow(),
+  finishedAt: timestamp("finished_at"),
+}, (table) => ({
+  userRecent: index("sync_jobs_user_started_idx").on(table.userId, table.startedAt),
+}));
+
+export type SyncJobRow = typeof syncJobs.$inferSelect;

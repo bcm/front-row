@@ -81,98 +81,77 @@ export default function AddShowDialog({ open, onOpenChange }: AddShowDialogProps
   });
 
   // Progress tracking with Server-Sent Events
+  // Progress tracking by polling the durable sync-job status endpoint
   const startProgressTracking = (jobId: string) => {
-    const eventSource = new EventSource(`/api/sync/${jobId}/events`);
-    
-    eventSource.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        
-        if (data.type === 'progress' || data.type === 'init') {
-          const progressData = data.data;
-          setSyncProgress({
-            status: progressData.status,
-            phase: progressData.phase || '',
-            percent: progressData.percent || 0,
-            completedEpisodes: progressData.completedEpisodes || 0,
-            totalEpisodes: progressData.totalEpisodes || 0,
-            etaSeconds: progressData.etaSeconds,
-            message: progressData.message || '',
-            errors: progressData.errors || []
-          });
-          
-          // If job is complete
-          if (progressData.status === 'success') {
-            eventSource.close();
-            
-            // Invalidate queries to refresh data
-            queryClient.invalidateQueries({ queryKey: ["/api/user/shows"] });
-            queryClient.invalidateQueries({ queryKey: ["/api/user/episodes"] });
-            queryClient.invalidateQueries({ queryKey: ["/api/search"], exact: false });
-            
-            toast({
-              title: "Import completed",
-              description: `Successfully imported ${progressData.episodesImported || progressData.completedEpisodes || 0} episodes${progressData.episodesUpdated && progressData.episodesUpdated > 0 ? ` with ${progressData.episodesUpdated} synced from your watch history` : ''}`,
-            });
-            
-            // Close dialog after a brief delay
-            setTimeout(() => {
-              onOpenChange(false);
-              setSearchQuery("");
-              setCurrentJobId(null);
-              setSyncProgress(null);
-            }, 2000);
-          } else if (progressData.status === 'error') {
-            eventSource.close();
-            setCurrentJobId(null);
-            setSyncProgress(null);
-            
-            toast({
-              title: "Import failed",
-              description: progressData.message || "Failed to import episodes",
-              variant: "destructive",
-            });
-          }
-        } else if (data.type === 'complete') {
-          // Handle completion event separately to get accurate counts
-          const completionData = data.data;
-          eventSource.close();
-          
-          // Invalidate queries to refresh data
-          queryClient.invalidateQueries({ queryKey: ["/api/user/shows"] });
-          queryClient.invalidateQueries({ queryKey: ["/api/user/episodes"] });
-          queryClient.invalidateQueries({ queryKey: ["/api/search"], exact: false });
-          
-          toast({
-            title: "Import completed",
-            description: `Successfully imported ${completionData.episodesImported || 0} episodes${completionData.episodesUpdated && completionData.episodesUpdated > 0 ? ` with ${completionData.episodesUpdated} synced from your watch history` : ''}`,
-          });
-          
-          // Close dialog after a brief delay
-          setTimeout(() => {
-            onOpenChange(false);
-            setSearchQuery("");
-            setCurrentJobId(null);
-            setSyncProgress(null);
-          }, 2000);
-        }
-      } catch (error) {
-        console.error('Error parsing SSE data:', error);
+    const applyStatus = (progressData: any) => {
+      setSyncProgress({
+        status: progressData.status,
+        phase: progressData.phase || '',
+        percent: progressData.percent || 0,
+        completedEpisodes: progressData.completedShows || 0,
+        totalEpisodes: progressData.totalShows || 0,
+        etaSeconds: progressData.etaSeconds,
+        message: progressData.lastMessage || progressData.message || '',
+        errors: progressData.errors || []
+      });
+
+      // If job is complete
+      if (progressData.status === 'success') {
+        stopPolling();
+
+        // Invalidate queries to refresh data
+        queryClient.invalidateQueries({ queryKey: ["/api/user/shows"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/user/episodes"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/search"], exact: false });
+
+        toast({
+          title: "Import completed",
+          description: `Successfully imported ${progressData.episodesImported || progressData.completedShows || 0} episodes${progressData.episodesUpdated && progressData.episodesUpdated > 0 ? ` with ${progressData.episodesUpdated} synced from your watch history` : ''}`,
+        });
+
+        // Close dialog after a brief delay
+        setTimeout(() => {
+          onOpenChange(false);
+          setSearchQuery("");
+          setCurrentJobId(null);
+          setSyncProgress(null);
+        }, 2000);
+      } else if (progressData.status === 'error') {
+        stopPolling();
+        setCurrentJobId(null);
+        setSyncProgress(null);
+
+        toast({
+          title: "Import failed",
+          description: progressData.lastMessage || progressData.message || "Failed to import episodes",
+          variant: "destructive",
+        });
       }
     };
 
-    eventSource.onerror = (error) => {
-      console.error('EventSource error:', error);
-      eventSource.close();
-      setCurrentJobId(null);
-      setSyncProgress(null);
-      
-      toast({
-        title: "Connection error",
-        description: "Lost connection to import progress",
-        variant: "destructive",
-      });
+    const stopPolling = () => clearInterval(pollTimer);
+
+    const poll = async () => {
+      try {
+        const res = await fetch(`/api/sync/${jobId}/status`);
+        if (!res.ok) throw new Error(`status ${res.status}`);
+        applyStatus(await res.json());
+      } catch (error) {
+        console.error('Error polling sync status:', error);
+        stopPolling();
+        setCurrentJobId(null);
+        setSyncProgress(null);
+
+        toast({
+          title: "Connection error",
+          description: "Lost connection to import progress",
+          variant: "destructive",
+        });
+      }
     };
+
+    const pollTimer = setInterval(poll, 2000);
+    void poll();
   };
 
   const handleAddShow = (showId: number) => {
