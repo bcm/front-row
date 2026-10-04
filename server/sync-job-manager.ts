@@ -553,12 +553,12 @@ export class SyncJobManager {
         return this.scheduleProgressFlush(jobId);
       },
 
-      addError: async (error) => {
+      addError: (error) => {
         // Atomic JSONB append in a single UPDATE: route call sites invoke
         // addError without awaiting it, so a read-modify-write here could
         // lose errors when concurrent appends read the same array.
         const now = new Date();
-        const write = () =>
+        const tracked = this.trackInflightWrite(jobId, () =>
           db
             .update(syncJobs)
             .set({
@@ -570,20 +570,21 @@ export class SyncJobManager {
             // (e.g. from a worker that hasn't observed the cancel yet) must
             // not touch the row.
             .where(activeJob(jobId))
-            .then(
-              () => {},
-              (err) => {
-                console.error(`[SYNC_JOB] addError failed for ${jobId}:`, err);
-              }
-            );
+            .then(() => {})
+        );
         // Tracked alongside the progress writes: terminal transitions drain
         // in-flight writes before committing (see flushProgressQuietly), so
         // an unawaited addError lands while the row is still active instead
         // of racing the terminal UPDATE and no-op'ing against the
-        // now-terminal row. Awaiting callers get durability; fire-and-forget
-        // callers are safe — failures are logged above and observed
-        // internally, never unhandled.
-        await this.trackInflightWrite(jobId, write);
+        // now-terminal row. The raw tracked promise is returned, so an
+        // awaiting caller sees a write failure as a rejection instead of
+        // believing the error was durable. This .catch keeps fire-and-forget
+        // callers safe (no unhandled-rejection warnings) and logs the lost
+        // error.
+        tracked.catch((err) => {
+          console.error(`[SYNC_JOB] addError failed for ${jobId}:`, err);
+        });
+        return tracked;
       },
 
       // Reads the row, so a cancel issued from any replica is honored.

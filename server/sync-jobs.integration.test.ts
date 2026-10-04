@@ -346,6 +346,55 @@ describe("SyncJobManager (durable, PG-backed)", () => {
     expect(row.errors).toEqual(expect.arrayContaining(["e1", "e2", "e3"]));
   });
 
+  it("an awaiting addError caller sees a write failure as a rejection", async () => {
+    const id = await syncJobManager.createJob(USER_A, "show-sync", 40);
+    await syncJobManager.markJobRunning(id);
+    const reporter = syncJobManager.createReporter(id);
+
+    // Fail addError's UPDATE: without propagating the rejection, the
+    // awaiting caller would believe the error was durable even though it
+    // was lost.
+    const WRITE_ERROR = new Error("addError write boom");
+    const originalUpdate = db.update.bind(db);
+    const updateSpy = vi
+      .spyOn(db, "update")
+      .mockImplementation(((table: any) => {
+        const builder: any = originalUpdate(table);
+        const originalSet = builder.set.bind(builder);
+        builder.set = (values: any) => {
+          const chained: any = originalSet(values);
+          if (values && typeof values === "object" && "errors" in values) {
+            // addError's chain is update -> set -> where -> then; reject
+            // the final thenable so the tracked write fails.
+            return {
+              where: (cond: any) => ({
+                then: (onFulfilled?: any, onRejected?: any) =>
+                  onRejected
+                    ? onRejected(WRITE_ERROR)
+                    : Promise.reject(WRITE_ERROR),
+              }),
+            };
+          }
+          return chained;
+        };
+        return builder;
+      }) as any);
+
+    try {
+      await expect(reporter.addError("boom")).rejects.toThrow(
+        "addError write boom"
+      );
+    } finally {
+      updateSpy.mockRestore();
+    }
+
+    // The failed write must not leave the job's write chain stuck: a
+    // subsequent write still runs.
+    await reporter.addError("after");
+    const row = (await rawRow(id))!;
+    expect(row.errors).toEqual(["after"]);
+  });
+
   it("cleanup terminates heartbeat-dead running jobs and reaps old terminal jobs", async () => {
     // Dead worker: heartbeat stale beyond retention -> terminated as error,
     // but not deleted on the same pass (its updatedAt is now fresh).
