@@ -5,7 +5,11 @@
 // Heartbeat: the reporter's progress writes advance heartbeat_at, throttled
 // to at most one write per second. Readers treat a 'running' job whose
 // heartbeat is older than SYNC_HEARTBEAT_TIMEOUT_MS as dead — computed on
-// read, the row itself is never mutated by a reader.
+// read, the row itself is never mutated by a reader. A minute-interval
+// reaper (reapStaleRunningJobs) persists that interpretation, so a
+// stalled-but-live worker can never revive the row with a late terminal
+// transition: every terminal transition is conditional on the row still
+// being queued/running, and only touches rows in those states.
 
 import { eq, and, desc, lt, or, sql } from "drizzle-orm";
 import { db } from "./db";
@@ -101,7 +105,8 @@ function toView(row: SyncJobRow): SyncJob {
 // deferred markJobRunning, so one older than the timeout means the replica
 // crashed in that window — its age is measured from startedAt, which is the
 // insert time and never advances while queued. The row is left untouched —
-// this is a read-time interpretation only.
+// this is a read-time interpretation only; reapStaleRunningJobs persists it
+// on a minute interval so late workers can never revive the row.
 function applyHeartbeatTimeout(row: SyncJobRow): SyncJob {
   const view = toView(row);
   if (
@@ -207,18 +212,24 @@ export class SyncJobManager {
     return applyHeartbeatTimeout(rows[0]);
   }
 
-  async getActiveJobs(userId?: string): Promise<SyncJob[]> {
+  /**
+   * Active (running/queued, heartbeat fresh) jobs for a user. When `kind` is
+   * given, only that job kind is returned — filtered in the query, not in
+   * memory. The episode-import status endpoint must not surface an unrelated
+   * show-sync or library-import job: the followed-shows page would label it
+   * "Episodes Syncing" and offer to cancel it through the episode-import
+   * cancel route.
+   */
+  async getActiveJobs(userId?: string, kind?: SyncJobKind): Promise<SyncJob[]> {
+    const predicates = [
+      or(eq(syncJobs.status, "running"), eq(syncJobs.status, "queued")),
+    ];
+    if (userId) predicates.push(eq(syncJobs.userId, userId));
+    if (kind) predicates.push(eq(syncJobs.kind, kind));
     const rows = await db
       .select()
       .from(syncJobs)
-      .where(
-        userId
-          ? and(
-              or(eq(syncJobs.status, "running"), eq(syncJobs.status, "queued")),
-              eq(syncJobs.userId, userId)
-            )
-          : or(eq(syncJobs.status, "running"), eq(syncJobs.status, "queued"))
-      );
+      .where(and(...predicates));
     // Timed-out workers are dead, not active. Stale queued jobs (crashed
     // between createJob and markJobRunning) read as error via the
     // heartbeat-timeout interpretation and are filtered out here.
@@ -723,19 +734,26 @@ export const syncJobManager = new SyncJobManager();
 const SYNC_JOB_RETENTION_MS = 24 * 60 * 60 * 1000;
 
 /**
- * Hourly maintenance, exported for tests.
+ * Writer-side heartbeat reaper, exported for tests.
  *
- * Dead workers leave 'running' rows that nothing would ever delete (readers
- * only compute the heartbeat timeout, never persist it), so first terminate
- * running jobs whose heartbeat has been stale beyond the retention period,
- * then reap terminal jobs older than retention as before. 'queued' rows are
- * included in the first pass: a replica can crash between createJob and the
- * deferred markJobRunning, leaving an orphan that no worker will ever pick
- * up (heartbeat_at is the insert time for queued rows, since nothing
- * advances it while queued, so the same cutoff identifies them).
+ * The read-time timeout interpretation is not terminal: the stored row stays
+ * 'running', so a stalled-but-live worker (several worker phases await raw
+ * `fetch` with no timeout) could resume after readers returned 'error' and
+ * markJobSuccess — resurrecting the job from the UI/MCP's perspective.
+ * Persisting the timeout transition closes that window: once reaped to
+ * 'error', the conditional terminal transitions (queued/running rows only)
+ * no-op instead of reviving the row.
+ *
+ * Stale 'queued' rows are included: heartbeat_at is the insert time for
+ * queued rows (nothing advances it while queued), so the same cutoff
+ * identifies replicas that crashed between createJob and markJobRunning —
+ * matching the read-time interpretation. Fresh queued rows (seconds old)
+ * never trip the five-minute cutoff.
  */
-export async function cleanupSyncJobs(now: number = Date.now()): Promise<void> {
-  const cutoff = new Date(now - SYNC_JOB_RETENTION_MS);
+export async function reapStaleRunningJobs(
+  now: number = Date.now()
+): Promise<void> {
+  const cutoff = new Date(now - SYNC_HEARTBEAT_TIMEOUT_MS);
   const stamp = new Date(now);
   await db
     .update(syncJobs)
@@ -751,6 +769,19 @@ export async function cleanupSyncJobs(now: number = Date.now()): Promise<void> {
         lt(syncJobs.heartbeatAt, cutoff)
       )
     );
+}
+
+/**
+ * Hourly maintenance, exported for tests.
+ *
+ * Dead workers leave 'running' rows that nothing would ever delete, so
+ * first reap stalled workers (reapStaleRunningJobs persists the
+ * heartbeat-timeout interpretation, which subsumes the old 24h cutoff on
+ * active rows), then delete terminal jobs older than the retention period.
+ */
+export async function cleanupSyncJobs(now: number = Date.now()): Promise<void> {
+  await reapStaleRunningJobs(now);
+  const cutoff = new Date(now - SYNC_JOB_RETENTION_MS);
   await db
     .delete(syncJobs)
     .where(
@@ -765,9 +796,23 @@ export async function cleanupSyncJobs(now: number = Date.now()): Promise<void> {
     );
 }
 
-// Reap old jobs hourly.
-setInterval(() => {
-  cleanupSyncJobs().catch((error) =>
-    console.error("[SYNC_JOB] cleanup failed:", error)
-  );
-}, 60 * 60 * 1000);
+// Maintenance timers are a server-runtime concern: the minute reaper closes
+// a minutes-scale window (stalled worker reviving a job), while retention
+// cleanup is hourly. Integration tests invoke the functions directly and
+// must not have a timer persist rows mid-assertion, so the timers only run
+// outside the test environment.
+if (process.env.NODE_ENV !== "test") {
+  // Reap stalled workers every minute.
+  setInterval(() => {
+    reapStaleRunningJobs().catch((error) =>
+      console.error("[SYNC_JOB] reap failed:", error)
+    );
+  }, 60 * 1000);
+
+  // Reap old jobs hourly.
+  setInterval(() => {
+    cleanupSyncJobs().catch((error) =>
+      console.error("[SYNC_JOB] cleanup failed:", error)
+    );
+  }, 60 * 60 * 1000);
+}

@@ -1534,7 +1534,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Check for active episode import jobs
   app.get("/api/episodes/import/status", asyncHandler(async (req, res) => {
     const userId = getUserId(req);
-    const activeJobs = await syncJobManager.getActiveJobs(userId);
+    // Kind-filtered: an active show-sync or library-import job must never
+    // surface here, or the followed-shows page labels it "Episodes Syncing"
+    // and offers to cancel it through the episode-import cancel route.
+    const activeJobs = await syncJobManager.getActiveJobs(userId, "episode-import");
     const activeJob = activeJobs.length > 0 ? activeJobs[0] : null;
     
     if (activeJob) {

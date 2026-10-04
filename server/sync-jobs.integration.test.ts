@@ -23,6 +23,7 @@ import {
   SyncJobManager,
   SYNC_WORKER_LOST_MESSAGE,
   cleanupSyncJobs,
+  reapStaleRunningJobs,
 } from "./sync-job-manager";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { registerSyncTools } from "./mcp/tools/sync";
@@ -582,6 +583,29 @@ describe("sync route async error forwarding (integration)", () => {
       await db.delete(syncJobs).where(eq(syncJobs.id, id));
     }
   });
+
+  it("episode-import status ignores active jobs of other kinds (GET /api/episodes/import/status)", async () => {
+    // A running show-sync must not surface as "Episodes Syncing" on the
+    // followed-shows page. Start from a clean slate: earlier suites leave
+    // USER_A jobs behind (only the main describe wipes between tests).
+    await db.delete(syncJobs).where(eq(syncJobs.userId, USER_A));
+    const cookie = await createSessionCookie(USER_A);
+    const showSync = await syncJobManager.createJob(USER_A, "show-sync", 201);
+    await syncJobManager.markJobRunning(showSync);
+    const epImport = await syncJobManager.createJob(USER_A, "episode-import");
+    await syncJobManager.markJobRunning(epImport);
+    try {
+      const res = await request(app)
+        .get("/api/episodes/import/status")
+        .set("Cookie", cookie);
+      expect(res.status).toBe(200);
+      expect(res.body.hasActiveJob).toBe(true);
+      expect(res.body.jobId).toBe(epImport);
+    } finally {
+      await db.delete(syncJobs).where(eq(syncJobs.id, showSync));
+      await db.delete(syncJobs).where(eq(syncJobs.id, epImport));
+    }
+  });
 });
 
 describe("add-show 202 contract (integration)", () => {
@@ -738,6 +762,78 @@ describe("Copilot round 8 findings (integration)", () => {
     expect(stale.lastMessage).toBe(SYNC_WORKER_LOST_MESSAGE);
     // A fresh queued job is untouched.
     expect((await rawRow(fresh))!.status).toBe("queued");
+  });
+
+  it("getActiveJobs filters by kind in the query", async () => {
+    // An active show-sync job must never surface through the episode-import
+    // status endpoint: the followed-shows page would label it
+    // "Episodes Syncing" and offer to cancel it via the episode-import
+    // cancel route.
+    const showSync = await syncJobManager.createJob(USER_A, "show-sync", 46);
+    await syncJobManager.markJobRunning(showSync);
+    const epImport = await syncJobManager.createJob(USER_A, "episode-import");
+    await syncJobManager.markJobRunning(epImport);
+
+    const filtered = await syncJobManager.getActiveJobs(
+      USER_A,
+      "episode-import"
+    );
+    expect(filtered.map((j) => j.id)).toEqual([epImport]);
+
+    const all = await syncJobManager.getActiveJobs(USER_A);
+    expect(all.map((j) => j.id).sort()).toEqual(
+      [showSync, epImport].sort()
+    );
+  });
+
+  it("reapStaleRunningJobs persists worker-lost for stale running rows", async () => {
+    const id = await syncJobManager.createJob(USER_A, "show-sync", 47);
+    await syncJobManager.markJobRunning(id);
+    await backdateHeartbeat(id, 10);
+
+    await reapStaleRunningJobs();
+
+    const row = (await rawRow(id))!;
+    expect(row.status).toBe("error");
+    expect(row.lastMessage).toBe(SYNC_WORKER_LOST_MESSAGE);
+    expect(row.finishedAt).not.toBeNull();
+  });
+
+  it("a late markJobSuccess after reaping is a no-op", async () => {
+    const id = await syncJobManager.createJob(USER_A, "show-sync", 48);
+    await syncJobManager.markJobRunning(id);
+    await backdateHeartbeat(id, 10);
+    await reapStaleRunningJobs();
+
+    // The stalled worker resumes and tries to complete the job: the row is
+    // already terminal, so the conditional transition must not revive it.
+    const revived = await syncJobManager.markJobSuccess(id, 5, 0);
+    expect(revived).toBe(false);
+    const row = (await rawRow(id))!;
+    expect(row.status).toBe("error");
+    expect(row.lastMessage).toBe(SYNC_WORKER_LOST_MESSAGE);
+  });
+
+  it("a late markJobError after reaping is a no-op", async () => {
+    const id = await syncJobManager.createJob(USER_A, "show-sync", 49);
+    await syncJobManager.markJobRunning(id);
+    await backdateHeartbeat(id, 10);
+    await reapStaleRunningJobs();
+
+    const changed = await syncJobManager.markJobError(id, "boom");
+    expect(changed).toBe(false);
+    const row = (await rawRow(id))!;
+    expect(row.status).toBe("error");
+    expect(row.lastMessage).toBe(SYNC_WORKER_LOST_MESSAGE);
+  });
+
+  it("a fresh running job is not reaped", async () => {
+    const id = await syncJobManager.createJob(USER_A, "show-sync", 50);
+    await syncJobManager.markJobRunning(id);
+
+    await reapStaleRunningJobs();
+
+    expect((await rawRow(id))!.status).toBe("running");
   });
 
   it("clears per-job throttle state after a terminal transition", async () => {
