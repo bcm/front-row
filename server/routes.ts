@@ -7,6 +7,15 @@ import { syncJobManager } from "./sync-job-manager";
 import { getUserId } from "./user-id";
 import { isAuthenticated } from "./replit_integrations/auth";
 
+// Express 4 does not forward async handler rejections to error middleware,
+// so a rejected DB call would hang the request and surface as an unhandled
+// rejection. Wrap async route handlers so rejections become next(error).
+const asyncHandler =
+  (fn: (req: Request, res: Response, next: NextFunction) => Promise<unknown>) =>
+  (req: Request, res: Response, next: NextFunction): void => {
+    fn(req, res, next).catch(next);
+  };
+
 // Async sync function for adding shows with progress reporting
 async function performAsyncAddShowSync(jobId: string, showId: number, userId: string, groupId?: string | null): Promise<void> {
   const reporter = syncJobManager.createReporter(jobId);
@@ -805,7 +814,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get sync job status (polled by the UI; durable across replicas)
-  app.get("/api/sync/:id/status", async (req, res) => {
+  app.get("/api/sync/:id/status", asyncHandler(async (req, res) => {
     const { id } = req.params;
     const userId = getUserId(req);
     const job = await syncJobManager.getJob(id, userId);
@@ -828,10 +837,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       episodesImported: job.episodesImported,
       episodesUpdated: job.episodesUpdated
     });
-  });
+  }));
 
   // Cancel sync job
-  app.delete("/api/sync/:id", async (req, res) => {
+  app.delete("/api/sync/:id", asyncHandler(async (req, res) => {
     const { id } = req.params;
     const userId = getUserId(req);
     const job = await syncJobManager.getJob(id, userId);
@@ -846,7 +855,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } else {
       res.json({ message: "Job already completed or not running" });
     }
-  });
+  }));
 
 
   app.get("/api/shows/:id/episodes", async (req, res) => {
@@ -1031,7 +1040,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // SSE endpoint for library import progress
   // Library import job status (polled by the UI; durable across replicas)
-  app.get("/api/library/import/:id/status", async (req, res) => {
+  app.get("/api/library/import/:id/status", asyncHandler(async (req, res) => {
     const { id } = req.params;
     const userId = getUserId(req);
     const job = await syncJobManager.getJob(id, userId);
@@ -1054,7 +1063,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       episodesImported: job.episodesImported,
       episodesUpdated: job.episodesUpdated
     });
-  });
+  }));
 
   // Get library from local database
   app.get("/api/library", async (req, res) => {
@@ -1421,7 +1430,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Episode import progress via JSON polling (no more SSE)
-  app.get("/api/episodes/import/progress/:id", async (req, res) => {
+  app.get("/api/episodes/import/progress/:id", asyncHandler(async (req, res) => {
     const { id } = req.params;
     const userId = getUserId(req);
     
@@ -1449,10 +1458,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       episodesImported: job.episodesImported,
       episodesUpdated: job.episodesUpdated
     });
-  });
+  }));
 
   // Cancel episode import job
-  app.post("/api/episodes/import/cancel/:id", async (req, res) => {
+  app.post("/api/episodes/import/cancel/:id", asyncHandler(async (req, res) => {
     const { id } = req.params;
     const userId = getUserId(req);
     const job = await syncJobManager.getJob(id, userId);
@@ -1468,10 +1477,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } else {
       res.status(404).json({ error: "Job not found or not running" });
     }
-  });
+  }));
 
   // Check for active episode import jobs
-  app.get("/api/episodes/import/status", async (req, res) => {
+  app.get("/api/episodes/import/status", asyncHandler(async (req, res) => {
     const userId = getUserId(req);
     const activeJobs = await syncJobManager.getActiveJobs(userId);
     const activeJob = activeJobs.length > 0 ? activeJobs[0] : null;
@@ -1492,7 +1501,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         hasActiveJob: false
       });
     }
-  });
+  }));
 
   // Get user episodes with filtering by status
   app.get("/api/user/episodes", async (req, res) => {

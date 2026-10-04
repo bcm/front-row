@@ -78,8 +78,11 @@ export async function createApp(): Promise<{ app: Express; server: Server }> {
     const status = err.status || err.statusCode || 500;
     const message = err.message || "Internal Server Error";
 
+    // Log instead of rethrowing: a throw here escapes to Express's
+    // finalhandler, which destroys the socket after headers are sent, so the
+    // client sees ECONNRESET instead of the JSON error we just wrote.
+    console.error("Unhandled API error:", err);
     res.status(status).json({ message });
-    throw err;
   });
 
   return { app, server };

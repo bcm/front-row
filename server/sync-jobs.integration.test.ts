@@ -540,3 +540,45 @@ describe("sync_status MCP tool", () => {
     expect(after).toEqual(before);
   });
 });
+
+describe("sync route async error forwarding (integration)", () => {
+  // Express 4 does not forward async handler rejections to error middleware;
+  // the sync routes wrap their handlers in asyncHandler so a rejected DB call
+  // becomes a 500 via next(error) instead of a hung request. These tests force
+  // the rejection with a mocked manager method and assert the client sees the
+  // 500 — before the fix, the request would hang until supertest timed out.
+  it("returns 500 when the status lookup rejects (GET /api/sync/:id/status)", async () => {
+    const cookie = await createSessionCookie(USER_A);
+    const spy = vi
+      .spyOn(syncJobManager, "getJob")
+      .mockRejectedValue(new Error("db down"));
+    try {
+      const res = await request(app)
+        .get("/api/sync/sync_1_2_3/status")
+        .set("Cookie", cookie);
+      expect(res.status).toBe(500);
+      expect(res.body).toEqual({ message: "db down" });
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it("returns 500 when the cancellation rejects (DELETE /api/sync/:id)", async () => {
+    const cookie = await createSessionCookie(USER_A);
+    const id = await syncJobManager.createJob(USER_A, "show-sync", 99);
+    await syncJobManager.markJobRunning(id);
+    const spy = vi
+      .spyOn(syncJobManager, "cancelJob")
+      .mockRejectedValue(new Error("cancel failed"));
+    try {
+      const res = await request(app)
+        .delete(`/api/sync/${id}`)
+        .set("Cookie", cookie);
+      expect(res.status).toBe(500);
+      expect(res.body).toEqual({ message: "cancel failed" });
+    } finally {
+      spy.mockRestore();
+      await db.delete(syncJobs).where(eq(syncJobs.id, id));
+    }
+  });
+});
