@@ -1,8 +1,57 @@
+// Durable sync job state (issue #6). Replaces the old per-replica in-memory
+// Map: every state transition writes through to the sync_jobs table, so any
+// replica (UI polling, API, MCP sync_status) reads the same job state.
+//
+// Heartbeat: the reporter's progress writes advance heartbeat_at, throttled
+// to at most one write per second. Readers treat a 'running' job whose
+// heartbeat is older than SYNC_HEARTBEAT_TIMEOUT_MS as dead — computed on
+// read, the row itself is never mutated by a reader. A minute-interval
+// reaper (reapStaleRunningJobs) persists that interpretation, so a
+// stalled-but-live worker can never revive the row with a late terminal
+// transition: every terminal transition is conditional on the row still
+// being queued/running, and only touches rows in those states.
+
+import { eq, and, desc, lt, or, sql } from "drizzle-orm";
+import { db } from "./db";
+import { syncJobs, type SyncJobRow } from "@shared/schema";
+
+export type SyncJobKind = "show-sync" | "library-import" | "episode-import";
+export type SyncJobStatus = "queued" | "running" | "success" | "error" | "canceled";
+export type SyncJobPhase =
+  | "fetch-show"
+  | "fetch-scrobbles"
+  | "fetch-episodes"
+  | "process-episodes"
+  | "finalize";
+
+// The paced TVMaze client can pause longer than this between shows, so the
+// heartbeat rides on every throttled progress tick — not only on phase
+// changes. Five minutes is generous; a worker silent this long is gone.
+export const SYNC_HEARTBEAT_TIMEOUT_MS = 5 * 60 * 1000;
+export const SYNC_WORKER_LOST_MESSAGE = "Sync worker lost (heartbeat timeout)";
+
+// Progress flushes are throttled to at most one DB write per second per job;
+// the trailing flush guarantees the final values land.
+const PROGRESS_FLUSH_MS = 1000;
+
+// Cap on re-check passes in the write-drain loops (flushProgress and
+// flushProgressQuietly). Each pass awaits at most one tracked write;
+// reporter writes are throttled to ~1/s, so in practice the drain settles
+// in one or two passes — the bound only guards against a pathological
+// constantly-chattering writer starving the drain forever. A straggler
+// past the bound stays chained behind the other writes (see
+// trackInflightWrite), so it still lands in order and can only no-op
+// against an already-terminal row via the active-row guard, never
+// clobber it.
+const DRAIN_MAX_PASSES = 10;
+
 export interface SyncJob {
   id: string;
-  showId: number;
-  status: 'queued' | 'running' | 'success' | 'error' | 'canceled';
-  phase: 'fetch-show' | 'fetch-scrobbles' | 'fetch-episodes' | 'process-episodes' | 'finalize';
+  userId: string;
+  kind: SyncJobKind;
+  showId: number | null;
+  status: SyncJobStatus;
+  phase: string;
   totalShows: number;
   completedShows: number;
   percent: number;
@@ -10,278 +59,783 @@ export interface SyncJob {
   errors: string[];
   startedAt: Date;
   updatedAt: Date;
+  heartbeatAt: Date;
+  finishedAt: Date | null;
   canceled: boolean;
-  lastMessage: string;
+  lastMessage: string | null;
   episodesImported: number;
   episodesUpdated: number;
 }
 
 export interface ProgressReporter {
-  setPhase(phase: SyncJob['phase'], message: string): void;
-  setTotal(total: number): void;
-  incrementCompleted(message?: string): void;
-  addError(error: string): void;
-  checkCanceled(): boolean;
-  getJob(): SyncJob;
+  setPhase(phase: SyncJobPhase, message: string): Promise<void>;
+  setTotal(total: number): Promise<void>;
+  incrementCompleted(message?: string): Promise<void>;
+  addError(error: string): Promise<void>;
+  checkCanceled(): Promise<boolean>;
+  /**
+   * Stop signal for worker loop checks: true when the row is missing
+   * (deleted) or its status left the active set (canceled, error,
+   * success). checkCanceled only sees the canceled flag, so a resumed
+   * worker on a reaped-to-error row would keep making API calls and DB
+   * mutations; every mid-loop check must use this instead.
+   */
+  shouldStop(): Promise<boolean>;
+  getJob(): Promise<SyncJob | null>;
+}
+
+function toView(row: SyncJobRow): SyncJob {
+  return {
+    id: row.id,
+    userId: row.userId,
+    kind: row.kind as SyncJobKind,
+    showId: row.showId,
+    status: row.status as SyncJobStatus,
+    phase: row.phase,
+    totalShows: row.totalShows,
+    completedShows: row.completedShows,
+    percent: row.percent,
+    etaSeconds: row.etaSeconds,
+    errors: row.errors ?? [],
+    startedAt: row.startedAt ?? new Date(0),
+    updatedAt: row.updatedAt ?? new Date(0),
+    heartbeatAt: row.heartbeatAt ?? new Date(0),
+    finishedAt: row.finishedAt,
+    canceled: row.canceled,
+    lastMessage: row.lastMessage,
+    episodesImported: row.episodesImported,
+    episodesUpdated: row.episodesUpdated,
+  };
+}
+
+// A 'running' job whose worker stopped heartbeating reads as a dead job.
+// A 'queued' job only lives in the milliseconds between createJob and the
+// deferred markJobRunning, so one older than the timeout means the replica
+// crashed in that window — its age is measured from startedAt, which is the
+// insert time and never advances while queued. The row is left untouched —
+// this is a read-time interpretation only; reapStaleRunningJobs persists it
+// on a minute interval so late workers can never revive the row.
+function applyHeartbeatTimeout(row: SyncJobRow): SyncJob {
+  const view = toView(row);
+  if (
+    (view.status === "running" &&
+      Date.now() - view.heartbeatAt.getTime() > SYNC_HEARTBEAT_TIMEOUT_MS) ||
+    (view.status === "queued" &&
+      Date.now() - view.startedAt.getTime() > SYNC_HEARTBEAT_TIMEOUT_MS)
+  ) {
+    view.status = "error";
+    view.lastMessage = SYNC_WORKER_LOST_MESSAGE;
+  }
+  return view;
+}
+
+// Reporter progress writes only touch active rows. A terminal transition
+// (cancel/success/error, possibly from another replica) that commits while
+// the worker is mid-item must win: Postgres rechecks this predicate at
+// write time, so a late progress flush no-ops instead of clobbering
+// terminal fields (e.g. replacing the cancel message with an item's
+// progress message). Same guard the terminal transitions use.
+function activeJob(jobId: string) {
+  return and(
+    eq(syncJobs.id, jobId),
+    or(eq(syncJobs.status, "queued"), eq(syncJobs.status, "running"))
+  );
+}
+
+interface PendingProgress {
+  completedShows: number;
+  percent: number;
+  etaSeconds: number | null;
+  lastMessage?: string;
 }
 
 export class SyncJobManager {
-  private jobs = new Map<string, SyncJob>();
-  private subscribers = new Map<string, Set<(event: string) => void>>();
+  private pendingProgress = new Map<string, PendingProgress>();
+  private progressTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  private lastProgressFlush = new Map<string, number>();
+  // In-flight DB writes per job (progress flushes and addError appends),
+  // chained so an older write can never land after a newer one. Terminal
+  // transitions drain these before committing (see flushProgressQuietly),
+  // so a fire-and-forget write always lands while the row is still active.
+  private inflightWrites = new Map<string, Promise<void>>();
+  // Deferred handles for throttled (trailing-edge) flushes, per job: the
+  // promise a reporter method returned settles when its flush lands, so an
+  // awaiting caller gets durability, not fire-and-forget.
+  private scheduledFlushes = new Map<
+    string,
+    {
+      promise: Promise<void>;
+      resolve: () => void;
+      reject: (err: unknown) => void;
+    }
+  >();
 
-  createJob(showId: number): string {
-    const id = `sync_${showId}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    
-    const job: SyncJob = {
+  private makeId(showId: number | null | undefined): string {
+    const sid = showId ?? 0;
+    return `sync_${sid}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  }
+
+  async createJob(
+    userId: string,
+    kind: SyncJobKind,
+    showId?: number | null
+  ): Promise<string> {
+    const id = this.makeId(showId);
+    await db.insert(syncJobs).values({
       id,
-      showId,
-      status: 'queued',
-      phase: 'fetch-show',
-      totalShows: 0,
-      completedShows: 0,
-      percent: 0,
-      etaSeconds: null,
-      errors: [],
-      startedAt: new Date(),
-      updatedAt: new Date(),
-      canceled: false,
-      lastMessage: 'Starting sync...',
-      episodesImported: 0,
-      episodesUpdated: 0
-    };
-
-    this.jobs.set(id, job);
+      userId,
+      kind,
+      showId: showId ?? null,
+      status: "queued",
+      phase: "fetch-show",
+      lastMessage: "Starting sync...",
+    });
     return id;
   }
 
-  getJob(id: string): SyncJob | null {
-    return this.jobs.get(id) || null;
+  /** Read a job by id, with the heartbeat timeout applied. When userId is
+   *  given, jobs owned by another user read as not found. */
+  async getJob(id: string, userId?: string): Promise<SyncJob | null> {   const rows = await db
+      .select()
+      .from(syncJobs)
+      .where(
+        userId
+          ? and(eq(syncJobs.id, id), eq(syncJobs.userId, userId))
+          : eq(syncJobs.id, id)
+      )
+      .limit(1);
+    if (rows.length === 0) return null;
+    return applyHeartbeatTimeout(rows[0]);
   }
 
-  getActiveJobs(): SyncJob[] {
-    const activeJobs: SyncJob[] = [];
-    Array.from(this.jobs.values()).forEach(job => {
-      if (job.status === 'running') {
-        activeJobs.push(job);
+  /** The user's most recent job, with the heartbeat timeout applied. */
+  async getLatestJob(userId: string): Promise<SyncJob | null> {
+    const rows = await db
+      .select()
+      .from(syncJobs)
+      .where(eq(syncJobs.userId, userId))
+      .orderBy(desc(syncJobs.startedAt))
+      .limit(1);
+    if (rows.length === 0) return null;
+    return applyHeartbeatTimeout(rows[0]);
+  }
+
+  /**
+   * Active (running/queued, heartbeat fresh) jobs for a user. When `kind` is
+   * given, only that job kind is returned — filtered in the query, not in
+   * memory. The episode-import status endpoint must not surface an unrelated
+   * show-sync or library-import job: the followed-shows page would label it
+   * "Episodes Syncing" and offer to cancel it through the episode-import
+   * cancel route.
+   */
+  async getActiveJobs(userId?: string, kind?: SyncJobKind): Promise<SyncJob[]> {
+    const predicates = [
+      or(eq(syncJobs.status, "running"), eq(syncJobs.status, "queued")),
+    ];
+    if (userId) predicates.push(eq(syncJobs.userId, userId));
+    if (kind) predicates.push(eq(syncJobs.kind, kind));
+    const rows = await db
+      .select()
+      .from(syncJobs)
+      .where(and(...predicates));
+    // Timed-out workers are dead, not active. Stale queued jobs (crashed
+    // between createJob and markJobRunning) read as error via the
+    // heartbeat-timeout interpretation and are filtered out here.
+    return rows
+      .map(applyHeartbeatTimeout)
+      .filter((j) => j.status === "running" || j.status === "queued");
+  }
+
+  /**
+   * Queued-to-running transition, conditional on the row still being queued.
+   * Returns whether the transition occurred: a cancellation that won the
+   * race before the deferred worker started leaves the row terminal and the
+   * worker must exit immediately without doing any API calls or mutations.
+   */
+  async markJobRunning(jobId: string): Promise<boolean> {
+    await this.flushProgressQuietly(jobId);
+    const now = new Date();
+    const updated = await db
+      .update(syncJobs)
+      .set({ status: "running", updatedAt: now, heartbeatAt: now })
+      // Queued only: a cancellation that won the race before the deferred
+      // worker started must stay terminal — a late worker must not revive
+      // the row back to running.
+      .where(and(eq(syncJobs.id, jobId), eq(syncJobs.status, "queued")))
+      .returning({ id: syncJobs.id });
+    return updated.length > 0;
+  }
+
+  /**
+   * Terminal transitions are conditional on the row still being active: a
+   * cancellation that wins after the worker's final cancellation check must
+   * stay terminal. Returns whether the transition was applied.
+   */
+  async markJobSuccess(
+    jobId: string,
+    episodesImported: number,
+    episodesUpdated: number
+  ): Promise<boolean> {
+    await this.flushProgressQuietly(jobId);
+    const now = new Date();
+    const updated = await db
+      .update(syncJobs)
+      .set({
+        status: "success",
+        episodesImported,
+        episodesUpdated,
+        lastMessage: `Sync completed successfully. ${episodesImported} episodes imported, ${episodesUpdated} updated.`,
+        percent: 100,
+        updatedAt: now,
+        heartbeatAt: now,
+        finishedAt: now,
+      })
+      .where(
+        and(
+          eq(syncJobs.id, jobId),
+          or(eq(syncJobs.status, "queued"), eq(syncJobs.status, "running"))
+        )
+      )
+      .returning({ id: syncJobs.id });
+    // The job can never make progress again; drop the per-job throttle
+    // state so the in-memory maps don't retain an entry per finished job.
+    this.clearThrottleState(jobId);
+    return updated.length > 0;
+  }
+
+  /** Same conditional-transition contract as markJobSuccess. */
+  async markJobError(jobId: string, error: string): Promise<boolean> {
+    await this.flushProgressQuietly(jobId);
+    const now = new Date();
+    const updated = await db
+      .update(syncJobs)
+      .set({
+        status: "error",
+        lastMessage: `Sync failed: ${error}`,
+        updatedAt: now,
+        heartbeatAt: now,
+        finishedAt: now,
+      })
+      .where(
+        and(
+          eq(syncJobs.id, jobId),
+          or(eq(syncJobs.status, "queued"), eq(syncJobs.status, "running"))
+        )
+      )
+      .returning({ id: syncJobs.id });
+    this.clearThrottleState(jobId);
+    return updated.length > 0;
+  }
+
+  async cancelJob(jobId: string): Promise<boolean> {
+    await this.flushProgressQuietly(jobId);
+    const now = new Date();
+    const updated = await db
+      .update(syncJobs)
+      .set({
+        canceled: true,
+        status: "canceled",
+        lastMessage: "Sync canceled by user",
+        updatedAt: now,
+        heartbeatAt: now,
+        finishedAt: now,
+      })
+      // Queued rows are cancellable too: a user can click Cancel after the
+      // start response but before the deferred worker calls markJobRunning.
+      // Without this the cancel reports nothing canceled and the worker
+      // then runs anyway.
+      .where(activeJob(jobId))
+      .returning({ id: syncJobs.id });
+    this.clearThrottleState(jobId);
+    return updated.length > 0;
+  }
+
+  /**
+   * Track an in-flight DB write for a job so a terminal transition can
+   * drain it first (see flushProgressQuietly). New writes chain onto the
+   * previous tracked write, so draining awaits every write issued so far
+   * even when several fire-and-forget writes overlap — e.g. an unawaited
+   * addError racing a terminal transition.
+   *
+   * The thunk runs only after previously tracked writes settle, so an
+   * older write can never land after a newer one. Tracked writes are plain
+   * UPDATEs that never wait on a terminal transition, so draining them
+   * cannot deadlock.
+   */
+  private trackInflightWrite(
+    jobId: string,
+    startWrite: () => Promise<void>
+  ): Promise<void> {
+    const previous = this.inflightWrites.get(jobId);
+    let settled!: Promise<void>;
+    settled = (async () => {
+      if (previous) {
+        try {
+          await previous;
+        } catch {
+          // A failed write preserved its own snapshot / logged itself;
+          // later writes still go through.
+        }
       }
-    });
-    return activeJobs;
+      await startWrite();
+    })().then(
+      () => {
+        if (this.inflightWrites.get(jobId) === settled) {
+          this.inflightWrites.delete(jobId);
+        }
+      },
+      (error) => {
+        if (this.inflightWrites.get(jobId) === settled) {
+          this.inflightWrites.delete(jobId);
+        }
+        throw error;
+      }
+    );
+    this.inflightWrites.set(jobId, settled);
+    // Observed internally so fire-and-forget callers (e.g. an unawaited
+    // addError) can't trigger unhandled-rejection warnings; explicit
+    // awaiters still see the rejection.
+    settled.catch(() => {});
+    return settled;
   }
 
-  cancelJob(id: string): boolean {
-    const job = this.jobs.get(id);
-    if (job && job.status === 'running') {
-      job.canceled = true;
-      job.status = 'canceled';
-      job.lastMessage = 'Sync canceled by user';
-      job.updatedAt = new Date();
-      this.emitEvent(id, 'canceled', { message: job.lastMessage });
-      return true;
+  /**
+   * Flush wrapper for the state-transition methods: a failed progress flush
+   * preserves its snapshot for the next flush (see flushProgress), and the
+   * transition itself must still be attempted — terminal state matters more
+   * than the last progress tick.
+   */
+  private async flushProgressQuietly(jobId: string): Promise<void> {
+    try {
+      await this.flushProgress(jobId);
+    } catch (error) {
+      console.error(
+        `[SYNC_JOB] pre-transition progress flush failed for ${jobId}:`,
+        error
+      );
+      // The failed flush preserved its snapshot, but no further progress
+      // ticks will come after a terminal transition — drop it rather than
+      // leak it in the pending map.
+      this.pendingProgress.delete(jobId);
     }
-    return false;
+    // Drain stragglers: a fire-and-forget write issued while the flush
+    // above was running (e.g. an unawaited addError) must land before the
+    // terminal UPDATE commits — the error has to arrive while the row is
+    // still active, or the active-row guard turns it into a silent no-op.
+    // Re-check the map after each await: a write issued during the drain
+    // chains onto the tracked promise and is awaited in turn. Tracked
+    // writes are plain UPDATEs that never wait on a terminal transition,
+    // so this cannot deadlock. Bounded by DRAIN_MAX_PASSES (see above):
+    // with the ordering chain, a straggler past the bound lands after the
+    // terminal commit and no-ops cleanly against the terminal row.
+    for (let pass = 0; pass < DRAIN_MAX_PASSES; pass++) {
+      const inflight = this.inflightWrites.get(jobId);
+      if (!inflight) return;
+      try {
+        await inflight;
+      } catch {
+        // Failures are logged where the write was issued; the terminal
+        // transition must still be attempted.
+      }
+    }
+  }
+
+  /**
+   * Flush any throttled progress for a job. Awaiting it guarantees the
+   * latest progress is durable:
+   *
+   * - It first awaits any in-flight write, so a terminal
+   *   transition can never run concurrently with an older write that would
+   *   land afterward and clobber terminal fields (e.g. percent: 100).
+   * - The write only touches active rows (queued/running): a terminal
+   *   transition that committed while the flush was pending makes the
+   *   write a clean no-op, so a late progress tick can't clobber the
+   *   terminal message either.
+   * - On DB failure the pending snapshot is preserved for the next flush
+   *   (heartbeats resume instead of silently stopping) and the returned
+   *   promise rejects, so awaited writes observe the failure. The rejection
+   *   is also observed internally, so intentionally fire-and-forget callers
+   *   can't trigger unhandled-rejection warnings.
+   */
+  async flushProgress(jobId: string): Promise<void> {
+    const timer = this.progressTimers.get(jobId);
+    if (timer) {
+      clearTimeout(timer);
+      this.progressTimers.delete(jobId);
+    }
+    // A trailing flush was scheduled but this explicit flush supersedes it:
+    // its awaiters ride on this flush's outcome.
+    const scheduled = this.scheduledFlushes.get(jobId);
+    if (scheduled) this.scheduledFlushes.delete(jobId);
+
+    // Re-checking drain: a reporter write issued while the drain await is
+    // pending (e.g. an unawaited addError) chains a newer promise into
+    // inflightWrites. Drain again until a full pass finds the map stable —
+    // otherwise the progress write installed below would overwrite the
+    // newer entry, the straggler drain in flushProgressQuietly would see an
+    // empty map, and the terminal UPDATE could commit while the newer write
+    // was still running (its active-row guard would then silently drop it).
+    // Bounded by DRAIN_MAX_PASSES (see above); a straggler past the bound
+    // stays chained behind the progress write and lands in order.
+    for (let pass = 0; pass < DRAIN_MAX_PASSES; pass++) {
+      const inflight = this.inflightWrites.get(jobId);
+      if (!inflight) break;
+      try {
+        await inflight;
+      } catch {
+        // The failed write preserved its snapshot (see below); proceed —
+        // a terminal transition must still be attempted.
+      }
+    }
+
+    const pending = this.pendingProgress.get(jobId);
+    this.pendingProgress.delete(jobId);
+    if (!pending) {
+      scheduled?.resolve();
+      return;
+    }
+
+    this.lastProgressFlush.set(jobId, Date.now());
+    const now = new Date();
+    const write = db
+      .update(syncJobs)
+      .set({
+        completedShows: pending.completedShows,
+        percent: pending.percent,
+        etaSeconds: pending.etaSeconds,
+        ...(pending.lastMessage !== undefined
+          ? { lastMessage: pending.lastMessage }
+          : {}),
+        updatedAt: now,
+        heartbeatAt: now,
+      })
+      // Active rows only: a terminal transition that committed while this
+      // flush was pending makes the write a no-op instead of clobbering
+      // terminal fields.
+      .where(activeJob(jobId));
+    // Chain onto whatever is tracked now rather than overwriting the map:
+    // a write issued during the drain above stays ahead of this flush in
+    // the ordering chain, so it can never be hidden from the straggler
+    // drain in flushProgressQuietly.
+    const tracked = this.trackInflightWrite(jobId, () =>
+      write
+        .returning({ id: syncJobs.id })
+        .then(
+          (updated) => {
+            if (updated.length === 0) {
+              // The flush was a no-op: the job reached a terminal state
+              // (locally, or on another replica observed via the active-row
+              // guard) while this flush was pending. Drop the per-job
+              // throttle state — no further progress will ever land, and
+              // retaining the timestamp entry would leak one map entry per
+              // finished job.
+              this.clearThrottleState(jobId);
+            }
+            scheduled?.resolve();
+          },
+          (error) => {
+            console.error(
+              `[SYNC_JOB] progress flush failed for ${jobId}:`,
+              error
+            );
+            // Preserve the snapshot so the next flush retries it instead of
+            // silently dropping the heartbeat — unless newer progress has
+            // already superseded it.
+            const existing = this.pendingProgress.get(jobId);
+            if (
+              !existing ||
+              existing.completedShows < pending.completedShows
+            ) {
+              this.pendingProgress.set(jobId, pending);
+            }
+            scheduled?.reject(error);
+            throw error;
+          }
+        )
+    );
+    return tracked;
+  }
+
+  /**
+   * Drop per-job progress-throttle state (pending snapshot, timer, last
+   * flush timestamp, scheduled trailing-edge flush). Called once the job
+   * can never make progress again: after a local terminal transition
+   * commits, or when a flush no-ops against a terminal row (the job
+   * finished on another replica). Without this, the in-memory maps retain
+   * one entry per finished job for the replica's lifetime. inflightWrites
+   * self-cleans on settle, so only these four maps need explicit clearing.
+   */
+  private clearThrottleState(jobId: string): void {
+    this.pendingProgress.delete(jobId);
+    const timer = this.progressTimers.get(jobId);
+    if (timer) {
+      clearTimeout(timer);
+      this.progressTimers.delete(jobId);
+    }
+    // A trailing-edge flush can be scheduled after the terminal
+    // transition's pre-flush drain returns: the timer above is cleared,
+    // but the deferred promise and map entry would otherwise leak forever
+    // (and its awaiters would hang). Settle and remove the handle,
+    // matching the no-op flush semantics. Idempotent: the timer callback
+    // already deletes the entry when it fires, so a fired timer can never
+    // be double-settled here.
+    const scheduled = this.scheduledFlushes.get(jobId);
+    if (scheduled) {
+      this.scheduledFlushes.delete(jobId);
+      scheduled.resolve();
+    }
+    this.lastProgressFlush.delete(jobId);
+  }
+
+  /** Exported for tests: number of per-job throttle entries currently held. */
+  throttleStateSize(): number {
+    return (
+      this.pendingProgress.size +
+      this.progressTimers.size +
+      this.lastProgressFlush.size +
+      this.scheduledFlushes.size +
+      this.inflightWrites.size
+    );
+  }
+
+  private scheduleProgressFlush(jobId: string): Promise<void> {
+    const elapsed = Date.now() - (this.lastProgressFlush.get(jobId) ?? 0);
+    if (elapsed >= PROGRESS_FLUSH_MS) {
+      return this.flushProgress(jobId);
+    }
+    const scheduled = this.scheduledFlushes.get(jobId);
+    if (scheduled) return scheduled.promise;
+    let resolve!: () => void;
+    let reject!: (err: unknown) => void;
+    const promise = new Promise<void>((res, rej) => {
+      resolve = res;
+      reject = rej;
+    });
+    // Fire-and-forget callers are safe; awaiters still observe failures.
+    promise.catch(() => {});
+    this.scheduledFlushes.set(jobId, { promise, resolve, reject });
+    const timer = setTimeout(() => {
+      this.progressTimers.delete(jobId);
+      this.scheduledFlushes.delete(jobId);
+      this.flushProgress(jobId).then(resolve, reject);
+    }, PROGRESS_FLUSH_MS - elapsed);
+    this.progressTimers.set(jobId, timer);
+    return promise;
   }
 
   createReporter(jobId: string): ProgressReporter {
     const startTime = Date.now();
     let processStartTime: number | null = null;
+    let completedShows = 0;
+    let totalShows = 0;
+
+    const touchHeartbeat = async (fields: Record<string, unknown>) => {
+      const now = new Date();
+      try {
+        await db
+          .update(syncJobs)
+          .set({ ...fields, updatedAt: now, heartbeatAt: now })
+          // Active rows only: a phase/message write after a terminal
+          // transition must not clobber the terminal message (or heartbeat).
+          .where(activeJob(jobId));
+      } catch (error) {
+        // setPhase/setTotal are awaited to guarantee durable ordering, so a
+        // failed UPDATE must be visible to the caller: re-throw after
+        // logging instead of converting the failure into apparent success
+        // (the worker would otherwise continue and mark the job successful
+        // although the phase/total write was lost). The worker's try/catch
+        // funnels it into markJobError, and the deferred task has an
+        // explicit rejection handler — it can never become an unhandled
+        // rejection.
+        console.error(`[SYNC_JOB] progress write failed for ${jobId}:`, error);
+        throw error;
+      }
+    };
 
     return {
-      setPhase: (phase, message) => {
-        const job = this.jobs.get(jobId);
-        if (!job) return;
-
-        job.phase = phase;
-        job.lastMessage = message;
-        job.updatedAt = new Date();
-        
-        if (phase === 'process-episodes') {
+      setPhase: async (phase, message) => {
+        if (phase === "process-episodes") {
           processStartTime = Date.now();
         }
-
-        this.emitEvent(jobId, 'progress', {
-          phase,
-          message,
-          percent: job.percent,
-          completedShows: job.completedShows,
-          totalShows: job.totalShows,
-          etaSeconds: job.etaSeconds
-        });
+        await touchHeartbeat({ phase, lastMessage: message });
       },
 
-      setTotal: (total) => {
-        const job = this.jobs.get(jobId);
-        if (!job) return;
-
-        job.totalShows = total;
-        job.updatedAt = new Date();
-        
-        this.emitEvent(jobId, 'progress', {
-          phase: job.phase,
-          message: job.lastMessage,
-          percent: job.percent,
-          completedShows: job.completedShows,
-          totalShows: total,
-          etaSeconds: job.etaSeconds
-        });
+      setTotal: async (total) => {
+        totalShows = total;
+        await touchHeartbeat({ totalShows: total });
       },
 
       incrementCompleted: (message) => {
-        const job = this.jobs.get(jobId);
-        if (!job) return;
-
-        job.completedShows++;
-        job.updatedAt = new Date();
-        
-        if (message) {
-          job.lastMessage = message;
+        completedShows++;
+        const percent =
+          totalShows > 0 ? Math.round((completedShows / totalShows) * 100) : 0;
+        let etaSeconds: number | null = null;
+        if (processStartTime && completedShows >= 3) {
+          const elapsed = (Date.now() - processStartTime) / 1000;
+          const avgPerShow = elapsed / completedShows;
+          etaSeconds = Math.round((totalShows - completedShows) * avgPerShow);
         }
-
-        // Calculate percentage
-        if (job.totalShows > 0) {
-          job.percent = Math.round((job.completedShows / job.totalShows) * 100);
-        }
-
-        // Calculate ETA after processing at least 3 shows
-        if (processStartTime && job.completedShows >= 3) {
-          const elapsed = (Date.now() - processStartTime) / 1000; // seconds
-          const avgPerShow = elapsed / job.completedShows;
-          const remaining = job.totalShows - job.completedShows;
-          job.etaSeconds = Math.round(remaining * avgPerShow);
-        }
-
-        // Throttle progress events (emit every show or if it's been more than 1 second)
-        const shouldEmit = job.completedShows % 1 === 0 || 
-                          (Date.now() - job.updatedAt.getTime()) > 1000;
-
-        if (shouldEmit) {
-          this.emitEvent(jobId, 'progress', {
-            phase: job.phase,
-            message: job.lastMessage,
-            percent: job.percent,
-            completedShows: job.completedShows,
-            totalShows: job.totalShows,
-            etaSeconds: job.etaSeconds
-          });
-        }
+        this.pendingProgress.set(jobId, {
+          completedShows,
+          percent,
+          etaSeconds,
+          ...(message !== undefined ? { lastMessage: message } : {}),
+        });
+        // Awaiting this guarantees the progress is durable; non-awaiting
+        // callers get at-most-once-per-second throttled writes.
+        return this.scheduleProgressFlush(jobId);
       },
 
       addError: (error) => {
-        const job = this.jobs.get(jobId);
-        if (!job) return;
-
-        job.errors.push(error);
-        job.updatedAt = new Date();
-        
-        this.emitEvent(jobId, 'error', {
-          error,
-          errorCount: job.errors.length
+        // Atomic JSONB append in a single UPDATE: route call sites invoke
+        // addError without awaiting it, so a read-modify-write here could
+        // lose errors when concurrent appends read the same array.
+        const now = new Date();
+        const tracked = this.trackInflightWrite(jobId, () =>
+          db
+            .update(syncJobs)
+            .set({
+              errors: sql`coalesce(${syncJobs.errors}, '[]'::jsonb) || ${JSON.stringify(error)}::jsonb`,
+              updatedAt: now,
+              heartbeatAt: now,
+            })
+            // Active rows only: errors arriving after a terminal transition
+            // (e.g. from a worker that hasn't observed the cancel yet) must
+            // not touch the row.
+            .where(activeJob(jobId))
+            .then(() => {})
+        );
+        // Tracked alongside the progress writes: terminal transitions drain
+        // in-flight writes before committing (see flushProgressQuietly), so
+        // an unawaited addError lands while the row is still active instead
+        // of racing the terminal UPDATE and no-op'ing against the
+        // now-terminal row. The raw tracked promise is returned, so an
+        // awaiting caller sees a write failure as a rejection instead of
+        // believing the error was durable. This .catch keeps fire-and-forget
+        // callers safe (no unhandled-rejection warnings) and logs the lost
+        // error.
+        tracked.catch((err) => {
+          console.error(`[SYNC_JOB] addError failed for ${jobId}:`, err);
         });
+        return tracked;
       },
 
-      checkCanceled: () => {
-        const job = this.jobs.get(jobId);
-        return job?.canceled || false;
+      // Reads the row, so a cancel issued from any replica is honored.
+      checkCanceled: async () => {
+        const rows = await db
+          .select({ canceled: syncJobs.canceled })
+          .from(syncJobs)
+          .where(eq(syncJobs.id, jobId))
+          .limit(1);
+        return rows[0]?.canceled ?? false;
       },
 
-      getJob: () => {
-        return this.jobs.get(jobId)!;
-      }
+      // Reads the row: stop when the job is no longer active — missing
+      // (deleted) or not queued/running (canceled on another replica, or
+      // reaped to error by the heartbeat reaper after stalling). A resumed
+      // worker must exit at its next check instead of continuing API calls
+      // and DB mutations against a terminal job.
+      shouldStop: async () => {
+        const rows = await db
+          .select({ status: syncJobs.status })
+          .from(syncJobs)
+          .where(eq(syncJobs.id, jobId))
+          .limit(1);
+        const status = rows[0]?.status;
+        return status !== "queued" && status !== "running";
+      },
+
+      getJob: () => this.getJob(jobId),
     };
-  }
-
-  markJobSuccess(jobId: string, episodesImported: number, episodesUpdated: number): void {
-    const job = this.jobs.get(jobId);
-    if (!job) return;
-
-    job.status = 'success';
-    job.episodesImported = episodesImported;
-    job.episodesUpdated = episodesUpdated;
-    job.lastMessage = `Sync completed successfully. ${episodesImported} episodes imported, ${episodesUpdated} updated.`;
-    job.percent = 100;
-    job.updatedAt = new Date();
-
-    this.emitEvent(jobId, 'complete', {
-      episodesImported,
-      episodesUpdated,
-      message: job.lastMessage
-    });
-  }
-
-  markJobError(jobId: string, error: string): void {
-    const job = this.jobs.get(jobId);
-    if (!job) return;
-
-    job.status = 'error';
-    job.lastMessage = `Sync failed: ${error}`;
-    job.updatedAt = new Date();
-
-    this.emitEvent(jobId, 'error', {
-      error,
-      fatal: true,
-      message: job.lastMessage
-    });
-  }
-
-  markJobRunning(jobId: string): void {
-    const job = this.jobs.get(jobId);
-    if (!job) return;
-
-    job.status = 'running';
-    job.updatedAt = new Date();
-  }
-
-  subscribe(jobId: string, callback: (event: string) => void): () => void {
-    if (!this.subscribers.has(jobId)) {
-      this.subscribers.set(jobId, new Set());
-    }
-    
-    this.subscribers.get(jobId)!.add(callback);
-    
-    // Return unsubscribe function
-    return () => {
-      const subs = this.subscribers.get(jobId);
-      if (subs) {
-        subs.delete(callback);
-        if (subs.size === 0) {
-          this.subscribers.delete(jobId);
-        }
-      }
-    };
-  }
-
-  private emitEvent(jobId: string, type: string, data: any): void {
-    const subscribers = this.subscribers.get(jobId);
-    if (!subscribers) return;
-
-    const event = `data: ${JSON.stringify({ type, data, timestamp: Date.now() })}\n\n`;
-    
-    subscribers.forEach(callback => {
-      try {
-        callback(event);
-      } catch (error) {
-        console.error('Error emitting SSE event:', error);
-      }
-    });
-  }
-
-  // Cleanup old jobs (called periodically)
-  cleanup(): void {
-    const cutoff = Date.now() - (24 * 60 * 60 * 1000); // 24 hours ago
-    
-    Array.from(this.jobs.entries()).forEach(([id, job]) => {
-      if (job.updatedAt.getTime() < cutoff && 
-          ['success', 'error', 'canceled'].includes(job.status)) {
-        this.jobs.delete(id);
-        this.subscribers.delete(id);
-      }
-    });
   }
 }
 
 // Global instance
 export const syncJobManager = new SyncJobManager();
 
-// Cleanup old jobs every hour
-setInterval(() => {
-  syncJobManager.cleanup();
-}, 60 * 60 * 1000);
+// Jobs are retained for 24h after their last update, then reaped.
+const SYNC_JOB_RETENTION_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Writer-side heartbeat reaper, exported for tests.
+ *
+ * The read-time timeout interpretation is not terminal: the stored row stays
+ * 'running', so a stalled-but-live worker (several worker phases await raw
+ * `fetch` with no timeout) could resume after readers returned 'error' and
+ * markJobSuccess — resurrecting the job from the UI/MCP's perspective.
+ * Persisting the timeout transition closes that window: once reaped to
+ * 'error', the conditional terminal transitions (queued/running rows only)
+ * no-op instead of reviving the row.
+ *
+ * Stale 'queued' rows are included: heartbeat_at is the insert time for
+ * queued rows (nothing advances it while queued), so the same cutoff
+ * identifies replicas that crashed between createJob and markJobRunning —
+ * matching the read-time interpretation. Fresh queued rows (seconds old)
+ * never trip the five-minute cutoff.
+ */
+export async function reapStaleRunningJobs(
+  now: number = Date.now()
+): Promise<void> {
+  const cutoff = new Date(now - SYNC_HEARTBEAT_TIMEOUT_MS);
+  const stamp = new Date(now);
+  await db
+    .update(syncJobs)
+    .set({
+      status: "error",
+      lastMessage: SYNC_WORKER_LOST_MESSAGE,
+      updatedAt: stamp,
+      finishedAt: stamp,
+    })
+    .where(
+      and(
+        or(eq(syncJobs.status, "running"), eq(syncJobs.status, "queued")),
+        lt(syncJobs.heartbeatAt, cutoff)
+      )
+    );
+}
+
+/**
+ * Hourly maintenance, exported for tests.
+ *
+ * Dead workers leave 'running' rows that nothing would ever delete, so
+ * first reap stalled workers (reapStaleRunningJobs persists the
+ * heartbeat-timeout interpretation, which subsumes the old 24h cutoff on
+ * active rows), then delete terminal jobs older than the retention period.
+ */
+export async function cleanupSyncJobs(now: number = Date.now()): Promise<void> {
+  await reapStaleRunningJobs(now);
+  const cutoff = new Date(now - SYNC_JOB_RETENTION_MS);
+  await db
+    .delete(syncJobs)
+    .where(
+      and(
+        lt(syncJobs.updatedAt, cutoff),
+        or(
+          eq(syncJobs.status, "success"),
+          eq(syncJobs.status, "error"),
+          eq(syncJobs.status, "canceled")
+        )
+      )
+    );
+}
+
+// Maintenance timers are a server-runtime concern: the minute reaper closes
+// a minutes-scale window (stalled worker reviving a job), while retention
+// cleanup is hourly. Integration tests invoke the functions directly and
+// must not have a timer persist rows mid-assertion, so the timers only run
+// outside the test environment.
+if (process.env.NODE_ENV !== "test") {
+  // Reap stalled workers every minute.
+  setInterval(() => {
+    reapStaleRunningJobs().catch((error) =>
+      console.error("[SYNC_JOB] reap failed:", error)
+    );
+  }, 60 * 1000);
+
+  // Reap old jobs hourly.
+  setInterval(() => {
+    cleanupSyncJobs().catch((error) =>
+      console.error("[SYNC_JOB] cleanup failed:", error)
+    );
+  }, 60 * 60 * 1000);
+}
