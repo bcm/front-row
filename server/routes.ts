@@ -801,9 +801,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Create new sync job
       const jobId = await syncJobManager.createJob(userId, "show-sync", showId);
       
-      // Start async sync process
-      setImmediate(async () => {
-        await performAsyncSync(jobId, showId, userId);
+      // Start async sync process; observe the launched promise so a
+      // rejection in the error path (e.g. markJobError during a DB outage)
+      // is logged instead of surfacing as an unhandled rejection.
+      setImmediate(() => {
+        performAsyncSync(jobId, showId, userId).catch((error) => {
+          console.error("Async show sync failed:", error);
+        });
       });
       
       res.json({ jobId });
@@ -1026,9 +1030,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Create new library import job
       const jobId = await syncJobManager.createJob(userId, "library-import");
       
-      // Start async import process
-      setImmediate(async () => {
-        await performAsyncLibraryImport(jobId, userId);
+      // Start async import process; observe the launched promise so a
+      // rejection in the error path is logged instead of becoming an
+      // unhandled rejection after the response has been returned.
+      setImmediate(() => {
+        performAsyncLibraryImport(jobId, userId).catch((error) => {
+          console.error("Async library import failed:", error);
+        });
       });
       
       res.json({ jobId, message: "Library import started" });
@@ -1182,10 +1190,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const jobId = await syncJobManager.createJob(userId, "show-sync", showId);
       console.log(`[ADD_SHOW] Created sync job: ${jobId}`);
 
-      // Start async episode sync process - pass groupId for shared shows
+      // Start async episode sync process - pass groupId for shared shows.
+      // Observe the launched promise so a rejection in the error path
+      // (e.g. markJobError during a DB outage) is logged instead of
+      // surfacing as an unhandled rejection.
       const episodeGroupId = userShow?.groupId;
-      setImmediate(async () => {
-        await performAsyncAddShowSync(jobId, showId, userId, episodeGroupId);
+      setImmediate(() => {
+        performAsyncAddShowSync(jobId, showId, userId, episodeGroupId).catch((error) => {
+          console.error("Async add-show sync failed:", error);
+        });
       });
 
       // Return 202 with job ID for progress tracking

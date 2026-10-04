@@ -42,10 +42,13 @@ export default function AddShowDialog({ open, onOpenChange }: AddShowDialogProps
 
   const addShowMutation = useMutation({
     mutationFn: async (showId: number) => {
-      return apiRequest("POST", "/api/user/shows", {
+      const res = await apiRequest("POST", "/api/user/shows", {
         showId,
         status: "new",
       });
+      // apiRequest returns the raw Response; parse it so onSuccess sees
+      // the JSON body (including jobId) and the progress poller can start.
+      return res.json();
     },
     onSuccess: (data: any) => {
       // If we get a job ID, start progress tracking

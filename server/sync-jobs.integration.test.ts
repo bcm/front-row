@@ -5,7 +5,7 @@
 // Not part of `npm test`; run with `npm run test:integration`.
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import type { Express } from "express";
 import {
   closeTestResources,
@@ -16,7 +16,8 @@ import {
 
 // The harness sets DATABASE_URL before these imports resolve server/db.
 import { db } from "./db";
-import { syncJobs } from "@shared/schema";
+import { syncJobs, userShows } from "@shared/schema";
+import { storage } from "./storage";
 import {
   syncJobManager,
   SyncJobManager,
@@ -579,6 +580,90 @@ describe("sync route async error forwarding (integration)", () => {
     } finally {
       spy.mockRestore();
       await db.delete(syncJobs).where(eq(syncJobs.id, id));
+    }
+  });
+});
+
+describe("add-show 202 contract (integration)", () => {
+  // The add-show dialog's mutationFn receives whatever mutationFn returns, so
+  // the JSON body (including jobId) must be parsed before onSuccess runs —
+  // apiRequest hands back the raw Response. This locks the server side of
+  // that contract: 202 with a JSON body containing the durable job id, so the
+  // client can start its progress poller. TVMaze is mocked so the test does
+  // not depend on the network.
+  it("POST /api/user/shows returns 202 JSON with jobId", async () => {
+    const cookie = await createSessionCookie(USER_A);
+    const spy = vi
+      .spyOn(storage, "syncShowFromTVMaze")
+      .mockResolvedValue({ id: 99999, name: "Mock Show" } as never);
+    try {
+      // A previous run may have left the library row behind; the route
+      // 400s on duplicates, so start clean for isolation.
+      await db
+        .delete(userShows)
+        .where(
+          and(eq(userShows.userId, USER_A), eq(userShows.showId, 99999)),
+        );
+      const res = await request(app)
+        .post("/api/user/shows")
+        .set("Cookie", cookie)
+        .send({ showId: 99999, status: "new" });
+      expect(res.status).toBe(202);
+      expect(typeof res.body.jobId).toBe("string");
+      expect(res.body.jobId.length).toBeGreaterThan(0);
+      expect(res.body.message).toEqual(expect.any(String));
+    } finally {
+      spy.mockRestore();
+      await db.delete(syncJobs).where(eq(syncJobs.userId, USER_A));
+      await db
+        .delete(userShows)
+        .where(
+          and(eq(userShows.userId, USER_A), eq(userShows.showId, 99999)),
+        );
+    }
+  });
+});
+
+describe("deferred sync-task rejection handling (integration)", () => {
+  // The sync routes launch their background work via setImmediate and return
+  // the HTTP response immediately. The background function's error path
+  // performs rejecting DB writes (markJobError); if nobody observes the
+  // launched promise, a DB outage turns that into an unhandled rejection
+  // after the response has been returned. These tests force both the work
+  // and the error path to fail, then assert the response still completes
+  // and no unhandled rejection is emitted.
+  it("observes the deferred task rejection (POST /api/shows/:id/sync/start)", async () => {
+    const cookie = await createSessionCookie(USER_A);
+    const unhandled: unknown[] = [];
+    const onUnhandled = (reason: unknown) => {
+      unhandled.push(reason);
+    };
+    process.on("unhandledRejection", onUnhandled);
+    const runSpy = vi
+      .spyOn(syncJobManager, "markJobRunning")
+      .mockRejectedValue(new Error("db down"));
+    const errSpy = vi
+      .spyOn(syncJobManager, "markJobError")
+      .mockRejectedValue(new Error("db still down"));
+    try {
+      const res = await request(app)
+        .post("/api/shows/42/sync/start")
+        .set("Cookie", cookie)
+        .send({});
+      // The response path is unaffected: 200 with the job id.
+      expect(res.status).toBe(200);
+      expect(typeof res.body.jobId).toBe("string");
+
+      // Let the deferred task run and the rejection settle; a rejected
+      // promise nobody observes would surface here as unhandledRejection.
+      await new Promise((resolve) => setImmediate(resolve));
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      expect(unhandled).toEqual([]);
+    } finally {
+      process.removeListener("unhandledRejection", onUnhandled);
+      runSpy.mockRestore();
+      errSpy.mockRestore();
+      await db.delete(syncJobs).where(eq(syncJobs.userId, USER_A));
     }
   });
 });
