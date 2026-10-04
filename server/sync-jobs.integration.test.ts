@@ -4,7 +4,7 @@
 //
 // Not part of `npm test`; run with `npm run test:integration`.
 
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { eq, sql } from "drizzle-orm";
 import type { Express } from "express";
 import {
@@ -244,6 +244,60 @@ describe("SyncJobManager (durable, PG-backed)", () => {
     expect(row.lastMessage).toBe(
       "Sync completed successfully. 1 episodes imported, 0 updated."
     );
+  });
+
+  it("an unawaited addError lands before an immediate terminal transition", async () => {
+    const id = await syncJobManager.createJob(USER_A, "show-sync", 40);
+    await syncJobManager.markJobRunning(id);
+    const reporter = syncJobManager.createReporter(id);
+
+    // Slow addError's UPDATE down: without in-flight tracking, the terminal
+    // UPDATE below commits first and the active-row guard turns the delayed
+    // append into a silent no-op, losing the error. The delay is timer-based
+    // (not gated on the terminal transition) so the fixed code — which
+    // drains in-flight writes before committing — cannot deadlock on it.
+    const ADD_ERROR_DELAY_MS = 150;
+    const sleep = (ms: number) =>
+      new Promise<void>((resolve) => setTimeout(resolve, ms));
+    const originalUpdate = db.update.bind(db);
+    const updateSpy = vi
+      .spyOn(db, "update")
+      .mockImplementation(((table: any) => {
+        const builder: any = originalUpdate(table);
+        const originalSet = builder.set.bind(builder);
+        builder.set = (values: any) => {
+          const chained: any = originalSet(values);
+          if (values && typeof values === "object" && "errors" in values) {
+            // addError's chain is update -> set -> where -> then; delay the
+            // final thenable so the UPDATE stays in flight.
+            return {
+              where: (cond: any) => ({
+                then: (onFulfilled?: any, onRejected?: any) =>
+                  sleep(ADD_ERROR_DELAY_MS).then(() =>
+                    (chained.where(cond) as PromiseLike<unknown>).then(
+                      onFulfilled,
+                      onRejected
+                    )
+                  ),
+              }),
+            };
+          }
+          return chained;
+        };
+        return builder;
+      }) as any);
+
+    try {
+      // Route call sites fire addError without awaiting it.
+      void reporter.addError("boom");
+      await syncJobManager.markJobError(id, "fatal boom");
+    } finally {
+      updateSpy.mockRestore();
+    }
+
+    const row = (await rawRow(id))!;
+    expect(row.status).toBe("error");
+    expect(row.errors).toEqual(["boom"]);
   });
 
   it("progress writes after a cancel are dropped, never clobbering the terminal row", async () => {

@@ -123,9 +123,10 @@ export class SyncJobManager {
   private pendingProgress = new Map<string, PendingProgress>();
   private progressTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private lastProgressFlush = new Map<string, number>();
-  // In-flight progress DB writes, per job. flushProgress awaits these before
-  // writing, so an older progress write can never land after a terminal
-  // update issued from another call.
+  // In-flight DB writes per job (progress flushes and addError appends),
+  // chained so an older write can never land after a newer one. Terminal
+  // transitions drain these before committing (see flushProgressQuietly),
+  // so a fire-and-forget write always lands while the row is still active.
   private inflightWrites = new Map<string, Promise<void>>();
   // Deferred handles for throttled (trailing-edge) flushes, per job: the
   // promise a reporter method returned settles when its flush lands, so an
@@ -290,6 +291,55 @@ export class SyncJobManager {
   }
 
   /**
+   * Track an in-flight DB write for a job so a terminal transition can
+   * drain it first (see flushProgressQuietly). New writes chain onto the
+   * previous tracked write, so draining awaits every write issued so far
+   * even when several fire-and-forget writes overlap — e.g. an unawaited
+   * addError racing a terminal transition.
+   *
+   * The thunk runs only after previously tracked writes settle, so an
+   * older write can never land after a newer one. Tracked writes are plain
+   * UPDATEs that never wait on a terminal transition, so draining them
+   * cannot deadlock.
+   */
+  private trackInflightWrite(
+    jobId: string,
+    startWrite: () => Promise<void>
+  ): Promise<void> {
+    const previous = this.inflightWrites.get(jobId);
+    let settled!: Promise<void>;
+    settled = (async () => {
+      if (previous) {
+        try {
+          await previous;
+        } catch {
+          // A failed write preserved its own snapshot / logged itself;
+          // later writes still go through.
+        }
+      }
+      await startWrite();
+    })().then(
+      () => {
+        if (this.inflightWrites.get(jobId) === settled) {
+          this.inflightWrites.delete(jobId);
+        }
+      },
+      (error) => {
+        if (this.inflightWrites.get(jobId) === settled) {
+          this.inflightWrites.delete(jobId);
+        }
+        throw error;
+      }
+    );
+    this.inflightWrites.set(jobId, settled);
+    // Observed internally so fire-and-forget callers (e.g. an unawaited
+    // addError) can't trigger unhandled-rejection warnings; explicit
+    // awaiters still see the rejection.
+    settled.catch(() => {});
+    return settled;
+  }
+
+  /**
    * Flush wrapper for the state-transition methods: a failed progress flush
    * preserves its snapshot for the next flush (see flushProgress), and the
    * transition itself must still be attempted — terminal state matters more
@@ -308,13 +358,31 @@ export class SyncJobManager {
       // leak it in the pending map.
       this.pendingProgress.delete(jobId);
     }
+    // Drain stragglers: a fire-and-forget write issued while the flush
+    // above was running (e.g. an unawaited addError) must land before the
+    // terminal UPDATE commits — the error has to arrive while the row is
+    // still active, or the active-row guard turns it into a silent no-op.
+    // Re-check the map after each await: a write issued during the drain
+    // chains onto the tracked promise and is awaited in turn. Tracked
+    // writes are plain UPDATEs that never wait on a terminal transition,
+    // so this cannot deadlock.
+    for (;;) {
+      const inflight = this.inflightWrites.get(jobId);
+      if (!inflight) return;
+      try {
+        await inflight;
+      } catch {
+        // Failures are logged where the write was issued; the terminal
+        // transition must still be attempted.
+      }
+    }
   }
 
   /**
    * Flush any throttled progress for a job. Awaiting it guarantees the
    * latest progress is durable:
    *
-   * - It first awaits any in-flight progress write, so a terminal
+   * - It first awaits any in-flight write, so a terminal
    *   transition can never run concurrently with an older write that would
    *   land afterward and clobber terminal fields (e.g. percent: 100).
    * - The write only touches active rows (queued/running): a terminal
@@ -490,8 +558,8 @@ export class SyncJobManager {
         // addError without awaiting it, so a read-modify-write here could
         // lose errors when concurrent appends read the same array.
         const now = new Date();
-        try {
-          await db
+        const write = () =>
+          db
             .update(syncJobs)
             .set({
               errors: sql`coalesce(${syncJobs.errors}, '[]'::jsonb) || ${JSON.stringify(error)}::jsonb`,
@@ -501,10 +569,21 @@ export class SyncJobManager {
             // Active rows only: errors arriving after a terminal transition
             // (e.g. from a worker that hasn't observed the cancel yet) must
             // not touch the row.
-            .where(activeJob(jobId));
-        } catch (err) {
-          console.error(`[SYNC_JOB] addError failed for ${jobId}:`, err);
-        }
+            .where(activeJob(jobId))
+            .then(
+              () => {},
+              (err) => {
+                console.error(`[SYNC_JOB] addError failed for ${jobId}:`, err);
+              }
+            );
+        // Tracked alongside the progress writes: terminal transitions drain
+        // in-flight writes before committing (see flushProgressQuietly), so
+        // an unawaited addError lands while the row is still active instead
+        // of racing the terminal UPDATE and no-op'ing against the
+        // now-terminal row. Awaiting callers get durability; fire-and-forget
+        // callers are safe — failures are logged above and observed
+        // internally, never unhandled.
+        await this.trackInflightWrite(jobId, write);
       },
 
       // Reads the row, so a cancel issued from any replica is honored.
