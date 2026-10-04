@@ -227,16 +227,24 @@ export class SyncJobManager {
       .filter((j) => j.status === "running" || j.status === "queued");
   }
 
-  async markJobRunning(jobId: string): Promise<void> {
+  /**
+   * Queued-to-running transition, conditional on the row still being queued.
+   * Returns whether the transition occurred: a cancellation that won the
+   * race before the deferred worker started leaves the row terminal and the
+   * worker must exit immediately without doing any API calls or mutations.
+   */
+  async markJobRunning(jobId: string): Promise<boolean> {
     await this.flushProgressQuietly(jobId);
     const now = new Date();
-    await db
+    const updated = await db
       .update(syncJobs)
       .set({ status: "running", updatedAt: now, heartbeatAt: now })
       // Queued only: a cancellation that won the race before the deferred
       // worker started must stay terminal — a late worker must not revive
       // the row back to running.
-      .where(and(eq(syncJobs.id, jobId), eq(syncJobs.status, "queued")));
+      .where(and(eq(syncJobs.id, jobId), eq(syncJobs.status, "queued")))
+      .returning({ id: syncJobs.id });
+    return updated.length > 0;
   }
 
   /**

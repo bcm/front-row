@@ -22,7 +22,13 @@ async function performAsyncAddShowSync(jobId: string, showId: number, userId: st
   
   try {
     console.log(`[ADD_SHOW_SYNC] Starting async sync for show ${showId}, job ${jobId}, groupId: ${groupId || 'personal'}`);
-    await syncJobManager.markJobRunning(jobId);
+    // A cancellation that won the race before this worker started
+    // leaves the row terminal (markJobRunning returns false): exit
+    // before any API call or mutation.
+    if (!(await syncJobManager.markJobRunning(jobId))) {
+      console.log(`[ADD_SHOW_SYNC] Job ${jobId} already terminal; worker exiting`);
+      return;
+    }
     
     // Phase 1: Fetch scrobble data
     await reporter.setPhase('fetch-scrobbles', 'Fetching your watch history from TVMaze...');
@@ -177,7 +183,13 @@ async function performAsyncSync(jobId: string, showId: number, userId: string): 
   const reporter = syncJobManager.createReporter(jobId);
   
   try {
-    await syncJobManager.markJobRunning(jobId);
+    // A cancellation that won the race before this worker started
+    // leaves the row terminal (markJobRunning returns false): exit
+    // before any API call or mutation.
+    if (!(await syncJobManager.markJobRunning(jobId))) {
+      console.log(`[SYNC] Job ${jobId} already terminal; worker exiting`);
+      return;
+    }
     
     // Phase 1: Sync show details
     await reporter.setPhase('fetch-show', 'Fetching show details...');
@@ -337,7 +349,13 @@ async function performAsyncLibraryImport(jobId: string, userId: string): Promise
   
   try {
     console.log(`[LIBRARY_IMPORT] Starting async library import, job ${jobId}`);
-    await syncJobManager.markJobRunning(jobId);
+    // A cancellation that won the race before this worker started
+    // leaves the row terminal (markJobRunning returns false): exit
+    // before any API call or mutation.
+    if (!(await syncJobManager.markJobRunning(jobId))) {
+      console.log(`[LIBRARY_IMPORT] Job ${jobId} already terminal; worker exiting`);
+      return;
+    }
     
     const apiKey = process.env.TVMAZE_API_KEY;
     const username = process.env.TVMAZE_USERNAME;
@@ -377,6 +395,13 @@ async function performAsyncLibraryImport(jobId: string, userId: string): Promise
 
     // Process each followed show
     for (const followedShow of followedShows) {
+      // Honor durable cancellation: DELETE /api/sync/:id can mark the job
+      // canceled while this loop is still importing.
+      if (await reporter.checkCanceled()) {
+        console.log(`[LIBRARY_IMPORT] Job ${jobId} was cancelled`);
+        return;
+      }
+
       const show = followedShow._embedded.show;
       
       try {
@@ -444,7 +469,13 @@ async function performAsyncEpisodeImport(jobId: string, userId: string): Promise
   
   try {
     console.log(`[EPISODE_IMPORT] Starting async episode import, job ${jobId}`);
-    await syncJobManager.markJobRunning(jobId);
+    // A cancellation that won the race before this worker started
+    // leaves the row terminal (markJobRunning returns false): exit
+    // before any API call or mutation.
+    if (!(await syncJobManager.markJobRunning(jobId))) {
+      console.log(`[EPISODE_IMPORT] Job ${jobId} already terminal; worker exiting`);
+      return;
+    }
     
     // Phase 1: Fetch user shows
     await reporter.setPhase('fetch-episodes', 'Fetching your shows...');

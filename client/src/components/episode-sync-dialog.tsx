@@ -23,7 +23,7 @@ interface EpisodeSyncDialogProps {
 }
 
 interface SyncProgress {
-  status: 'running' | 'success' | 'error';
+  status: 'running' | 'success' | 'error' | 'canceled';
   phase: string;
   percent: number;
   completedShows: number;
@@ -155,7 +155,15 @@ export default function EpisodeSyncDialog({ open, onOpenChange, existingJobId }:
       } as SyncProgress;
     },
     enabled: !!jobId && open,
-    refetchInterval: 2500, // Poll every 2.5 seconds
+    // A canceled job is terminal like success/error: stop refetching so the
+    // interval doesn't spin forever when the cancel came from the generic
+    // cancellation endpoint (this dialog's own Cancel button closes it).
+    refetchInterval: (query) => {
+      const status = query.state.data?.status;
+      return status === 'success' || status === 'error' || status === 'canceled'
+        ? false
+        : 2500; // Poll every 2.5 seconds
+    },
     refetchIntervalInBackground: false,
     retry: 3,
   });
@@ -249,7 +257,8 @@ export default function EpisodeSyncDialog({ open, onOpenChange, existingJobId }:
                   {syncProgress.status === 'success' && <CheckCircle className="w-3 h-3 mr-1" />}
                   {syncProgress.status === 'error' && <AlertCircle className="w-3 h-3 mr-1" />}
                   {syncProgress.status === 'running' ? 'Syncing' : 
-                   syncProgress.status === 'success' ? 'Complete' : 'Failed'}
+                   syncProgress.status === 'success' ? 'Complete' :
+                   syncProgress.status === 'canceled' ? 'Canceled' : 'Failed'}
                 </Badge>
                 {syncProgress.etaSeconds && (
                   <span className="text-xs text-muted-foreground">

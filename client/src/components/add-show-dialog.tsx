@@ -11,7 +11,7 @@ import { Search, Plus, X, CheckCircle, AlertCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 interface SyncProgress {
-  status: 'running' | 'success' | 'error';
+  status: 'running' | 'success' | 'error' | 'canceled';
   phase: string;
   percent: number;
   completedEpisodes: number;
@@ -136,6 +136,15 @@ export default function AddShowDialog({ open, onOpenChange }: AddShowDialogProps
           description: progressData.lastMessage || progressData.message || "Failed to import episodes",
           variant: "destructive",
         });
+      } else if (progressData.status === 'canceled') {
+        // A cancel issued through the generic cancellation endpoint is a
+        // terminal state like success/error: stop polling so the interval
+        // doesn't spin forever. Clear the job ID so a new import can start,
+        // but keep the progress state so the dialog shows what was canceled
+        // (the modal is closable once the status is no longer 'running').
+        stopPolling();
+        setCurrentJobId(null);
+        setSyncProgress(prev => prev ? { ...prev, message: 'Import canceled' } : prev);
       }
     };
 

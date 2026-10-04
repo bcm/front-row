@@ -8,7 +8,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 
 interface SyncProgress {
-  status: 'running' | 'success' | 'error';
+  status: 'running' | 'success' | 'error' | 'canceled';
   phase: string;
   percent: number;
   completedEpisodes: number;
@@ -119,6 +119,15 @@ export default function LibraryImportDialog({ open, onOpenChange }: LibraryImpor
           description: progressData.message || "Failed to import shows from TVMaze",
           variant: "destructive",
         });
+      } else if (progressData.status === 'canceled') {
+        // A cancel issued through the generic cancellation endpoint is a
+        // terminal state like success/error: stop polling so the interval
+        // doesn't spin forever. Clear the job ID so a new import can start,
+        // but keep the progress state so the dialog shows what was canceled
+        // (the modal is closable once the status is no longer 'running').
+        stopPolling();
+        setCurrentJobId(null);
+        setSyncProgress(prev => prev ? { ...prev, message: 'Import canceled' } : prev);
       }
     };
 

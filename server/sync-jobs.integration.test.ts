@@ -871,3 +871,159 @@ describe("Copilot round 9: queued-job cancellation and terminal cleanup", () => 
     expect(manager.throttleStateSize()).toBe(0);
   });
 });
+
+describe("Copilot round 10: markJobRunning return value, canceled-is-terminal, loop cancellation", () => {
+  it("markJobRunning returns whether the queued-to-running transition occurred", async () => {
+    // Queued row: transition happens.
+    const queued = await syncJobManager.createJob(USER_A, "show-sync", 60);
+    expect(await syncJobManager.markJobRunning(queued)).toBe(true);
+    expect((await rawRow(queued))!.status).toBe("running");
+
+    // Canceled row: no transition, no revival.
+    const canceled = await syncJobManager.createJob(USER_A, "show-sync", 61);
+    expect(await syncJobManager.cancelJob(canceled)).toBe(true);
+    expect(await syncJobManager.markJobRunning(canceled)).toBe(false);
+    expect((await rawRow(canceled))!.status).toBe("canceled");
+
+    // Already-running row: the conditional UPDATE matches nothing.
+    const running = await syncJobManager.createJob(USER_A, "show-sync", 62);
+    await syncJobManager.markJobRunning(running);
+    expect(await syncJobManager.markJobRunning(running)).toBe(false);
+    expect((await rawRow(running))!.status).toBe("running");
+  });
+
+  it("a worker whose markJobRunning returns false performs no API call and no mutation", async () => {
+    // Simulates cancellation winning the race before the deferred worker
+    // started: the real worker guard must exit before any API call or DB
+    // mutation.
+    const cookie = await createSessionCookie(USER_A);
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(async () => {
+        throw new Error("fetch must not be called");
+      });
+    const origCreateShow = storage.createShow.bind(storage);
+    const createShowSpy = vi
+      .spyOn(storage, "createShow")
+      .mockImplementation(origCreateShow);
+    const runSpy = vi
+      .spyOn(syncJobManager, "markJobRunning")
+      .mockResolvedValue(false);
+    try {
+      const res = await request(app)
+        .post("/api/library/import")
+        .set("Cookie", cookie)
+        .send({});
+      expect(res.status).toBe(200);
+      const jobId = res.body.jobId as string;
+
+      // Let the deferred worker run.
+      await new Promise((r) => setImmediate(r));
+      await new Promise((r) => setTimeout(r, 500));
+
+      // The worker exited before any work: no TVMaze fetch, no show
+      // mutation, and the row is untouched (still queued — the mocked
+      // transition never happened).
+      expect(fetchSpy).not.toHaveBeenCalled();
+      expect(createShowSpy).not.toHaveBeenCalled();
+      expect((await rawRow(jobId))!.status).toBe("queued");
+    } finally {
+      fetchSpy.mockRestore();
+      createShowSpy.mockRestore();
+      runSpy.mockRestore();
+      await db.delete(syncJobs).where(eq(syncJobs.userId, USER_A));
+    }
+  });
+
+  it("library-import worker exits its loop when the job is canceled mid-import", async () => {
+    // The worker is launched by the route via setImmediate; TVMaze is
+    // mocked so no network is involved. The first createShow is held
+    // in-flight so the test can cancel deterministically mid-loop.
+    const cookie = await createSessionCookie(USER_A);
+    const showIds = [880001, 880002, 880003];
+    const mockFollowedShows = showIds.map((id) => ({
+      _embedded: {
+        show: {
+          id,
+          name: `Cancel Test Show ${id}`,
+          summary: "x",
+          image: null,
+          network: null,
+          genres: [],
+          status: "Running",
+          premiered: "2020-01-01",
+          rating: null,
+          runtime: 60,
+          officialSite: null,
+          language: "English",
+          type: "Scripted",
+          updated: 0,
+        },
+      },
+    }));
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(
+      async () =>
+        ({
+          ok: true,
+          status: 200,
+          json: async () => mockFollowedShows,
+        }) as Response
+    );
+    const hadApiKey = "TVMAZE_API_KEY" in process.env;
+    const hadUsername = "TVMAZE_USERNAME" in process.env;
+    process.env.TVMAZE_API_KEY = "test";
+    process.env.TVMAZE_USERNAME = "test";
+
+    const origCreateShow = storage.createShow.bind(storage);
+    let createShowCalls = 0;
+    let releaseGate!: () => void;
+    const gate = new Promise<void>((r) => {
+      releaseGate = r;
+    });
+    const createShowSpy = vi
+      .spyOn(storage, "createShow")
+      .mockImplementation(async (...args: never[]) => {
+        createShowCalls++;
+        if (createShowCalls === 1) await gate;
+        return origCreateShow(...args);
+      });
+
+    try {
+      const res = await request(app)
+        .post("/api/library/import")
+        .set("Cookie", cookie)
+        .send({});
+      expect(res.status).toBe(200);
+      const jobId = res.body.jobId as string;
+
+      // Wait for the worker to reach the first import, then cancel while
+      // the loop is mid-flight.
+      const deadline = Date.now() + 10000;
+      while (createShowCalls === 0 && Date.now() < deadline) {
+        await new Promise((r) => setTimeout(r, 25));
+      }
+      expect(createShowCalls).toBe(1);
+      const cancelRes = await request(app)
+        .delete(`/api/sync/${jobId}`)
+        .set("Cookie", cookie);
+      expect(cancelRes.status).toBe(200);
+      expect(cancelRes.body.canceled).toBe(true);
+      releaseGate();
+
+      // Let the worker observe the cancellation and exit.
+      await new Promise((r) => setTimeout(r, 2000));
+
+      // Only the in-flight import completed; the remaining shows were
+      // never attempted (fails pre-fix: all three are imported).
+      expect(createShowCalls).toBe(1);
+      expect((await rawRow(jobId))!.status).toBe("canceled");
+    } finally {
+      fetchSpy.mockRestore();
+      createShowSpy.mockRestore();
+      if (!hadApiKey) delete process.env.TVMAZE_API_KEY;
+      if (!hadUsername) delete process.env.TVMAZE_USERNAME;
+      await db.delete(syncJobs).where(eq(syncJobs.userId, USER_A));
+      await db.delete(userShows).where(eq(userShows.userId, USER_A));
+    }
+  });
+});
