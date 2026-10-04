@@ -1122,4 +1122,129 @@ describe("Copilot round 10: markJobRunning return value, canceled-is-terminal, l
       await db.delete(userShows).where(eq(userShows.userId, USER_A));
     }
   });
+
+  it("shouldStop is a stop signal for terminal and missing rows, not for active ones", async () => {
+    const id = await syncJobManager.createJob(USER_A, "show-sync", 61);
+    const reporter = syncJobManager.createReporter(id);
+    expect(await reporter.shouldStop()).toBe(false);
+    await syncJobManager.markJobRunning(id);
+    expect(await reporter.shouldStop()).toBe(false);
+
+    // A cancel from another replica stops a resumed worker.
+    await new SyncJobManager().cancelJob(id);
+    expect(await reporter.shouldStop()).toBe(true);
+    expect(await reporter.checkCanceled()).toBe(true);
+
+    // A reaped-to-error job stops the worker even though nothing canceled
+    // it — the case checkCanceled missed.
+    const reaped = await syncJobManager.createJob(USER_A, "show-sync", 62);
+    await syncJobManager.markJobRunning(reaped);
+    await backdateHeartbeat(reaped, 10);
+    await reapStaleRunningJobs();
+    expect(await syncJobManager.createReporter(reaped).shouldStop()).toBe(true);
+    expect(await syncJobManager.createReporter(reaped).checkCanceled()).toBe(
+      false
+    );
+
+    // A missing row (deleted job) is also a stop signal.
+    const gone = await syncJobManager.createJob(USER_A, "show-sync", 63);
+    await db.delete(syncJobs).where(eq(syncJobs.id, gone));
+    expect(await syncJobManager.createReporter(gone).shouldStop()).toBe(true);
+  });
+
+  it("library-import worker exits its loop when the job is reaped to error mid-import", async () => {
+    // Reuses the deterministic mid-loop setup of the cancel test: the first
+    // createShow is held in-flight while the heartbeat reaper persists the
+    // stalled row as error. After the gate releases, the resumed worker must
+    // exit at its next shouldStop check and perform no further imports —
+    // pre-fix (checkCanceled) it would import all three shows and only its
+    // final terminal write would be suppressed.
+    const cookie = await createSessionCookie(USER_A);
+    const showIds = [880101, 880102, 880103];
+    const mockFollowedShows = showIds.map((id) => ({
+      _embedded: {
+        show: {
+          id,
+          name: `Reap Test Show ${id}`,
+          summary: "x",
+          image: null,
+          network: null,
+          genres: [],
+          status: "Running",
+          premiered: "2020-01-01",
+          rating: null,
+          runtime: 60,
+          officialSite: null,
+          language: "English",
+          type: "Scripted",
+          updated: 0,
+        },
+      },
+    }));
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(
+      async () =>
+        ({
+          ok: true,
+          status: 200,
+          json: async () => mockFollowedShows,
+        }) as Response
+    );
+    const hadApiKey = "TVMAZE_API_KEY" in process.env;
+    const hadUsername = "TVMAZE_USERNAME" in process.env;
+process.env.TVMAZE_API_KEY=<redacted>
+    process.env.TVMAZE_USERNAME = "test";
+
+    const origCreateShow = storage.createShow.bind(storage);
+    let createShowCalls = 0;
+    let releaseGate!: () => void;
+    const gate = new Promise<void>((r) => {
+      releaseGate = r;
+    });
+    const createShowSpy = vi
+      .spyOn(storage, "createShow")
+      .mockImplementation(async (...args: never[]) => {
+        createShowCalls++;
+        if (createShowCalls === 1) await gate;
+        return origCreateShow(...args);
+      });
+
+    try {
+      const res = await request(app)
+        .post("/api/library/import")
+        .set("Cookie", cookie)
+        .send({});
+      expect(res.status).toBe(200);
+      const jobId = res.body.jobId as string;
+
+      // Wait for the worker to reach the first import, then reap the row
+      // while the loop is mid-flight — like the heartbeat reaper would.
+      const deadline = Date.now() + 10000;
+      while (createShowCalls === 0 && Date.now() < deadline) {
+        await new Promise((r) => setTimeout(r, 25));
+      }
+      expect(createShowCalls).toBe(1);
+      await backdateHeartbeat(jobId, 10);
+      await reapStaleRunningJobs();
+      expect((await rawRow(jobId))!.status).toBe("error");
+      releaseGate();
+
+      // Let the worker observe the reaped row and exit.
+      await new Promise((r) => setTimeout(r, 2000));
+
+      // Only the in-flight import completed; the resumed worker exited at
+      // its next check instead of importing the remaining shows, and the
+      // reaped terminal row was never revived.
+      expect(createShowCalls).toBe(1);
+      const row = (await rawRow(jobId))!;
+      expect(row.status).toBe("error");
+      expect(row.lastMessage).toBe(SYNC_WORKER_LOST_MESSAGE);
+    } finally {
+      fetchSpy.mockRestore();
+      createShowSpy.mockRestore();
+      if (!hadApiKey) delete process.env.TVMAZE_API_KEY;
+      if (!hadUsername) delete process.env.TVMAZE_USERNAME;
+      await db.delete(syncJobs).where(eq(syncJobs.userId, USER_A));
+      await db.delete(userShows).where(eq(userShows.userId, USER_A));
+    }
+  });
 });

@@ -86,9 +86,10 @@ async function performAsyncAddShowSync(jobId: string, showId: number, userId: st
     let episodesUpdated = 0;
     
     for (const episode of episodes) {
-      // Check for cancellation
-      if (await reporter.checkCanceled()) {
-        console.log(`[ADD_SHOW_SYNC] Job ${jobId} was cancelled`);
+      // Stop if the job left the active set (canceled, reaped to error,
+      // deleted) instead of continuing against a terminal job.
+      if (await reporter.shouldStop()) {
+        console.log(`[ADD_SHOW_SYNC] Job ${jobId} was cancelled or terminated`);
         return;
       }
 
@@ -243,8 +244,9 @@ async function performAsyncSync(jobId: string, showId: number, userId: string): 
     let episodesUpdated = 0;
     
     for (const episode of episodes) {
-      // Check for cancellation
-      if (await reporter.checkCanceled()) {
+      // Stop if the job left the active set (canceled, reaped to error,
+      // deleted) instead of continuing against a terminal job.
+      if (await reporter.shouldStop()) {
         return;
       }
 
@@ -395,10 +397,12 @@ async function performAsyncLibraryImport(jobId: string, userId: string): Promise
 
     // Process each followed show
     for (const followedShow of followedShows) {
-      // Honor durable cancellation: DELETE /api/sync/:id can mark the job
-      // canceled while this loop is still importing.
-      if (await reporter.checkCanceled()) {
-        console.log(`[LIBRARY_IMPORT] Job ${jobId} was cancelled`);
+      // Honor durable job end: DELETE /api/sync/:id can mark the job
+      // canceled, and the heartbeat reaper can mark it error, while this
+      // loop is still importing — stop rather than importing into a
+      // terminal job.
+      if (await reporter.shouldStop()) {
+        console.log(`[LIBRARY_IMPORT] Job ${jobId} was cancelled or terminated`);
         return;
       }
 
@@ -502,9 +506,10 @@ async function performAsyncEpisodeImport(jobId: string, userId: string): Promise
     await reporter.setTotal(totalShows);
 
     for (const userShow of userShows) {
-      // Check if job has been canceled
-      if (await reporter.checkCanceled()) {
-        console.log(`[EPISODE_IMPORT] Job ${jobId} was canceled`);
+      // Stop if the job left the active set (canceled, reaped to error,
+      // deleted) instead of continuing against a terminal job.
+      if (await reporter.shouldStop()) {
+        console.log(`[EPISODE_IMPORT] Job ${jobId} was canceled or terminated`);
         break;
       }
 

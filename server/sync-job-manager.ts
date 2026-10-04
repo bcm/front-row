@@ -73,6 +73,14 @@ export interface ProgressReporter {
   incrementCompleted(message?: string): Promise<void>;
   addError(error: string): Promise<void>;
   checkCanceled(): Promise<boolean>;
+  /**
+   * Stop signal for worker loop checks: true when the row is missing
+   * (deleted) or its status left the active set (canceled, error,
+   * success). checkCanceled only sees the canceled flag, so a resumed
+   * worker on a reaped-to-error row would keep making API calls and DB
+   * mutations; every mid-loop check must use this instead.
+   */
+  shouldStop(): Promise<boolean>;
   getJob(): Promise<SyncJob | null>;
 }
 
@@ -720,6 +728,21 @@ export class SyncJobManager {
           .where(eq(syncJobs.id, jobId))
           .limit(1);
         return rows[0]?.canceled ?? false;
+      },
+
+      // Reads the row: stop when the job is no longer active — missing
+      // (deleted) or not queued/running (canceled on another replica, or
+      // reaped to error by the heartbeat reaper after stalling). A resumed
+      // worker must exit at its next check instead of continuing API calls
+      // and DB mutations against a terminal job.
+      shouldStop: async () => {
+        const rows = await db
+          .select({ status: syncJobs.status })
+          .from(syncJobs)
+          .where(eq(syncJobs.id, jobId))
+          .limit(1);
+        const status = rows[0]?.status;
+        return status !== "queued" && status !== "running";
       },
 
       getJob: () => this.getJob(jobId),
