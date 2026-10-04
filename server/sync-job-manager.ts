@@ -97,12 +97,18 @@ function toView(row: SyncJobRow): SyncJob {
 }
 
 // A 'running' job whose worker stopped heartbeating reads as a dead job.
-// The row is left untouched — this is a read-time interpretation only.
+// A 'queued' job only lives in the milliseconds between createJob and the
+// deferred markJobRunning, so one older than the timeout means the replica
+// crashed in that window — its age is measured from startedAt, which is the
+// insert time and never advances while queued. The row is left untouched —
+// this is a read-time interpretation only.
 function applyHeartbeatTimeout(row: SyncJobRow): SyncJob {
   const view = toView(row);
   if (
-    view.status === "running" &&
-    Date.now() - view.heartbeatAt.getTime() > SYNC_HEARTBEAT_TIMEOUT_MS
+    (view.status === "running" &&
+      Date.now() - view.heartbeatAt.getTime() > SYNC_HEARTBEAT_TIMEOUT_MS) ||
+    (view.status === "queued" &&
+      Date.now() - view.startedAt.getTime() > SYNC_HEARTBEAT_TIMEOUT_MS)
   ) {
     view.status = "error";
     view.lastMessage = SYNC_WORKER_LOST_MESSAGE;
@@ -176,8 +182,7 @@ export class SyncJobManager {
 
   /** Read a job by id, with the heartbeat timeout applied. When userId is
    *  given, jobs owned by another user read as not found. */
-  async getJob(id: string, userId?: string): Promise<SyncJob | null> {
-    const rows = await db
+  async getJob(id: string, userId?: string): Promise<SyncJob | null> {   const rows = await db
       .select()
       .from(syncJobs)
       .where(
@@ -208,13 +213,18 @@ export class SyncJobManager {
       .from(syncJobs)
       .where(
         userId
-          ? and(eq(syncJobs.status, "running"), eq(syncJobs.userId, userId))
-          : eq(syncJobs.status, "running")
+          ? and(
+              or(eq(syncJobs.status, "running"), eq(syncJobs.status, "queued")),
+              eq(syncJobs.userId, userId)
+            )
+          : or(eq(syncJobs.status, "running"), eq(syncJobs.status, "queued"))
       );
-    // Timed-out workers are dead, not active.
+    // Timed-out workers are dead, not active. Stale queued jobs (crashed
+    // between createJob and markJobRunning) read as error via the
+    // heartbeat-timeout interpretation and are filtered out here.
     return rows
       .map(applyHeartbeatTimeout)
-      .filter((j) => j.status === "running");
+      .filter((j) => j.status === "running" || j.status === "queued");
   }
 
   async markJobRunning(jobId: string): Promise<void> {
@@ -257,6 +267,9 @@ export class SyncJobManager {
         )
       )
       .returning({ id: syncJobs.id });
+    // The job can never make progress again; drop the per-job throttle
+    // state so the in-memory maps don't retain an entry per finished job.
+    this.clearThrottleState(jobId);
     return updated.length > 0;
   }
 
@@ -280,6 +293,7 @@ export class SyncJobManager {
         )
       )
       .returning({ id: syncJobs.id });
+    this.clearThrottleState(jobId);
     return updated.length > 0;
   }
 
@@ -298,6 +312,7 @@ export class SyncJobManager {
       })
       .where(and(eq(syncJobs.id, jobId), eq(syncJobs.status, "running")))
       .returning({ id: syncJobs.id });
+    this.clearThrottleState(jobId);
     return updated.length > 0;
   }
 
@@ -469,31 +484,73 @@ export class SyncJobManager {
     // the ordering chain, so it can never be hidden from the straggler
     // drain in flushProgressQuietly.
     const tracked = this.trackInflightWrite(jobId, () =>
-      write.then(
-        () => {
-          scheduled?.resolve();
-        },
-        (error) => {
-          console.error(
-            `[SYNC_JOB] progress flush failed for ${jobId}:`,
-            error
-          );
-          // Preserve the snapshot so the next flush retries it instead of
-          // silently dropping the heartbeat — unless newer progress has
-          // already superseded it.
-          const existing = this.pendingProgress.get(jobId);
-          if (
-            !existing ||
-            existing.completedShows < pending.completedShows
-          ) {
-            this.pendingProgress.set(jobId, pending);
+      write
+        .returning({ id: syncJobs.id })
+        .then(
+          (updated) => {
+            if (updated.length === 0) {
+              // The flush was a no-op: the job reached a terminal state
+              // (locally, or on another replica observed via the active-row
+              // guard) while this flush was pending. Drop the per-job
+              // throttle state — no further progress will ever land, and
+              // retaining the timestamp entry would leak one map entry per
+              // finished job.
+              this.clearThrottleState(jobId);
+            }
+            scheduled?.resolve();
+          },
+          (error) => {
+            console.error(
+              `[SYNC_JOB] progress flush failed for ${jobId}:`,
+              error
+            );
+            // Preserve the snapshot so the next flush retries it instead of
+            // silently dropping the heartbeat — unless newer progress has
+            // already superseded it.
+            const existing = this.pendingProgress.get(jobId);
+            if (
+              !existing ||
+              existing.completedShows < pending.completedShows
+            ) {
+              this.pendingProgress.set(jobId, pending);
+            }
+            scheduled?.reject(error);
+            throw error;
           }
-          scheduled?.reject(error);
-          throw error;
-        }
-      )
+        )
     );
     return tracked;
+  }
+
+  /**
+   * Drop per-job progress-throttle state (pending snapshot, timer, last
+   * flush timestamp). Called once the job can never make progress again:
+   * after a local terminal transition commits, or when a flush no-ops
+   * against a terminal row (the job finished on another replica). Without
+   * this, the in-memory maps retain one entry per finished job for the
+   * replica's lifetime. scheduledFlushes is consumed by flushProgress
+   * itself and inflightWrites self-cleans on settle, so only these three
+   * maps need explicit clearing.
+   */
+  private clearThrottleState(jobId: string): void {
+    this.pendingProgress.delete(jobId);
+    const timer = this.progressTimers.get(jobId);
+    if (timer) {
+      clearTimeout(timer);
+      this.progressTimers.delete(jobId);
+    }
+    this.lastProgressFlush.delete(jobId);
+  }
+
+  /** Exported for tests: number of per-job throttle entries currently held. */
+  throttleStateSize(): number {
+    return (
+      this.pendingProgress.size +
+      this.progressTimers.size +
+      this.lastProgressFlush.size +
+      this.scheduledFlushes.size +
+      this.inflightWrites.size
+    );
   }
 
   private scheduleProgressFlush(jobId: string): Promise<void> {
@@ -537,7 +594,16 @@ export class SyncJobManager {
           // transition must not clobber the terminal message (or heartbeat).
           .where(activeJob(jobId));
       } catch (error) {
+        // setPhase/setTotal are awaited to guarantee durable ordering, so a
+        // failed UPDATE must be visible to the caller: re-throw after
+        // logging instead of converting the failure into apparent success
+        // (the worker would otherwise continue and mark the job successful
+        // although the phase/total write was lost). The worker's try/catch
+        // funnels it into markJobError, and the deferred task has an
+        // explicit rejection handler — it can never become an unhandled
+        // rejection.
         console.error(`[SYNC_JOB] progress write failed for ${jobId}:`, error);
+        throw error;
       }
     };
 
@@ -636,7 +702,11 @@ const SYNC_JOB_RETENTION_MS = 24 * 60 * 60 * 1000;
  * Dead workers leave 'running' rows that nothing would ever delete (readers
  * only compute the heartbeat timeout, never persist it), so first terminate
  * running jobs whose heartbeat has been stale beyond the retention period,
- * then reap terminal jobs older than retention as before.
+ * then reap terminal jobs older than retention as before. 'queued' rows are
+ * included in the first pass: a replica can crash between createJob and the
+ * deferred markJobRunning, leaving an orphan that no worker will ever pick
+ * up (heartbeat_at is the insert time for queued rows, since nothing
+ * advances it while queued, so the same cutoff identifies them).
  */
 export async function cleanupSyncJobs(now: number = Date.now()): Promise<void> {
   const cutoff = new Date(now - SYNC_JOB_RETENTION_MS);
@@ -650,7 +720,10 @@ export async function cleanupSyncJobs(now: number = Date.now()): Promise<void> {
       finishedAt: stamp,
     })
     .where(
-      and(eq(syncJobs.status, "running"), lt(syncJobs.heartbeatAt, cutoff))
+      and(
+        or(eq(syncJobs.status, "running"), eq(syncJobs.status, "queued")),
+        lt(syncJobs.heartbeatAt, cutoff)
+      )
     );
   await db
     .delete(syncJobs)

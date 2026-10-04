@@ -30,6 +30,10 @@ export default function AddShowDialog({ open, onOpenChange }: AddShowDialogProps
   const [searchQuery, setSearchQuery] = useState("");
   const [currentJobId, setCurrentJobId] = useState<string | null>(null);
   const [syncProgress, setSyncProgress] = useState<SyncProgress | null>(null);
+  // Set when the poll loop gives up after repeated transient failures. The
+  // dialog stays open on the last known progress and the job ID is kept, so
+  // the user cannot start a duplicate import from this dialog.
+  const [pollingGaveUp, setPollingGaveUp] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -139,30 +143,42 @@ export default function AddShowDialog({ open, onOpenChange }: AddShowDialogProps
     // responses (e.g. a stale 'running' landing after a terminal state).
     let pollInFlight = false;
 
+    // A single transient status failure must not stop tracking: the durable
+    // job continues on the server, and clearing the job ID here would let
+    // the user start a duplicate import. Keep polling; only give up after
+    // MAX_POLL_FAILURES consecutive failures (~10s of outage), and keep the
+    // job state even then so a duplicate cannot be launched.
+    let consecutiveFailures = 0;
+    const MAX_POLL_FAILURES = 5;
+
     const poll = async () => {
       if (pollInFlight) return;
       pollInFlight = true;
       try {
         const res = await fetch(`/api/sync/${jobId}/status`);
         if (!res.ok) throw new Error(`status ${res.status}`);
+        consecutiveFailures = 0;
         applyStatus(await res.json());
       } catch (error) {
         console.error('Error polling sync status:', error);
-        stopPolling();
-        setCurrentJobId(null);
-        setSyncProgress(null);
+        consecutiveFailures++;
+        if (consecutiveFailures >= MAX_POLL_FAILURES) {
+          stopPolling();
+          setPollingGaveUp(true);
 
-        toast({
-          title: "Connection error",
-          description: "Lost connection to import progress",
-          variant: "destructive",
-        });
+          toast({
+            title: "Connection error",
+            description: "Lost connection to import progress after several retries",
+            variant: "destructive",
+          });
+        }
       } finally {
         pollInFlight = false;
       }
     };
 
     const pollTimer = setInterval(poll, 2000);
+    setPollingGaveUp(false);
     void poll();
   };
 
@@ -179,7 +195,10 @@ export default function AddShowDialog({ open, onOpenChange }: AddShowDialogProps
 
   // Handle dialog close with progress check
   const handleOpenChange = (open: boolean) => {
-    if (!open && currentJobId && syncProgress?.status === 'running') {
+    // Once the poll loop has given up, let the user close even though the
+    // last known status is 'running' — the job itself is durable on the
+    // server and no duplicate can be started while the job ID is held.
+    if (!open && currentJobId && syncProgress?.status === 'running' && !pollingGaveUp) {
       // Don't allow closing while sync is in progress
       toast({
         title: "Import in progress",
@@ -237,6 +256,22 @@ export default function AddShowDialog({ open, onOpenChange }: AddShowDialogProps
                   {syncProgress.errors.slice(-3).map((error, index) => (
                     <p key={index} className="text-sm text-red-500">{error}</p>
                   ))}
+                </div>
+              )}
+
+              {pollingGaveUp && syncProgress.status === 'running' && (
+                <div className="flex items-center justify-between pt-2">
+                  <p className="text-sm text-muted-foreground">
+                    Connection to progress updates was lost; the import may still be running.
+                  </p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => currentJobId && startProgressTracking(currentJobId)}
+                    data-testid="button-retry-progress-poll"
+                  >
+                    Retry
+                  </Button>
                 </div>
               )}
             </div>

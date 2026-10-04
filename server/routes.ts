@@ -854,10 +854,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
 
     if (job.status === 'running') {
-      await syncJobManager.cancelJob(id);
-      res.json({ message: "Sync job canceled" });
+      // The status read and the cancellation UPDATE are separate operations:
+      // another replica may have completed the job between them. Report what
+      // actually happened instead of always claiming the cancel landed.
+      const canceled = await syncJobManager.cancelJob(id);
+      res.json({
+        canceled,
+        message: canceled ? "Sync job canceled" : "Job already completed or not running",
+      });
     } else {
-      res.json({ message: "Job already completed or not running" });
+      res.json({ canceled: false, message: "Job already completed or not running" });
     }
   }));
 

@@ -667,3 +667,137 @@ describe("deferred sync-task rejection handling (integration)", () => {
     }
   });
 });
+
+describe("Copilot round 8 findings (integration)", () => {
+  beforeEach(async () => {
+    await db.delete(syncJobs);
+  });
+
+  it("setPhase re-throws a failed UPDATE so the caller observes the lost write", async () => {
+    // setPhase/setTotal are awaited to guarantee durable ordering. A failed
+    // UPDATE used to be swallowed (converted to apparent success), letting
+    // the worker continue and mark the job successful although the
+    // phase/total write was lost.
+    const id = await syncJobManager.createJob(USER_A, "show-sync", 42);
+    await syncJobManager.markJobRunning(id);
+    const reporter = syncJobManager.createReporter(id);
+    const boom = new Error("update exploded");
+    const spy = vi.spyOn(db, "update").mockImplementationOnce(() => {
+      throw boom;
+    });
+    try {
+      await expect(reporter.setPhase("fetch-show", "hi")).rejects.toBe(boom);
+      await expect(reporter.setTotal(10)).resolves.toBeUndefined();
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it("a queued job older than the heartbeat timeout reads as worker-lost", async () => {
+    // A replica can crash between createJob and the deferred markJobRunning,
+    // leaving an orphan 'queued' row no worker will ever pick up. Readers
+    // must not report it as queued forever.
+    const id = await syncJobManager.createJob(USER_A, "show-sync", 43);
+    expect((await syncJobManager.getJob(id))!.status).toBe("queued");
+
+    await db.execute(sql`
+      UPDATE "sync_jobs"
+      SET "started_at" = now() - interval '6 minutes'
+      WHERE "id" = ${id}`);
+
+    const job = (await syncJobManager.getJob(id))!;
+    expect(job.status).toBe("error");
+    expect(job.lastMessage).toBe(SYNC_WORKER_LOST_MESSAGE);
+
+    // The row itself is untouched — read-time interpretation only.
+    expect((await rawRow(id))!.status).toBe("queued");
+
+    // Stale queued jobs are not "active".
+    expect(await syncJobManager.getActiveJobs(USER_A)).toEqual([]);
+  });
+
+  it("getActiveJobs includes fresh queued jobs", async () => {
+    const id = await syncJobManager.createJob(USER_A, "episode-import");
+    const active = await syncJobManager.getActiveJobs(USER_A);
+    expect(active.map((j) => j.id)).toEqual([id]);
+  });
+
+  it("cleanupSyncJobs terminates stale queued rows", async () => {
+    const id = await syncJobManager.createJob(USER_A, "show-sync", 44);
+    await db.execute(sql`
+      UPDATE "sync_jobs"
+      SET "heartbeat_at" = now() - interval '25 hours'
+      WHERE "id" = ${id}`);
+
+    const fresh = await syncJobManager.createJob(USER_A, "show-sync", 45);
+
+    await cleanupSyncJobs();
+
+    const stale = (await rawRow(id))!;
+    expect(stale.status).toBe("error");
+    expect(stale.lastMessage).toBe(SYNC_WORKER_LOST_MESSAGE);
+    // A fresh queued job is untouched.
+    expect((await rawRow(fresh))!.status).toBe("queued");
+  });
+
+  it("clears per-job throttle state after a terminal transition", async () => {
+    // A fresh manager isolates the throttle maps from background deferred
+    // workers left over from API-level tests sharing the singleton.
+    const manager = new SyncJobManager();
+    const id = await manager.createJob(USER_A, "show-sync", 46);
+    await manager.markJobRunning(id);
+    const reporter = manager.createReporter(id);
+    await reporter.incrementCompleted();
+    // The throttled flush ran and retained its timestamp entry.
+    expect(manager.throttleStateSize()).toBeGreaterThan(0);
+
+    await manager.markJobSuccess(id, 0, 0);
+    expect(manager.throttleStateSize()).toBe(0);
+  });
+
+  it("clears throttle state when a flush no-ops against a terminal row", async () => {
+    // Cross-replica case: the job finished elsewhere, so this replica's
+    // flush no-ops via the active-row guard. The per-job throttle entry
+    // must not leak for the replica's lifetime.
+    const manager = new SyncJobManager();
+    const id = await manager.createJob(USER_A, "show-sync", 47);
+    await manager.markJobRunning(id);
+    await manager.markJobSuccess(id, 0, 0);
+    expect(manager.throttleStateSize()).toBe(0);
+
+    const reporter = manager.createReporter(id);
+    await reporter.incrementCompleted();
+    expect(manager.throttleStateSize()).toBe(0);
+  });
+
+  it("DELETE /api/sync/:id reports the cancel race honestly", async () => {
+    const cookie = await createSessionCookie(USER_A);
+
+    // Positive case: a running job cancels.
+    const id = await syncJobManager.createJob(USER_A, "show-sync", 48);
+    await syncJobManager.markJobRunning(id);
+    const canceled = await request(app)
+      .delete(`/api/sync/${id}`)
+      .set("Cookie", cookie);
+    expect(canceled.status).toBe(200);
+    expect(canceled.body.canceled).toBe(true);
+
+    // Race case: the job completed between the status read and the
+    // cancellation UPDATE. The route must not claim the cancel landed.
+    const raced = await syncJobManager.createJob(USER_A, "show-sync", 49);
+    await syncJobManager.markJobRunning(raced);
+    const cancelSpy = vi
+      .spyOn(syncJobManager, "cancelJob")
+      .mockResolvedValue(false);
+    try {
+      const res = await request(app)
+        .delete(`/api/sync/${raced}`)
+        .set("Cookie", cookie);
+      expect(res.status).toBe(200);
+      expect(res.body.canceled).toBe(false);
+      expect(res.body.message).toMatch(/already completed/i);
+    } finally {
+      cancelSpy.mockRestore();
+    }
+  });
+});
