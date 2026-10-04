@@ -72,6 +72,10 @@ export default function ShowDetail() {
     errors: []
   });
   const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Serializes the poll loop: a tick whose request is still in flight is
+  // skipped, so overlapping requests can never deliver out-of-order
+  // responses (e.g. a stale 'running' landing after a terminal state).
+  const pollInFlightRef = useRef(false);
   
   const { data: show, isLoading, error } = useQuery<TVMazeShow>({
     queryKey: ['/api/shows', id],
@@ -249,6 +253,8 @@ export default function ShowDetail() {
   // sync dialogs. The response exposes completedShows/totalShows (not
   // completedEpisodes/totalEpisodes) and lastMessage (not message).
   const pollSyncStatus = async (jobId: string) => {
+    if (pollInFlightRef.current) return;
+    pollInFlightRef.current = true;
     try {
       const statusResponse = await fetch(`/api/sync/${jobId}/status`);
       if (!statusResponse.ok) throw new Error(`status ${statusResponse.status}`);
@@ -299,6 +305,8 @@ export default function ShowDetail() {
         description: "Lost connection to sync progress",
         variant: "destructive",
       });
+    } finally {
+      pollInFlightRef.current = false;
     }
   };
 

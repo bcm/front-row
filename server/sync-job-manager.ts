@@ -99,6 +99,19 @@ function applyHeartbeatTimeout(row: SyncJobRow): SyncJob {
   return view;
 }
 
+// Reporter progress writes only touch active rows. A terminal transition
+// (cancel/success/error, possibly from another replica) that commits while
+// the worker is mid-item must win: Postgres rechecks this predicate at
+// write time, so a late progress flush no-ops instead of clobbering
+// terminal fields (e.g. replacing the cancel message with an item's
+// progress message). Same guard the terminal transitions use.
+function activeJob(jobId: string) {
+  return and(
+    eq(syncJobs.id, jobId),
+    or(eq(syncJobs.status, "queued"), eq(syncJobs.status, "running"))
+  );
+}
+
 interface PendingProgress {
   completedShows: number;
   percent: number;
@@ -304,6 +317,10 @@ export class SyncJobManager {
    * - It first awaits any in-flight progress write, so a terminal
    *   transition can never run concurrently with an older write that would
    *   land afterward and clobber terminal fields (e.g. percent: 100).
+   * - The write only touches active rows (queued/running): a terminal
+   *   transition that committed while the flush was pending makes the
+   *   write a clean no-op, so a late progress tick can't clobber the
+   *   terminal message either.
    * - On DB failure the pending snapshot is preserved for the next flush
    *   (heartbeats resume instead of silently stopping) and the returned
    *   promise rejects, so awaited writes observe the failure. The rejection
@@ -352,7 +369,10 @@ export class SyncJobManager {
         updatedAt: now,
         heartbeatAt: now,
       })
-      .where(eq(syncJobs.id, jobId));
+      // Active rows only: a terminal transition that committed while this
+      // flush was pending makes the write a no-op instead of clobbering
+      // terminal fields.
+      .where(activeJob(jobId));
     const tracked: Promise<void> = write.then(
       () => {
         if (this.inflightWrites.get(jobId) === tracked) {
@@ -423,7 +443,9 @@ export class SyncJobManager {
         await db
           .update(syncJobs)
           .set({ ...fields, updatedAt: now, heartbeatAt: now })
-          .where(eq(syncJobs.id, jobId));
+          // Active rows only: a phase/message write after a terminal
+          // transition must not clobber the terminal message (or heartbeat).
+          .where(activeJob(jobId));
       } catch (error) {
         console.error(`[SYNC_JOB] progress write failed for ${jobId}:`, error);
       }
@@ -476,7 +498,10 @@ export class SyncJobManager {
               updatedAt: now,
               heartbeatAt: now,
             })
-            .where(eq(syncJobs.id, jobId));
+            // Active rows only: errors arriving after a terminal transition
+            // (e.g. from a worker that hasn't observed the cancel yet) must
+            // not touch the row.
+            .where(activeJob(jobId));
         } catch (err) {
           console.error(`[SYNC_JOB] addError failed for ${jobId}:`, err);
         }

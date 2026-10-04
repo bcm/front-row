@@ -246,6 +246,33 @@ describe("SyncJobManager (durable, PG-backed)", () => {
     );
   });
 
+  it("progress writes after a cancel are dropped, never clobbering the terminal row", async () => {
+    const id = await syncJobManager.createJob(USER_A, "show-sync", 37);
+    await syncJobManager.markJobRunning(id);
+    const reporter = syncJobManager.createReporter(id);
+    await reporter.setTotal(10);
+    await reporter.incrementCompleted("show one");
+
+    // The user cancels; the worker hasn't observed it yet and keeps
+    // writing progress, phase messages, and errors.
+    expect(await syncJobManager.cancelJob(id)).toBe(true);
+
+    await reporter.incrementCompleted("show two");
+    await syncJobManager.flushProgress(id);
+    await reporter.setPhase("process-episodes", "late phase message");
+    await reporter.addError("late error");
+
+    // The row stays canceled with the cancel message: no progress field,
+    // no phase message, and no late error touched it.
+    const row = (await rawRow(id))!;
+    expect(row.status).toBe("canceled");
+    expect(row.lastMessage).toBe("Sync canceled by user");
+    expect(row.completedShows).toBe(1);
+    expect(row.percent).toBe(10);
+    expect(row.phase).toBe("fetch-show");
+    expect(row.errors).toEqual([]);
+  });
+
   it("concurrent addError calls do not lose errors", async () => {
     const id = await syncJobManager.createJob(USER_A, "show-sync", 36);
     await syncJobManager.markJobRunning(id);

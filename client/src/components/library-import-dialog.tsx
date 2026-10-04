@@ -117,7 +117,14 @@ export default function LibraryImportDialog({ open, onOpenChange }: LibraryImpor
 
     const stopPolling = () => clearInterval(pollTimer);
 
+    // Serializes the poll loop: a tick whose request is still in flight is
+    // skipped, so overlapping requests can never deliver out-of-order
+    // responses (e.g. a stale 'running' landing after a terminal state).
+    let pollInFlight = false;
+
     const poll = async () => {
+      if (pollInFlight) return;
+      pollInFlight = true;
       try {
         const res = await fetch(`/api/library/import/${jobId}/status`);
         if (!res.ok) throw new Error(`status ${res.status}`);
@@ -133,6 +140,8 @@ export default function LibraryImportDialog({ open, onOpenChange }: LibraryImpor
           description: "Lost connection to import progress",
           variant: "destructive",
         });
+      } finally {
+        pollInFlight = false;
       }
     };
 
