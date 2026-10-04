@@ -92,7 +92,10 @@ export default function AddShowDialog({ open, onOpenChange }: AddShowDialogProps
   const startProgressTracking = (jobId: string) => {
     const applyStatus = (progressData: any) => {
       setSyncProgress({
-        status: progressData.status,
+        // A queued row is live work (created, worker not yet started):
+        // treat it as active so the dialog stays open and no duplicate
+        // import can start.
+        status: progressData.status === "queued" ? "running" : progressData.status,
         phase: progressData.phase || '',
         percent: progressData.percent || 0,
         completedEpisodes: progressData.completedShows || 0,

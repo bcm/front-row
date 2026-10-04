@@ -271,7 +271,11 @@ export default function ShowDetail() {
 
       setSyncProgress(prev => ({
         ...prev,
-        status: job.status,
+        // A queued row is live work (created, worker not yet started): treat
+        // it as active so the sync button stays disabled and Cancel/Close
+        // stay available. A stale queued job is read as 'error' by the
+        // server's heartbeat timeout, never as 'queued'.
+        status: job.status === "queued" ? "running" : job.status,
         phase: job.phase ?? prev.phase,
         percent: job.percent ?? prev.percent,
         completedEpisodes: job.completedShows ?? prev.completedEpisodes,

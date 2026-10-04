@@ -233,7 +233,10 @@ export class SyncJobManager {
     await db
       .update(syncJobs)
       .set({ status: "running", updatedAt: now, heartbeatAt: now })
-      .where(eq(syncJobs.id, jobId));
+      // Queued only: a cancellation that won the race before the deferred
+      // worker started must stay terminal — a late worker must not revive
+      // the row back to running.
+      .where(and(eq(syncJobs.id, jobId), eq(syncJobs.status, "queued")));
   }
 
   /**
@@ -310,7 +313,11 @@ export class SyncJobManager {
         heartbeatAt: now,
         finishedAt: now,
       })
-      .where(and(eq(syncJobs.id, jobId), eq(syncJobs.status, "running")))
+      // Queued rows are cancellable too: a user can click Cancel after the
+      // start response but before the deferred worker calls markJobRunning.
+      // Without this the cancel reports nothing canceled and the worker
+      // then runs anyway.
+      .where(activeJob(jobId))
       .returning({ id: syncJobs.id });
     this.clearThrottleState(jobId);
     return updated.length > 0;
@@ -524,13 +531,12 @@ export class SyncJobManager {
 
   /**
    * Drop per-job progress-throttle state (pending snapshot, timer, last
-   * flush timestamp). Called once the job can never make progress again:
-   * after a local terminal transition commits, or when a flush no-ops
-   * against a terminal row (the job finished on another replica). Without
-   * this, the in-memory maps retain one entry per finished job for the
-   * replica's lifetime. scheduledFlushes is consumed by flushProgress
-   * itself and inflightWrites self-cleans on settle, so only these three
-   * maps need explicit clearing.
+   * flush timestamp, scheduled trailing-edge flush). Called once the job
+   * can never make progress again: after a local terminal transition
+   * commits, or when a flush no-ops against a terminal row (the job
+   * finished on another replica). Without this, the in-memory maps retain
+   * one entry per finished job for the replica's lifetime. inflightWrites
+   * self-cleans on settle, so only these four maps need explicit clearing.
    */
   private clearThrottleState(jobId: string): void {
     this.pendingProgress.delete(jobId);
@@ -538,6 +544,18 @@ export class SyncJobManager {
     if (timer) {
       clearTimeout(timer);
       this.progressTimers.delete(jobId);
+    }
+    // A trailing-edge flush can be scheduled after the terminal
+    // transition's pre-flush drain returns: the timer above is cleared,
+    // but the deferred promise and map entry would otherwise leak forever
+    // (and its awaiters would hang). Settle and remove the handle,
+    // matching the no-op flush semantics. Idempotent: the timer callback
+    // already deletes the entry when it fires, so a fired timer can never
+    // be double-settled here.
+    const scheduled = this.scheduledFlushes.get(jobId);
+    if (scheduled) {
+      this.scheduledFlushes.delete(jobId);
+      scheduled.resolve();
     }
     this.lastProgressFlush.delete(jobId);
   }

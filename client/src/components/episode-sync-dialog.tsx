@@ -139,7 +139,10 @@ export default function EpisodeSyncDialog({ open, onOpenChange, existingJobId }:
       }
       
       return {
-        status: data.status,
+        // A queued row is live work (created, worker not yet started):
+        // treat it as active so the dialog keeps polling and shows the
+        // pending state instead of an unknown status.
+        status: data.status === "queued" ? "running" : data.status,
         phase: data.phase || '',
         percent: data.percent || 0,
         completedShows: data.completedShows || 0,

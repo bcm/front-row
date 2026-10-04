@@ -801,3 +801,73 @@ describe("Copilot round 8 findings (integration)", () => {
     }
   });
 });
+
+describe("Copilot round 9: queued-job cancellation and terminal cleanup", () => {
+  it("cancelJob cancels a queued job; a late markJobRunning stays terminal", async () => {
+    const id = await syncJobManager.createJob(USER_A, "show-sync", 52);
+    // Cancel lands while the row is still queued (worker hasn't started).
+    expect(await syncJobManager.cancelJob(id)).toBe(true);
+    expect((await rawRow(id))!.status).toBe("canceled");
+
+    // A late worker must not revive the row: markJobRunning only
+    // transitions from queued, so it no-ops against the terminal row.
+    await syncJobManager.markJobRunning(id);
+    expect((await rawRow(id))!.status).toBe("canceled");
+
+    // The worker's final transition no-ops too.
+    expect(await syncJobManager.markJobSuccess(id, 1, 0)).toBe(false);
+    expect((await rawRow(id))!.status).toBe("canceled");
+  });
+
+  it("markJobRunning still transitions a queued job to running", async () => {
+    const id = await syncJobManager.createJob(USER_A, "show-sync", 53);
+    await syncJobManager.markJobRunning(id);
+    expect((await rawRow(id))!.status).toBe("running");
+  });
+
+  it("DELETE /api/sync/:id cancels a queued job", async () => {
+    const cookie = await createSessionCookie(USER_A);
+    const id = await syncJobManager.createJob(USER_A, "show-sync", 54);
+    const res = await request(app)
+      .delete(`/api/sync/${id}`)
+      .set("Cookie", cookie);
+    expect(res.status).toBe(200);
+    expect(res.body.canceled).toBe(true);
+    expect((await rawRow(id))!.status).toBe("canceled");
+  });
+
+  it("clearThrottleState settles a scheduled flush created in the terminal race window", async () => {
+    // A fresh manager isolates the throttle maps from background deferred
+    // workers left over from API-level tests sharing the singleton.
+    const manager = new SyncJobManager();
+    const id = await manager.createJob(USER_A, "show-sync", 55);
+    await manager.markJobRunning(id);
+    const reporter = manager.createReporter(id);
+    // First tick flushes immediately and starts the throttle window; a
+    // second tick would schedule a trailing-edge flush instead.
+    await reporter.incrementCompleted();
+
+    // Inject a trailing-edge progress tick in the window between the
+    // terminal transition's pre-flush drain and its commit — the race
+    // Copilot flagged: scheduleProgressFlush creates an entry + timer
+    // after flushProgressQuietly returned.
+    let trailing: Promise<void> | undefined;
+    const origDrain = (manager as any).flushProgressQuietly.bind(manager);
+    (manager as any).flushProgressQuietly = async (jobId: string) => {
+      await origDrain(jobId);
+      trailing = reporter.incrementCompleted();
+    };
+
+    await manager.markJobSuccess(id, 0, 0);
+    expect((await rawRow(id))!.status).toBe("success");
+
+    // The scheduled handle was settled and removed: no leaked map entry
+    // and no hanging awaiter (fails in ~2s pre-fix instead of passing).
+    const settled = await Promise.race([
+      trailing!.then(() => "settled"),
+      new Promise((r) => setTimeout(() => r("hung"), 2000)),
+    ]);
+    expect(settled).toBe("settled");
+    expect(manager.throttleStateSize()).toBe(0);
+  });
+});

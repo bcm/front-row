@@ -853,10 +853,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return res.status(404).json({ error: "Job not found" });
     }
 
-    if (job.status === 'running') {
+    if (job.status === 'running' || job.status === 'queued') {
       // The status read and the cancellation UPDATE are separate operations:
       // another replica may have completed the job between them. Report what
       // actually happened instead of always claiming the cancel landed.
+      // Queued jobs are cancellable too: the user may click Cancel after the
+      // start response but before the deferred worker marks the job running.
       const canceled = await syncJobManager.cancelJob(id);
       res.json({
         canceled,
