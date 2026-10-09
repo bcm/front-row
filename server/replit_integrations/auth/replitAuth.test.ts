@@ -62,6 +62,15 @@ function grantTokens(overrides: Record<string, unknown> = {}) {
   } as any;
 }
 
+// A minimal stand-in for express's req: session id plus a session whose save
+// completes via callback, like express-session's Session.save.
+function mockReq(sessionID: string, saveImpl?: (cb: (err?: any) => void) => void) {
+  return {
+    sessionID,
+    session: { save: vi.fn(saveImpl ?? ((cb: (err?: any) => void) => cb())) },
+  } as any;
+}
+
 describe("refreshSessionTokens (single-flight)", () => {
   it("fires only one refresh grant for concurrent requests on the same session", async () => {
     const grant = mockGrant();
@@ -71,7 +80,7 @@ describe("refreshSessionTokens (single-flight)", () => {
       () => new Promise((resolve) => { resolveGrant = resolve; }),
     );
     const user: any = { refresh_token: "rt-1", claims: { sub: "u" } };
-    const req = { sessionID: "sess-same" } as any;
+    const req = mockReq("sess-same");
 
     const p1 = refreshSessionTokens(req, user);
     const p2 = refreshSessionTokens(req, user);
@@ -84,6 +93,7 @@ describe("refreshSessionTokens (single-flight)", () => {
     expect(grant).toHaveBeenCalledTimes(1);
     expect(grant).toHaveBeenCalledWith({}, "rt-1");
     expect(user.refresh_token).toBe("new-refresh-token");
+    expect(req.session.save).toHaveBeenCalledTimes(1);
   });
 
   it("refreshes different sessions independently", async () => {
@@ -91,11 +101,11 @@ describe("refreshSessionTokens (single-flight)", () => {
     grant.mockReset();
     grant.mockImplementation(async () => grantTokens());
     await Promise.all([
-      refreshSessionTokens({ sessionID: "sess-a" } as any, {
+      refreshSessionTokens(mockReq("sess-a"), {
         refresh_token: "rt-a",
         claims: {},
       }),
-      refreshSessionTokens({ sessionID: "sess-b" } as any, {
+      refreshSessionTokens(mockReq("sess-b"), {
         refresh_token: "rt-b",
         claims: {},
       }),
@@ -108,7 +118,7 @@ describe("refreshSessionTokens (single-flight)", () => {
     grant.mockReset();
     grant.mockRejectedValueOnce(new Error("bad_grant"));
     const user: any = { refresh_token: "rt-x", claims: {} };
-    const req = { sessionID: "sess-fail" } as any;
+    const req = mockReq("sess-fail");
 
     await expect(
       Promise.all([refreshSessionTokens(req, user), refreshSessionTokens(req, user)]),
@@ -119,5 +129,37 @@ describe("refreshSessionTokens (single-flight)", () => {
     grant.mockImplementationOnce(async () => grantTokens());
     await refreshSessionTokens(req, user);
     expect(grant).toHaveBeenCalledTimes(2);
+  });
+
+  it("holds the lock until the session save completes", async () => {
+    const grant = mockGrant();
+    grant.mockReset();
+    grant.mockImplementation(async () => grantTokens());
+    let release!: () => void;
+    const savePromise = new Promise<void>((r) => { release = r; });
+    const req = mockReq("sess-save-gate");
+    // Hold the save open until the test releases it. The mock honors
+    // express-session's contract: completion is signaled via the callback.
+    req.session.save.mockImplementation((cb: (err?: any) => void) => {
+      void savePromise.then(() => cb());
+    });
+
+    const user: any = { refresh_token: "rt-g", claims: {} };
+    const p1 = refreshSessionTokens(req, user);
+    // Manual poll: wait until the grant has resolved and the code is blocked on the save.
+    for (let i = 0; i < 100 && req.session.save.mock.calls.length === 0; i++) {
+      await new Promise((r) => setTimeout(r, 10));
+    }
+    expect(req.session.save).toHaveBeenCalled();
+    // A second request arriving in that window must still see the in-flight
+    // entry and must not fire its own grant with the consumed token.
+    const p2 = refreshSessionTokens(req, user);
+    await new Promise((r) => setTimeout(r, 10));
+    expect(grant).toHaveBeenCalledTimes(1);
+
+    release!();
+    await Promise.all([p1, p2]);
+    expect(grant).toHaveBeenCalledTimes(1);
+    expect(user.refresh_token).toBe("new-refresh-token");
   });
 });

@@ -183,7 +183,7 @@ export const isAuthenticated: RequestHandler = async (req, res, next) => {
 const inflightRefreshes = new Map<string, Promise<void>>();
 
 export async function refreshSessionTokens(
-  req: Pick<Request, "sessionID">,
+  req: Pick<Request, "sessionID" | "session">,
   user: any,
 ): Promise<void> {
   const key = req.sessionID ?? user?.claims?.sub ?? "unknown";
@@ -196,6 +196,12 @@ export async function refreshSessionTokens(
     const config = await getOidcConfig();
     const tokenResponse = await client.refreshTokenGrant(config, user.refresh_token);
     updateUserSession(user, tokenResponse);
+    // The lock must be held until the rotated tokens are durable in the
+    // session store. Releasing it after the in-memory mutation but before
+    // persistence leaves a window where another request loads the stale
+    // session, misses this entry, and refreshes with the consumed token —
+    // the exact race this lock exists to prevent.
+    await saveSession(req);
   })();
   inflightRefreshes.set(key, task);
   try {
@@ -203,4 +209,12 @@ export async function refreshSessionTokens(
   } finally {
     inflightRefreshes.delete(key);
   }
+}
+
+// Persist the session explicitly instead of waiting for express-session's
+// end-of-response save, so the critical section above covers durability.
+function saveSession(req: Pick<Request, "session">): Promise<void> {
+  return new Promise((resolve, reject) => {
+    req.session.save((err) => (err ? reject(err) : resolve()));
+  });
 }
