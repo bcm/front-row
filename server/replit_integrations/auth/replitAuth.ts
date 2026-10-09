@@ -3,7 +3,7 @@ import { Strategy, type VerifyFunction } from "openid-client/passport";
 
 import passport from "passport";
 import session from "express-session";
-import type { Express, RequestHandler } from "express";
+import type { Express, Request, RequestHandler } from "express";
 import memoize from "memoizee";
 import connectPg from "connect-pg-simple";
 import { authStorage } from "./storage";
@@ -158,12 +158,49 @@ export const isAuthenticated: RequestHandler = async (req, res, next) => {
   }
 
   try {
-    const config = await getOidcConfig();
-    const tokenResponse = await client.refreshTokenGrant(config, refreshToken);
-    updateUserSession(user, tokenResponse);
+    await refreshSessionTokens(req, user);
     return next();
   } catch (error) {
+    // A silent 401 here is how "logged out every day" mysteries are born:
+    // log the provider's failure server-side so the next incident leaves
+    // evidence. Never log token material.
+    console.error("[auth] OIDC refresh grant failed", {
+      error: error instanceof Error ? error.message : String(error),
+      code: (error as { code?: unknown })?.code,
+    });
     res.status(401).json({ message: "Unauthorized" });
     return;
   }
 };
+
+// In-flight refresh grants, keyed by session id. Concurrent requests sharing
+// an expired access token must not each fire a refresh: with rotating refresh
+// tokens the losers look like token reuse and can get the grant chain revoked,
+// logging the user out for real. Single-flight them instead: the first
+// request refreshes, the rest await its outcome and continue on the stored
+// session (express-session persists the winner's token update by hashing the
+// session; unmodified followers don't overwrite it).
+const inflightRefreshes = new Map<string, Promise<void>>();
+
+export async function refreshSessionTokens(
+  req: Pick<Request, "sessionID">,
+  user: any,
+): Promise<void> {
+  const key = req.sessionID ?? user?.claims?.sub ?? "unknown";
+  const existing = inflightRefreshes.get(key);
+  if (existing) {
+    await existing;
+    return;
+  }
+  const task = (async () => {
+    const config = await getOidcConfig();
+    const tokenResponse = await client.refreshTokenGrant(config, user.refresh_token);
+    updateUserSession(user, tokenResponse);
+  })();
+  inflightRefreshes.set(key, task);
+  try {
+    await task;
+  } finally {
+    inflightRefreshes.delete(key);
+  }
+}

@@ -40,3 +40,84 @@ describe("updateUserSession", () => {
     expect(user.refresh_token).toBe("rotated-token");
   });
 });
+
+vi.mock("openid-client", () => ({
+  discovery: vi.fn(async () => ({})),
+  refreshTokenGrant: vi.fn(),
+}));
+
+// Import after the mocks above; the module under test is already imported at
+// the top of this file, so pull the new helper from it here.
+import { refreshSessionTokens } from "./replitAuth";
+import { refreshTokenGrant } from "openid-client";
+
+const mockGrant = () => vi.mocked(refreshTokenGrant);
+
+function grantTokens(overrides: Record<string, unknown> = {}) {
+  return {
+    claims: () => ({ sub: "user-123", exp: 9999999999 }),
+    access_token: "new-access-token",
+    refresh_token: "new-refresh-token",
+    ...overrides,
+  } as any;
+}
+
+describe("refreshSessionTokens (single-flight)", () => {
+  it("fires only one refresh grant for concurrent requests on the same session", async () => {
+    const grant = mockGrant();
+    grant.mockReset();
+    let resolveGrant!: (v: unknown) => void;
+    grant.mockImplementationOnce(
+      () => new Promise((resolve) => { resolveGrant = resolve; }),
+    );
+    const user: any = { refresh_token: "rt-1", claims: { sub: "u" } };
+    const req = { sessionID: "sess-same" } as any;
+
+    const p1 = refreshSessionTokens(req, user);
+    const p2 = refreshSessionTokens(req, user);
+    const p3 = refreshSessionTokens(req, user);
+    // Let the leader start the grant before resolving it.
+    await new Promise((r) => setTimeout(r, 0));
+    resolveGrant!(grantTokens());
+    await Promise.all([p1, p2, p3]);
+
+    expect(grant).toHaveBeenCalledTimes(1);
+    expect(grant).toHaveBeenCalledWith({}, "rt-1");
+    expect(user.refresh_token).toBe("new-refresh-token");
+  });
+
+  it("refreshes different sessions independently", async () => {
+    const grant = mockGrant();
+    grant.mockReset();
+    grant.mockImplementation(async () => grantTokens());
+    await Promise.all([
+      refreshSessionTokens({ sessionID: "sess-a" } as any, {
+        refresh_token: "rt-a",
+        claims: {},
+      }),
+      refreshSessionTokens({ sessionID: "sess-b" } as any, {
+        refresh_token: "rt-b",
+        claims: {},
+      }),
+    ]);
+    expect(grant).toHaveBeenCalledTimes(2);
+  });
+
+  it("propagates refresh failure to all awaiters and clears the in-flight entry", async () => {
+    const grant = mockGrant();
+    grant.mockReset();
+    grant.mockRejectedValueOnce(new Error("bad_grant"));
+    const user: any = { refresh_token: "rt-x", claims: {} };
+    const req = { sessionID: "sess-fail" } as any;
+
+    await expect(
+      Promise.all([refreshSessionTokens(req, user), refreshSessionTokens(req, user)]),
+    ).rejects.toThrow("bad_grant");
+    expect(grant).toHaveBeenCalledTimes(1);
+
+    // The failed entry is gone: a later call retries with a new grant.
+    grant.mockImplementationOnce(async () => grantTokens());
+    await refreshSessionTokens(req, user);
+    expect(grant).toHaveBeenCalledTimes(2);
+  });
+});
