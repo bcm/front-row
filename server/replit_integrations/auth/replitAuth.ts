@@ -176,39 +176,70 @@ export const isAuthenticated: RequestHandler = async (req, res, next) => {
 // In-flight refresh grants, keyed by session id. Concurrent requests sharing
 // an expired access token must not each fire a refresh: with rotating refresh
 // tokens the losers look like token reuse and can get the grant chain revoked,
-// logging the user out for real. Single-flight them instead: the first
-// request refreshes, the rest await its outcome and continue on the stored
-// session (express-session persists the winner's token update by hashing the
-// session; unmodified followers don't overwrite it).
-const inflightRefreshes = new Map<string, Promise<void>>();
+// logging the user out for real. The critical section covers a fresh session
+// read, the grant, and the save: a request whose session copy predates another
+// request's rotation re-reads inside the lock and adopts the rotated tokens
+// instead of granting with the consumed one.
+const inflightRefreshes = new Map<string, Promise<any>>();
 
 export async function refreshSessionTokens(
   req: Pick<Request, "sessionID" | "session">,
   user: any,
-): Promise<void> {
+): Promise<any> {
   const key = req.sessionID ?? user?.claims?.sub ?? "unknown";
   const existing = inflightRefreshes.get(key);
   if (existing) {
-    await existing;
+    adoptFreshUser(req, await existing);
     return;
   }
   const task = (async () => {
+    // Fresh read inside the critical section: this request's session copy
+    // may predate another request's rotation.
+    await reloadSession(req);
+    const sessionUser = (req.session as any)?.passport?.user;
+    const nowSec = Math.floor(Date.now() / 1000);
+    if (sessionUser?.expires_at && nowSec <= sessionUser.expires_at) {
+      return sessionUser; // already refreshed by someone else
+    }
+    if (!sessionUser?.refresh_token) {
+      throw new Error("no refresh token in session");
+    }
     const config = await getOidcConfig();
-    const tokenResponse = await client.refreshTokenGrant(config, user.refresh_token);
-    updateUserSession(user, tokenResponse);
+    const tokenResponse = await client.refreshTokenGrant(
+      config,
+      sessionUser.refresh_token,
+    );
+    updateUserSession(sessionUser, tokenResponse);
     // The lock must be held until the rotated tokens are durable in the
-    // session store. Releasing it after the in-memory mutation but before
-    // persistence leaves a window where another request loads the stale
-    // session, misses this entry, and refreshes with the consumed token —
-    // the exact race this lock exists to prevent.
+    // session store; releasing it earlier leaves a window for a stale
+    // reader to grant with the consumed token.
     await saveSession(req);
+    return sessionUser;
   })();
   inflightRefreshes.set(key, task);
   try {
-    await task;
+    const freshUser = await task;
+    adoptFreshUser(req, freshUser);
+    return freshUser;
   } finally {
     inflightRefreshes.delete(key);
   }
+}
+
+// Point req.user and the request's session copy at the fresh user object so
+// downstream handlers and the end-of-response save observe the rotated tokens.
+function adoptFreshUser(req: any, freshUser: any) {
+  if (!freshUser) return;
+  req.user = freshUser;
+  if (req.session?.passport) {
+    req.session.passport.user = freshUser;
+  }
+}
+
+function reloadSession(req: Pick<Request, "session">): Promise<void> {
+  return new Promise((resolve, reject) => {
+    req.session.reload((err) => (err ? reject(err) : resolve()));
+  });
 }
 
 // Persist the session explicitly instead of waiting for express-session's
