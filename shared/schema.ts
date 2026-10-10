@@ -212,7 +212,7 @@ export const oauthClients = pgTable("oauth_clients", {
   clientId: text("client_id").primaryKey(), // e.g. "ghost"; pre-registered, no dynamic registration in v1
   name: text("name").notNull(),
   allowedScopes: text("allowed_scopes").array().notNull(), // scopes this client may request
-  allowedRedirectUris: text("allowed_redirect_uris").array().notNull().default(sql`'{}'::text[]`), // exact-match allow-list for the authorization-code grant; canonical form so drizzle-kit push converges
+  allowedRedirectUris: text("allowed_redirect_uris").array().notNull(), // exact-match allow-list for the authorization-code grant; no DDL default — drizzle-kit 0.31.11's push introspection mangles empty array defaults ('{}' -> '{""]}') so no declared default converges (issue #30). The sole insert path (ensureDefaultClients) sets [] explicitly.
   createdAt: timestamp("created_at").defaultNow(),
 });
 
