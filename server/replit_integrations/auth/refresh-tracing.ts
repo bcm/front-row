@@ -18,11 +18,13 @@ function timestamp(value: unknown): number | null {
 }
 
 function tokenMetadata(user: any) {
-  const issuedAt = timestamp(user?.claims?.iat);
+  const receivedAt = timestamp(user?.access_token_received_at);
+  const issuedAt = receivedAt ?? timestamp(user?.claims?.iat);
   const expiresAt = timestamp(user?.expires_at);
   const now = Math.floor(Date.now() / 1000);
   return {
     token_issued_at: issuedAt,
+    token_time_source: receivedAt !== null ? "access_token_received_at" : "id_token_claims",
     token_expires_at: expiresAt,
     token_age_seconds: issuedAt === null ? null : Math.max(0, now - issuedAt),
     access_token_expired: expiresAt === null ? null : now > expiresAt,

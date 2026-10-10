@@ -90,6 +90,15 @@ describe("token-safe refresh tracing", () => {
     expect(a.attempt_ref).not.toBe(b.attempt_ref);
   });
 
+  it("does not report retained identity claims as the age of a refreshed access token", () => {
+    createRefreshTrace("private-session-id")("completed", {
+      ...user, access_token_received_at: 300,
+    });
+    expect(records()[0]).toMatchObject({
+      token_issued_at: 300, token_time_source: "access_token_received_at",
+    });
+  });
+
   it("emits one-line sanitized failures and never copies credentials or PII", () => {
     createRefreshTrace("private-session-id")("failed", user, {
       phase: "grant",

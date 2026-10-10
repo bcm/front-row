@@ -10,6 +10,9 @@ import { authStorage } from "./storage";
 import { refreshFailureDiagnostics } from "./refresh-diagnostics";
 import { createRefreshTrace, type RefreshPhase } from "./refresh-tracing";
 import { loginTokenMetadata, type LoginTokenMetadata } from "./auth-diagnostic-metadata";
+import { updateUserSession } from "./session-tokens";
+
+export { updateUserSession } from "./session-tokens";
 
 // Diagnostic metadata only; no tokens or credentials are retained here.
 const pendingLoginMetadata = new WeakMap<object, LoginTokenMetadata>();
@@ -47,22 +50,6 @@ export function getSession() {
       maxAge: sessionTtl,
     },
   });
-}
-
-export function updateUserSession(
-  user: any,
-  tokens: client.TokenEndpointResponse & client.TokenEndpointResponseHelpers
-) {
-  user.claims = tokens.claims();
-  user.access_token = tokens.access_token;
-  // A refresh response may omit refresh_token (the provider didn't rotate
-  // it); the spec says the client must keep using the old one. Overwriting
-  // with undefined permanently breaks future refreshes: the next expiry
-  // finds no refresh token and the user is logged out.
-  if (tokens.refresh_token) {
-    user.refresh_token = tokens.refresh_token;
-  }
-  user.expires_at = user.claims?.exp;
 }
 
 async function upsertUser(claims: any) {

@@ -148,6 +148,36 @@ describe("refresh failure logging in middleware", () => {
 });
 
 describe("refreshSessionTokens (single-flight)", () => {
+  it("keeps authentication working after a refresh without an ID token", async () => {
+    const now = Math.floor(Date.now() / 1000);
+    const identity = { sub: "synthetic-user", iat: now - 7200, exp: now - 3600 };
+    mockGrant().mockReset();
+    mockGrant().mockResolvedValueOnce(grantTokens({
+      claims: () => undefined, expires_in: 3600, refresh_token: undefined,
+    }));
+    const req = mockReq("synthetic-no-id-token-session", {
+      staleUser: { claims: identity, refresh_token: "old-refresh", expires_at: identity.exp },
+    });
+    req.isAuthenticated = () => true;
+    const res = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+    const next = vi.fn();
+    await isAuthenticated(req, res as any, next);
+    expect(next).toHaveBeenCalledTimes(1);
+    expect(res.status).not.toHaveBeenCalled();
+    expect(req.session.save).toHaveBeenCalledTimes(1);
+    expect(req.user.claims).toBe(identity);
+    expect(req.user.refresh_token).toBe("old-refresh");
+    expect(req.user.expires_at).toBeGreaterThanOrEqual(now + 3600);
+    expect(req.session.passport.user).toBe(req.user);
+    await isAuthenticated(req, res as any, next);
+    expect(next).toHaveBeenCalledTimes(2);
+    expect(mockGrant()).toHaveBeenCalledTimes(1);
+    expect(traceRecords()).toEqual(expect.arrayContaining([
+      expect.objectContaining({ event: "session_saved" }),
+      expect.objectContaining({ event: "grant_succeeded", refresh_token_rotated: false }),
+    ]));
+  });
+
   it("fires only one refresh grant for concurrent requests on the same session", async () => {
     const grant = mockGrant();
     grant.mockReset();

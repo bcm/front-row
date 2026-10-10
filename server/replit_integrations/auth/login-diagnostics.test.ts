@@ -78,12 +78,16 @@ describe("successful callback diagnostic observer", () => {
     return req;
   }
 
-  it("uses the final session label and preserves the original user/token update behavior", async () => {
+  it("uses the final session label and correctly updated access-token lifetime", async () => {
+    const now = Math.floor(Date.now() / 1000);
     const req = await runCallback();
     expect(req.user).toEqual({
       claims: mocks.tokens.claims(), access_token: mocks.tokens.access_token,
-      refresh_token: mocks.tokens.refresh_token, expires_at: 200,
+      refresh_token: mocks.tokens.refresh_token, expires_at: expect.any(Number),
+      access_token_received_at: expect.any(Number),
     });
+    expect(req.user.expires_at).toBe(req.user.access_token_received_at + 3600);
+    expect(req.user.access_token_received_at).toBeGreaterThanOrEqual(now);
     expect(mocks.upsert).toHaveBeenCalledTimes(1);
     expect(log).toHaveBeenCalledTimes(1);
     const line = String(log.mock.calls[0][0]);
