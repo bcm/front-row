@@ -7,6 +7,7 @@ import type { Express, Request, RequestHandler } from "express";
 import memoize from "memoizee";
 import connectPg from "connect-pg-simple";
 import { authStorage } from "./storage";
+import { refreshFailureDiagnostics } from "./refresh-diagnostics";
 
 const getOidcConfig = memoize(
   async () => {
@@ -164,10 +165,7 @@ export const isAuthenticated: RequestHandler = async (req, res, next) => {
     // A silent 401 here is how "logged out every day" mysteries are born:
     // log the provider's failure server-side so the next incident leaves
     // evidence. Never log token material.
-    console.error("[auth] OIDC refresh grant failed", {
-      error: error instanceof Error ? error.message : String(error),
-      code: (error as { code?: unknown })?.code,
-    });
+    console.error("[auth] OIDC refresh grant failed", refreshFailureDiagnostics(error));
     res.status(401).json({ message: "Unauthorized" });
     return;
   }
