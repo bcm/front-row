@@ -38,6 +38,25 @@ describe("oauthClients", () => {
     expect(parsed.clientId).toBe("ghost");
     expect(() => insertOauthClientSchema.parse({ clientId: "ghost" })).toThrow();
   });
+
+  it("declares the allowed_redirect_uris default in Postgres-canonical form", () => {
+    // drizzle-kit push compares the generated default text against what Postgres
+    // introspects ('{}'::text[]); declaring anything else makes it propose the
+    // same no-op ALTER on every run (issue #28).
+    const col = (getTableConfig(oauthClients).columns as any[]).find(
+      (c) => c.name === "allowed_redirect_uris",
+    );
+    const def = col.default;
+    // SQL defaults are stored as chunk objects ({ value: string[] }); join the raw text.
+    const text = Array.isArray(def?.queryChunks)
+      ? def.queryChunks
+          .map((c: any) =>
+            typeof c === "string" ? c : Array.isArray(c?.value) ? c.value.join("") : "",
+          )
+          .join("")
+      : def;
+    expect(text).toBe("'{}'::text[]");
+  });
 });
 
 describe("oauthDeviceCodes", () => {
