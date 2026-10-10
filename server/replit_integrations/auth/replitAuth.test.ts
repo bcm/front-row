@@ -1,4 +1,14 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+let traceLog: ReturnType<typeof vi.spyOn>;
+beforeEach(() => { traceLog = vi.spyOn(console, "info").mockImplementation(() => {}); });
+afterEach(() => { traceLog.mockRestore(); });
+
+function traceRecords() {
+  return traceLog.mock.calls
+    .filter(([line]) => String(line).startsWith("[auth] refresh_trace "))
+    .map(([line]) => JSON.parse(String(line).slice("[auth] refresh_trace ".length)));
+}
 
 // replitAuth pulls in ./storage -> server/db, which throws without a
 // DATABASE_URL. updateUserSession is pure logic; mock the storage away.
@@ -124,6 +134,13 @@ describe("refresh failure logging in middleware", () => {
       });
       expect(JSON.stringify(log.mock.calls)).not.toContain("secret-provider-token");
       expect(JSON.stringify(log.mock.calls)).not.toContain("diagnostics-session");
+      expect(traceRecords()).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          event: "failed", phase: "grant", provider_error: "invalid_grant", http_status: 400,
+        }),
+      ]));
+      expect(traceRecords().some(record => record.event === "completed")).toBe(false);
+      expect(JSON.stringify(traceLog.mock.calls)).not.toContain("test-refresh-token");
     } finally {
       log.mockRestore();
     }
@@ -159,6 +176,9 @@ describe("refreshSessionTokens (single-flight)", () => {
     expect(req2.user.refresh_token).toBe("new-refresh-token");
     expect(req2.session.passport.user.refresh_token).toBe("new-refresh-token");
     expect(req1.session.save).toHaveBeenCalledTimes(1);
+    expect(traceRecords().filter(record => record.event === "grant_started")).toHaveLength(1);
+    expect(traceRecords().filter(record => record.event === "waiting")).toHaveLength(1);
+    expect(traceRecords().filter(record => record.event === "completed")).toHaveLength(2);
   });
 
   it("refreshes different sessions independently", async () => {
@@ -228,6 +248,10 @@ describe("refreshSessionTokens (single-flight)", () => {
       await new Promise((r) => setTimeout(r, 10));
     }
     expect(req.session.save).toHaveBeenCalled();
+    expect(traceRecords()).toEqual(expect.arrayContaining([
+      expect.objectContaining({ event: "grant_succeeded", refresh_token_rotated: true }),
+    ]));
+    expect(traceRecords().some(record => record.event === "session_saved")).toBe(false);
     // A second request arriving in that window must still see the in-flight
     // entry and must not fire its own grant with the consumed token.
     const p2 = refreshSessionTokens(req, req.user);
@@ -237,6 +261,25 @@ describe("refreshSessionTokens (single-flight)", () => {
     release!();
     await Promise.all([p1, p2]);
     expect(grant).toHaveBeenCalledTimes(1);
+    expect(traceRecords().filter(record => record.event === "session_saved")).toHaveLength(1);
+  });
+
+  it("distinguishes a provider success from a failed durable session save", async () => {
+    const grant = mockGrant();
+    grant.mockReset();
+    grant.mockImplementationOnce(async () => grantTokens());
+    const req = mockReq("private-save-failure-session", {
+      saveImpl: cb => cb(new Error("private-database-error")),
+    });
+    await expect(refreshSessionTokens(req, req.user)).rejects.toThrow("private-database-error");
+    expect(traceRecords()).toEqual(expect.arrayContaining([
+      expect.objectContaining({ event: "grant_succeeded" }),
+      expect.objectContaining({ event: "failed", phase: "session_save" }),
+    ]));
+    expect(traceRecords().some(record => record.event === "session_saved")).toBe(false);
+    expect(traceRecords().some(record => record.event === "completed")).toBe(false);
+    expect(JSON.stringify(traceLog.mock.calls)).not.toContain("private-database-error");
+    expect(JSON.stringify(traceLog.mock.calls)).not.toContain("private-save-failure-session");
   });
 
   it("adopts already-rotated tokens on reload instead of granting again", async () => {
@@ -268,6 +311,7 @@ describe("refreshSessionTokens (single-flight)", () => {
     expect(grant).toHaveBeenCalledTimes(1);
     expect(followerReq.user.refresh_token).toBe("RT2");
     expect(followerReq.user.access_token).toBe("a2");
+    expect(traceRecords().filter(record => record.event === "already_fresh")).toHaveLength(1);
   });
 
   it("surfaces a failed session reload as an error", async () => {
