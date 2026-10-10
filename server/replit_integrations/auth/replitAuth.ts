@@ -8,6 +8,7 @@ import memoize from "memoizee";
 import connectPg from "connect-pg-simple";
 import { authStorage } from "./storage";
 import { refreshFailureDiagnostics } from "./refresh-diagnostics";
+import { createRefreshTrace, type RefreshPhase } from "./refresh-tracing";
 
 const getOidcConfig = memoize(
   async () => {
@@ -185,40 +186,67 @@ export async function refreshSessionTokens(
   user: any,
 ): Promise<any> {
   const key = req.sessionID ?? user?.claims?.sub ?? "unknown";
+  const trace = createRefreshTrace(req.sessionID);
+  trace("started", user);
   const existing = inflightRefreshes.get(key);
   if (existing) {
-    adoptFreshUser(req, await existing);
+    trace("waiting", user, { phase: "waiting" });
+    try {
+      const freshUser = await existing;
+      adoptFreshUser(req, freshUser);
+      trace("completed", freshUser, { phase: "waiting" });
+    } catch (error) {
+      trace("failed", user, { phase: "waiting", error });
+      throw error;
+    }
     return;
   }
+  let phase: RefreshPhase = "session_reload";
   const task = (async () => {
     // Fresh read inside the critical section: this request's session copy
     // may predate another request's rotation.
     await reloadSession(req);
     const sessionUser = (req.session as any)?.passport?.user;
+    trace("session_reloaded", sessionUser, { phase });
     const nowSec = Math.floor(Date.now() / 1000);
     if (sessionUser?.expires_at && nowSec <= sessionUser.expires_at) {
+      trace("already_fresh", sessionUser, { phase });
       return sessionUser; // already refreshed by someone else
     }
     if (!sessionUser?.refresh_token) {
       throw new Error("no refresh token in session");
     }
+    phase = "discovery";
     const config = await getOidcConfig();
+    phase = "grant";
+    trace("grant_started", sessionUser, { phase });
+    const previousRefreshToken = sessionUser.refresh_token;
     const tokenResponse = await client.refreshTokenGrant(
       config,
       sessionUser.refresh_token,
     );
     updateUserSession(sessionUser, tokenResponse);
+    trace("grant_succeeded", sessionUser, {
+      phase,
+      refreshTokenRotated: sessionUser.refresh_token !== previousRefreshToken,
+    });
     // The lock must be held until the rotated tokens are durable in the
     // session store; releasing it earlier leaves a window for a stale
     // reader to grant with the consumed token.
+    phase = "session_save";
     await saveSession(req);
+    trace("session_saved", sessionUser, { phase });
     return sessionUser;
   })();
   inflightRefreshes.set(key, task);
   try {
     const freshUser = await task;
     adoptFreshUser(req, freshUser);
+    trace("completed", freshUser);
     return freshUser;
+  } catch (error) {
+    trace("failed", (req.session as any)?.passport?.user ?? user, { phase, error });
+    throw error;
   } finally {
     inflightRefreshes.delete(key);
   }
