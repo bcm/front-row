@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { refreshFailureDiagnostics } from "./refresh-diagnostics";
+import { refreshFailureDiagnostics, providerRejectionSignals } from "./refresh-diagnostics";
 
 function providerError(description?: unknown) {
   return {
@@ -27,10 +27,29 @@ describe("refreshFailureDiagnostics", () => {
     ["Token replay detected", "token_reuse_mentioned"],
     ["Invalid refresh token", "invalid_token_mentioned"],
     ["Unexpected provider response", "other_redacted"],
+    ["The authorization grant expired", "expiry_mentioned"],
+    ["Authorization has been revoked", "revocation_mentioned"],
+    ["This grant was already consumed", "reuse_mentioned"],
+    ["The grant was issued to another client", "client_mismatch_mentioned"],
+    ["The requested scope is not allowed", "scope_mentioned"],
+    ["Invalid grant", "invalid_grant_mentioned"],
+    ["The grant is invalid, expired, revoked, or issued to another client", "multiple_reasons_mentioned"],
     [undefined, "not_provided"],
   ])("categorizes %s without logging the description", (description, category) => {
     expect(refreshFailureDiagnostics(providerError(description)).provider_description_category)
       .toBe(category);
+  });
+
+  it("reports all mentions in a generic rejection without claiming a single cause", () => {
+    expect(providerRejectionSignals(providerError(
+      "Grant expired, revoked, reused, or issued to a different client; invalid scope; private-token",
+    ))).toEqual({
+      expiry: true, revocation: true, reuse: true, client_mismatch: true, scope: true,
+    });
+    expect(JSON.stringify(providerRejectionSignals(providerError("private@example.test"))))
+      .not.toContain("private");
+    expect(providerRejectionSignals({ error_description: "expired revoked scope" }))
+      .toEqual({ expiry: false, revocation: false, reuse: false, client_mismatch: false, scope: false });
   });
 
   it("never includes credentials, PII, request headers, or raw error bodies", () => {

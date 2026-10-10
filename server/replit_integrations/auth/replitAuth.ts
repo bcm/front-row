@@ -9,6 +9,10 @@ import connectPg from "connect-pg-simple";
 import { authStorage } from "./storage";
 import { refreshFailureDiagnostics } from "./refresh-diagnostics";
 import { createRefreshTrace, type RefreshPhase } from "./refresh-tracing";
+import { loginTokenMetadata, type LoginTokenMetadata } from "./auth-diagnostic-metadata";
+
+// Diagnostic metadata only; no tokens or credentials are retained here.
+const pendingLoginMetadata = new WeakMap<object, LoginTokenMetadata>();
 
 const getOidcConfig = memoize(
   async () => {
@@ -86,6 +90,7 @@ export async function setupAuth(app: Express) {
     const user = {};
     updateUserSession(user, tokens);
     await upsertUser(tokens.claims());
+    pendingLoginMetadata.set(user, loginTokenMetadata(tokens));
     verified(null, user);
   };
 
@@ -123,6 +128,17 @@ export async function setupAuth(app: Express) {
 
   app.get("/api/callback", (req, res, next) => {
     ensureStrategy(req.hostname);
+    // Passport regenerates the session during sign-in. Observe the final
+    // session ID after its existing redirect, not the pre-login session ID.
+    res.once("finish", () => {
+      const user = req.user;
+      if (!user) return;
+      const metadata = pendingLoginMetadata.get(user);
+      if (!metadata) return;
+      pendingLoginMetadata.delete(user);
+      if (res.statusCode < 300 || res.statusCode >= 400 || !req.isAuthenticated()) return;
+      createRefreshTrace(req.sessionID)("login_succeeded", user, { config, login: metadata });
+    });
     passport.authenticate(`replitauth:${req.hostname}`, {
       successReturnToOrRedirect: "/",
       failureRedirect: "/api/login",
@@ -202,6 +218,7 @@ export async function refreshSessionTokens(
     return;
   }
   let phase: RefreshPhase = "session_reload";
+  let providerConfig: client.Configuration | undefined;
   const task = (async () => {
     // Fresh read inside the critical section: this request's session copy
     // may predate another request's rotation.
@@ -218,8 +235,9 @@ export async function refreshSessionTokens(
     }
     phase = "discovery";
     const config = await getOidcConfig();
+    providerConfig = config;
     phase = "grant";
-    trace("grant_started", sessionUser, { phase });
+    trace("grant_started", sessionUser, { phase, config });
     const previousRefreshToken = sessionUser.refresh_token;
     const tokenResponse = await client.refreshTokenGrant(
       config,
@@ -245,7 +263,9 @@ export async function refreshSessionTokens(
     trace("completed", freshUser);
     return freshUser;
   } catch (error) {
-    trace("failed", (req.session as any)?.passport?.user ?? user, { phase, error });
+    trace("failed", (req.session as any)?.passport?.user ?? user, {
+      phase, error, config: providerConfig,
+    });
     throw error;
   } finally {
     inflightRefreshes.delete(key);

@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createRefreshTrace } from "./refresh-tracing";
+import { loginTokenMetadata } from "./auth-diagnostic-metadata";
 
 const prefix = "[auth] refresh_trace ";
 const user = {
@@ -50,6 +51,32 @@ describe("token-safe refresh tracing", () => {
     expect(records()[0].session_ref).not.toBe(records()[1].session_ref);
   });
 
+  it("correlates sign-in and grant configuration without copying credentials or user fields", () => {
+    const config = {
+      serverMetadata: () => ({
+        issuer: "https://private-issuer.test", token_endpoint: "https://private-issuer.test/token",
+      }),
+      clientMetadata: () => ({ client_id: "private-client", client_secret: "private-client-secret" }),
+    };
+    createRefreshTrace("private-session-id")("login_succeeded", user, {
+      config, login: loginTokenMetadata({
+        access_token: "private-access", refresh_token: "private-refresh",
+        expires_in: 3600, scope: "openid offline_access private-scope",
+      }),
+    });
+    createRefreshTrace("private-session-id")("grant_started", user, { config, phase: "grant" });
+    const [login, grant] = records();
+    for (const key of ["session_ref", "client_ref", "issuer_ref", "token_endpoint_ref"]) {
+      expect(login[key]).toBe(grant[key]);
+      expect(login[key]).toMatch(/^[a-f0-9]{32}$/);
+    }
+    expect(login).toMatchObject({
+      refresh_token_returned: true, offline_access_returned: true,
+      refresh_expires_in_seconds: null, refresh_token_expires_in_seconds: null,
+    });
+    expect(JSON.stringify(log.mock.calls)).not.toContain("private");
+  });
+
   it("keeps session labels stable across independently initialized server modules", async () => {
     vi.resetModules();
     const first = await import("./refresh-tracing");
@@ -82,6 +109,9 @@ describe("token-safe refresh tracing", () => {
     expect(String(log.mock.calls[0][0])).not.toContain("\n");
     expect(records()[0]).toMatchObject({
       event: "failed", phase: "grant", provider_error: "invalid_grant", http_status: 400,
+      provider_description_signals: {
+        expiry: false, revocation: false, reuse: false, client_mismatch: false, scope: false,
+      },
     });
   });
 
