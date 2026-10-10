@@ -42,7 +42,7 @@ describe("oauthClients", () => {
 
   it("declares no DDL default on allowed_redirect_uris", () => {
     // drizzle-kit 0.31.11's push introspection mangles empty array defaults
-    // ('{}' -> '{""]}'), so no declared default converges (issue #30). The
+    // ('{}' -> '{""}'), so no declared default converges (issue #30). The
     // column is NOT NULL and the sole insert path (ensureDefaultClients in
     // server/oauth.ts) sets [] explicitly, so no default is needed.
     const col = (getTableConfig(oauthClients).columns as any[]).find(
